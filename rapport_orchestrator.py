@@ -18,6 +18,7 @@ from core.generate import DEFAULT_FIELDS, generate_fields
 from core.template_fields import build_field_specs, extract_placeholders_from_docx
 from core.render import render_report
 from core.export import docx_to_pdf
+from core.location_date import build_location_date
 
 StatusCallback = Callable[[str], None]
 
@@ -38,6 +39,11 @@ class PipelineConfig:
     name: str = ""
     surname: str = ""
     civility: str = "Monsieur"
+    location_date: str = ""
+    location_city: str = ""
+    auto_location_date: bool = False
+    location_date_manual: str = ""
+    avs_number: str = ""
     force_reextract: bool = False
     enable_soffice: bool = False
     report_filename: Optional[str] = None
@@ -214,6 +220,14 @@ class RapportOrchestrator:
         debug_dir = job_dir / config.debug_subdir
         self._log("Génération des champs via le LLM...")
         self._log(f"Cible LLM : {config.model} @ {config.host}")
+        self._refresh_location_date(config)
+        deterministic_values = {
+            "MONSIEUR_OU_MADAME": config.civility,
+            "NAME": config.name,
+            "SURNAME": config.surname,
+            "LIEU_ET_DATE": config.location_date,
+            "NUMERO_AVS": config.avs_number,
+        }
 
         answers = generate_fields(
             payload,
@@ -226,6 +240,7 @@ class RapportOrchestrator:
             include_filters=config.include_filters,
             debug_dir=debug_dir,
             fields=config.fields or DEFAULT_FIELDS,
+            deterministic_values=deterministic_values,
             status_callback=self._log,
             progress_callback=progress_callback,
         )
@@ -253,6 +268,7 @@ class RapportOrchestrator:
             name=config.name,
             surname=config.surname,
             civility=config.civility,
+            location_date=config.location_date,
         )
 
         self._log(f"DOCX généré -> {report_path}")
@@ -301,3 +317,10 @@ class RapportOrchestrator:
         self.logger.info(message)
         if self.status_callback:
             self.status_callback(message)
+
+    def _refresh_location_date(self, config: PipelineConfig) -> None:
+        config.location_date = build_location_date(
+            config.location_city,
+            config.location_date_manual or config.location_date,
+            auto_date=config.auto_location_date,
+        )

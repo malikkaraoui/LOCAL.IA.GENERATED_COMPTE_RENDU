@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from docx import Document
 
+from .field_specs import get_field_spec
+
 PLACEHOLDER_RE = re.compile(r"\{\{([^{}]+)\}\}")
 
 
@@ -52,9 +54,10 @@ def build_field_specs(
         if not key or key in seen:
             continue
         seen.add(key)
-        base = fallback_lookup.get(key)
-        query = base.get("query") if base else key.replace("_", " ")
-        instructions = base.get("instructions") if base else f"Synthétise les informations pertinentes pour « {key} »"
+        base = fallback_lookup.get(key) if fallback_lookup else None
+        spec = get_field_spec(key)
+        query = base.get("query") if base and base.get("query") else spec.query
+        instructions = base.get("instructions") if base and base.get("instructions") else spec.instructions
         specs.append({
             "key": key,
             "query": query,

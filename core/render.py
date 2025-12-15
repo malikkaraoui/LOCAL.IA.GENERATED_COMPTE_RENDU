@@ -100,6 +100,9 @@ def _stringify_answer(value: Any) -> str:
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, dict):
+        answer = value.get("value")
+        if isinstance(answer, str):
+            return answer.strip()
         answer = value.get("answer")
         if isinstance(answer, str):
             return answer.strip()
@@ -172,6 +175,7 @@ def render_report(
     name: str = "",
     surname: str = "",
     civility: str = "Monsieur",
+    location_date: str = "",
 ) -> Path:
     template_path = Path(template).expanduser().resolve()
     output_path = Path(output).expanduser().resolve()
@@ -186,10 +190,16 @@ def render_report(
     simple_mapping = {}
     if name:
         simple_mapping["{NAME}"] = name
+        simple_mapping["{{NAME}}"] = name
         simple_mapping["{monsieur ou madame NAME}"] = f"{civility} {name}".strip()
     if surname:
         simple_mapping["{surname}"] = surname
+        simple_mapping["{{SURNAME}}"] = surname
         simple_mapping["XX"] = f"{civility} {surname}".strip()
+    simple_mapping["{{MONSIEUR_OU_MADAME}}"] = civility
+    if location_date:
+        simple_mapping["{LIEU_ET_DATE}"] = location_date
+        simple_mapping["{{LIEU_ET_DATE}}"] = location_date
     if simple_mapping:
         replace_text_everywhere(doc, simple_mapping)
 

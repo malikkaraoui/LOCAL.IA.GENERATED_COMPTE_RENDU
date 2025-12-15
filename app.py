@@ -13,6 +13,7 @@ import streamlit as st
 
 from rapport_orchestrator import PipelineConfig, RapportOrchestrator
 from core.generate import check_llm_status, DEFAULT_FIELDS
+from core.location_date import build_location_date
 
 
 def _load_version() -> str:
@@ -47,6 +48,11 @@ SESSION_DEFAULTS = {
     "live_llm_logs": None,
     "field_progress": None,
     "field_order": [],
+    "location_city": "Genève",
+    "location_date_manual": "",
+    "auto_location_date": True,
+    "location_date": "",
+    "avs_number": "",
 }
 for key, val in SESSION_DEFAULTS.items():
     st.session_state.setdefault(key, val)
@@ -281,6 +287,10 @@ def build_config(
     name: str,
     surname: str,
     civility: str,
+    location_city: str,
+    location_date_manual: str,
+    auto_location_date: bool,
+    avs_number: str,
     force_reextract: bool,
     enable_soffice: bool,
     auto_pdf: bool,
@@ -291,6 +301,12 @@ def build_config(
     if not template_path.exists():
         st.error("Template introuvable.")
         return None
+
+    final_location_date = build_location_date(
+        location_city,
+        location_date_manual,
+        auto_date=auto_location_date,
+    )
 
     return PipelineConfig(
         client_dir=clients_root / selected_client,
@@ -306,6 +322,11 @@ def build_config(
         name=name,
         surname=surname,
         civility=civility,
+        location_city=location_city,
+        auto_location_date=auto_location_date,
+        location_date_manual=location_date_manual,
+        location_date=final_location_date,
+        avs_number=avs_number,
         force_reextract=force_reextract,
         enable_soffice=enable_soffice,
         export_pdf=auto_pdf,
@@ -443,6 +464,41 @@ with cols[1]:
     name = st.text_input("Prénom", value="")
     surname = st.text_input("Nom", value="")
     civility = st.selectbox("Civilité", ["Monsieur", "Madame", "Autre"], index=0)
+    location_city = st.text_input(
+        "Lieu",
+        value=st.session_state.get("location_city", "Genève"),
+        placeholder="Genève",
+        help="Nom de la ville affichée dans {{LIEU_ET_DATE}}",
+    )
+    auto_location_date = st.checkbox(
+        "Utiliser automatiquement la date du jour",
+        value=st.session_state.get("auto_location_date", True),
+        help="Si coché, la date sera recalculée à chaque lancement de la génération.",
+    )
+    manual_location_date = st.text_input(
+        "Date / texte manuel",
+        value=st.session_state.get("location_date_manual", st.session_state.get("location_date", "")),
+        placeholder="15/12/2025 ou Genève, le 15/12/2025",
+        disabled=auto_location_date,
+        help="Renseigner ici la date complète si tu désactives l'automatisation.",
+    )
+    location_preview = build_location_date(
+        location_city,
+        manual_location_date,
+        auto_date=auto_location_date,
+    )
+    st.session_state.location_city = location_city
+    st.session_state.auto_location_date = auto_location_date
+    st.session_state.location_date_manual = manual_location_date
+    st.session_state.location_date = location_preview
+    st.caption(f"Prévisualisation {{LIEU_ET_DATE}} : {location_preview or '—'}")
+    avs_number = st.text_input(
+        "Numéro AVS (jamais généré)",
+        value=st.session_state.get("avs_number", ""),
+        placeholder="756.XXXX.XXXX.XX",
+        help="Saisir manuellement le numéro AVS exact, sans passer par l'IA.",
+    )
+    st.session_state.avs_number = avs_number
     model = st.text_input("Modèle Ollama", value="mistral:latest")
     llm_host = st.text_input("Serveur Ollama", value=st.session_state.get("llm_host_value", "http://localhost:11434"))
     st.session_state.llm_host_value = llm_host
@@ -500,6 +556,17 @@ for (key, label), col in zip(STAGES, stage_cols):
         unsafe_allow_html=True,
     )
 
+with st.expander("Règles LLM (instructions.md)"):
+    st.markdown(
+        """
+        - Réponses **100% en français**, sans JSON ni Markdown.
+        - Si l'information manque : écrire `__VIDE__` (le script remplace par vide).
+        - Champs courts ≤ 1 ligne / 50 caractères ; narratifs ≤ 4 lignes.
+        - Valeurs contraintes : niveaux linguistiques (A1→C2), bureautique (Faible→Très bon), tests (OK/Moyen/À renforcer/Non évalué).
+        - Aucune invention : seules les sources sélectionnées peuvent être citées.
+        """
+    )
+
 st.subheader("Progression des champs LLM")
 field_progress_placeholder = st.empty()
 render_field_progress = make_field_progress_renderer(field_progress_placeholder)
@@ -528,6 +595,11 @@ pdf_clicked = step_cols[3].button("4) Export PDF", use_container_width=True, dis
 if st.session_state.config_obj:
     st.session_state.config_obj.host = llm_host
     st.session_state.config_obj.model = model
+    st.session_state.config_obj.location_city = location_city
+    st.session_state.config_obj.auto_location_date = auto_location_date
+    st.session_state.config_obj.location_date_manual = manual_location_date
+    st.session_state.config_obj.location_date = location_preview
+    st.session_state.config_obj.avs_number = avs_number
 
 if extract_clicked:
     set_stage_status("extract", "running", "Préparation de l'extraction...")
@@ -547,6 +619,10 @@ if extract_clicked:
         name=name,
         surname=surname,
         civility=civility,
+        location_city=location_city,
+        location_date_manual=manual_location_date,
+        auto_location_date=auto_location_date,
+        avs_number=avs_number,
         force_reextract=force_reextract,
         enable_soffice=enable_soffice,
         auto_pdf=auto_pdf,
