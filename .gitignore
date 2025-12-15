@@ -1,0 +1,35 @@
+# System artifacts
+.DS_Store
+Thumbs.db
+
+# Python caches & environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.venv/
+.env
+.env.*
+
+# Streamlit runtime data
+.streamlit/
+
+# Generated outputs & uploads
+out/
+uploaded_templates/
+
+# Client and sensitive documents
+CLIENTS/**/*
+!CLIENTS/*.py
+CLIENTS/__pycache__/
+*.docx
+*.doc
+*.pdf
+*.msg
+*.pages
+*.rtf
+
+# Logs & misc
+*.log
