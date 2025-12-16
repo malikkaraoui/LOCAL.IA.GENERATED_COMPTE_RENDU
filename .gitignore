@@ -13,6 +13,13 @@ __pycache__/
 .env
 .env.*
 
+# Testing artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
 # Streamlit runtime data
 .streamlit/
 
