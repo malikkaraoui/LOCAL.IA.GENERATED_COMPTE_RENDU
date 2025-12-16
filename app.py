@@ -430,9 +430,9 @@ st.markdown(
     .stage-card {
         border: 1px solid rgba(255,255,255,0.08);
         background: rgba(255,255,255,0.02);
-        padding: 0.75rem;
-        border-radius: 0.6rem;
-        min-height: 6rem;
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.5rem;
+        min-height: 4rem;
     }
     .stage-title {
         font-weight: 600;
@@ -451,23 +451,39 @@ st.markdown(
     .badge-done { background: #198754; }
     .badge-error { background: #d9534f; }
     .stage-message {
-        font-size: 0.8rem;
-        margin-top: 0.35rem;
+        font-size: 0.78rem;
+        margin-top: 0.2rem;
         color: rgba(255,255,255,0.7);
-        min-height: 1.5rem;
+        min-height: 1rem;
+    }
+    div[data-testid="stFileUploaderDropzone"] span,
+    div[data-testid="stFileUploaderDropzone"] small,
+    div[data-testid="stFileUploaderDropzone"] > div:not(:last-child) {
+        display: none !important;
+    }
+    div[data-testid="stFileUploaderDropzone"] {
+        padding: 0.1rem 0.4rem !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stFileUploaderDropzone"] button {
+        width: 100%;
+        border-radius: 0.5rem;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-if st.button("🔄 Réinitialiser le workflow", type="secondary"):
+if st.button("🔄", type="secondary"):
     reset_workflow(full=False)
     st.rerun()
 
-cols = st.columns(2)
-with cols[0]:
-    clients_root_input = st.text_input(
+layout_cols = st.columns([1.1, 1])
+with layout_cols[0]:
+    base_cols = st.columns([1, 1])
+    clients_root_input = base_cols[0].text_input(
         "Dossier clients",
         value=str((Path.cwd() / "CLIENTS").resolve()),
         help="Racine contenant les sous-dossiers clients",
@@ -475,7 +491,7 @@ with cols[0]:
     clients_root = Path(clients_root_input).expanduser()
     client_dirs = list_subdirs(clients_root)
     client_names = [p.name for p in client_dirs]
-    selected_client = st.selectbox(
+    selected_client = base_cols[1].selectbox(
         "Client",
         options=["<Sélectionner>"] + client_names,
         index=0,
@@ -486,7 +502,11 @@ with cols[0]:
         value=str((Path.cwd() / "TemplateRapportStage.docx").resolve()),
         help="Chemin complet vers le template (placeholders {{...}} pris en charge)",
     )
-    uploaded_template = st.file_uploader("Téléverser un template (DOCX)", type=["docx"])
+    uploaded_template = st.file_uploader(
+        "Fichier template",
+        type=["docx"],
+        label_visibility="collapsed",
+    )
     if uploaded_template is not None:
         upload_dir = Path.cwd() / "uploaded_templates"
         upload_dir.mkdir(parents=True, exist_ok=True)
@@ -502,32 +522,35 @@ with cols[0]:
         value=str((Path.cwd() / "out").resolve()),
         help="Les jobs et artefacts seront stockés ici",
     )
-with cols[1]:
-    st.markdown("#### Identité")
-    identity_cols = st.columns([1, 1, 1])
+
+with layout_cols[1]:
+    identity_cols = st.columns([1, 1, 0.8])
     name = identity_cols[0].text_input("Prénom", value="", placeholder="Prénom")
     surname = identity_cols[1].text_input("Nom", value="", placeholder="Nom")
     civility = identity_cols[2].selectbox("Civilité", ["Monsieur", "Madame", "Autre"], index=0)
 
-    st.markdown("#### Lieu & date")
-    loc_cols = st.columns([1.2, 0.8, 1])
-    location_city = loc_cols[0].text_input(
+    loc_line = st.columns([1, 0.5, 0.8, 0.8])
+    location_city = loc_line[0].text_input(
         "Ville",
         value=st.session_state.get("location_city", "Genève"),
         placeholder="Genève",
-        help="Ville affichée dans {{LIEU_ET_DATE}}",
     )
-    auto_location_date = loc_cols[1].checkbox(
+    auto_location_date = loc_line[1].checkbox(
         "Date auto",
         value=st.session_state.get("auto_location_date", True),
-        help="Réutilise la date du jour à chaque génération.",
     )
-    manual_location_date = loc_cols[2].text_input(
+    manual_location_date = loc_line[2].text_input(
         "Date manuelle",
         value=st.session_state.get("location_date_manual", st.session_state.get("location_date", "")),
         placeholder="15/12/2025",
         disabled=auto_location_date,
     )
+    avs_number = loc_line[3].text_input(
+        "Numéro AVS",
+        value=st.session_state.get("avs_number", ""),
+        placeholder="756.XXXX.XXXX.XX",
+    )
+    st.session_state.avs_number = avs_number
     location_preview = build_location_date(
         location_city,
         manual_location_date,
@@ -538,20 +561,8 @@ with cols[1]:
     st.session_state.location_date_manual = manual_location_date
     st.session_state.location_date = location_preview
     st.caption(f"Prévisualisation {{LIEU_ET_DATE}} : {location_preview or '—'}")
-
-    avs_cols = st.columns([1, 1])
-    avs_number = avs_cols[0].text_input(
-        "Numéro AVS",
-        value=st.session_state.get("avs_number", ""),
-        placeholder="756.XXXX.XXXX.XX",
-    )
-    st.session_state.avs_number = avs_number
-
-    st.markdown("#### Modèle LLM")
     llm_host_default = st.session_state.get("llm_host_value", "http://localhost:11434")
-    model_host_cols = st.columns([2, 1])
-    with model_host_cols[1]:
-        llm_host = st.text_input("Serveur", value=llm_host_default, placeholder="http://localhost:11434")
+    llm_host = st.text_input("Serveur", value=llm_host_default, placeholder="http://localhost:11434")
     st.session_state.llm_host_value = llm_host
     detected_models = list_ollama_models(llm_host)
     merged_models: List[str] = []
@@ -567,24 +578,23 @@ with cols[1]:
     if current_model not in merged_models and not current_custom:
         current_custom = current_model
     default_index = llm_options.index(current_model) if current_model in merged_models else len(merged_models)
-    with model_host_cols[0]:
-        selected_option = st.selectbox("Modèle", options=llm_options, index=default_index)
-        if selected_option == custom_label:
-            model = st.text_input(
-                "Custom",
-                value=current_custom or (current_model if current_model not in LLM_PRESETS else ""),
-                help="Nom exact d'un modèle installé (ex: phi3:mini).",
-            ).strip()
-            if not model:
-                model = current_custom or current_model or LLM_PRESETS[0]
-            st.session_state.llm_model_custom = model
-        else:
-            model = selected_option
-            st.session_state.llm_model_custom = current_custom
-        if detected_models:
-            st.caption(f"{len(detected_models)} modèle(s) détecté(s) via {llm_host}.")
-        else:
-            st.caption("Liste Ollama indisponible – utilisation des favoris.")
+    selected_option = st.selectbox("Modèle", options=llm_options, index=default_index)
+    if selected_option == custom_label:
+        model = st.text_input(
+            "Custom",
+            value=current_custom or (current_model if current_model not in LLM_PRESETS else ""),
+            help="Nom exact d'un modèle installé (ex: phi3:mini).",
+        ).strip()
+        if not model:
+            model = current_custom or current_model or LLM_PRESETS[0]
+        st.session_state.llm_model_custom = model
+    else:
+        model = selected_option
+        st.session_state.llm_model_custom = current_custom
+    if detected_models:
+        st.caption(f"{len(detected_models)} modèle(s) détecté(s) via {llm_host}.")
+    else:
+        st.caption("Liste Ollama indisponible – utilisation des favoris.")
     st.session_state.llm_model_choice = model
 
 with st.expander("⚙️ Options avancées (RAG & sortie)", expanded=False):
@@ -605,31 +615,33 @@ with st.expander("⚙️ Options avancées (RAG & sortie)", expanded=False):
 logs_placeholder = st.empty()
 progress_bar = st.progress(st.session_state.progress)
 
-st.subheader("Suivi temps réel")
-live_status_placeholder = st.empty()
-llm_stream_placeholder = st.empty()
-if st.session_state.live_llm_logs:
-    llm_stream_placeholder.code("\n".join(st.session_state.live_llm_logs[-40:]), language="text")
-else:
-    llm_stream_placeholder.info("Lance la génération pour voir le flux LLM ici.")
-
-status_cols = st.columns([4, 1])
-with status_cols[0]:
+header_cols = st.columns([1.2, 3.0, 2.4, 1.0, 1.2])
+with header_cols[0]:
+    st.markdown("#### Suivi temps réel")
+with header_cols[1]:
+    live_status_placeholder = st.empty()
+    llm_stream_placeholder = st.empty()
+    if st.session_state.live_llm_logs:
+        llm_stream_placeholder.code("\n".join(st.session_state.live_llm_logs[-40:]), language="text")
+    else:
+        llm_stream_placeholder.info("Lance la génération pour voir le flux LLM ici.")
+with header_cols[2]:
+    status_box = st.container()
     try:
         llm_ok, llm_message = cached_llm_status(llm_host, model)
     except Exception as exc:
         cached_llm_status.clear()
         llm_ok, llm_message = False, f"Erreur lors de la vérification : {exc}"
     if llm_ok:
-        st.success(f"LLM disponible : {llm_message}")
+        status_box.success(f"LLM disponible : {llm_message}")
     else:
-        st.error(f"LLM indisponible : {llm_message}")
-with status_cols[1]:
+        status_box.error(f"LLM indisponible : {llm_message}")
+with header_cols[3]:
     if st.button("↻ Rafraîchir LLM", use_container_width=True):
         cached_llm_status.clear()
         st.rerun()
-
-st.subheader("Suivi des étapes")
+with header_cols[4]:
+    st.markdown("#### Suivi des étapes")
 stage_cols = st.columns(len(STAGES))
 for (key, label), col in zip(STAGES, stage_cols):
     status = st.session_state.stage_status.get(key, "pending")
