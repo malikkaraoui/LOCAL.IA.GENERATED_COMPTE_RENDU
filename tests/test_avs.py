@@ -1,6 +1,5 @@
 """Tests pour le module core/avs.py."""
 
-import pytest
 from core.avs import detect_avs_number
 
 
@@ -20,7 +19,7 @@ class TestDetectAvsNumber:
         assert result == "756.1234.5678.90"
 
     def test_detects_format_without_dots(self):
-        """Détecte le format sans points."""
+        """Détecte le format sans points et normalise avec points."""
         payload = {
             "documents": [
                 {
@@ -29,7 +28,8 @@ class TestDetectAvsNumber:
             ]
         }
         result = detect_avs_number(payload)
-        assert result == "7561234567890"
+        # La fonction normalise toujours au format avec points
+        assert result == "756.1234.5678.90"
 
     def test_returns_none_if_not_found(self):
         """Retourne None si aucun numéro AVS trouvé."""

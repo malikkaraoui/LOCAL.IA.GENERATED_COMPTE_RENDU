@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Optional
 
 from .models import Chunk
 
@@ -24,7 +25,7 @@ def normalize_text(text: str) -> str:
     return text.strip()
 
 
-def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> list[str]:
     text = normalize_text(text)
     if not text:
         return []
@@ -45,7 +46,7 @@ def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[st
     return chunks
 
 
-def tokenize(text: str, remove_stop: bool = True) -> List[str]:
+def tokenize(text: str, remove_stop: bool = True) -> list[str]:
     tokens = [m.group(0).lower() for m in TOKEN_RE.finditer(text)]
     if remove_stop:
         tokens = [t for t in tokens if t not in FR_STOP and len(t) > 1]
@@ -53,22 +54,22 @@ def tokenize(text: str, remove_stop: bool = True) -> List[str]:
 
 
 class BM25Index:
-    def __init__(self, chunks: List[Chunk], k1: float = 1.5, b: float = 0.75):
+    def __init__(self, chunks: list[Chunk], k1: float = 1.5, b: float = 0.75):
         self.chunks = chunks
         self.k1 = k1
         self.b = b
 
-        self.doc_len: List[int] = []
+        self.doc_len: list[int] = []
         self.avgdl: float = 0.0
-        self.df: Dict[str, int] = {}
-        self.tf: List[Dict[str, int]] = []
+        self.df: dict[str, int] = {}
+        self.tf: list[dict[str, int]] = []
         self._build()
 
     def _build(self) -> None:
         total_len = 0
         for ch in self.chunks:
             toks = tokenize(ch.text)
-            freqs: Dict[str, int] = {}
+            freqs: dict[str, int] = {}
             for t in toks:
                 freqs[t] = freqs.get(t, 0) + 1
             self.tf.append(freqs)
@@ -102,7 +103,7 @@ class BM25Index:
             score += idf * (tf * (self.k1 + 1)) / denom
         return score
 
-    def topk(self, query: str, k: int = 8) -> List[Tuple[int, float]]:
+    def topk(self, query: str, k: int = 8) -> list[tuple[int, float]]:
         scored = []
         for i in range(len(self.chunks)):
             s = self.score(query, i)
@@ -124,15 +125,15 @@ def path_allowed(path: str, include: Optional[Sequence[str]], exclude: Optional[
 
 
 def make_chunks(
-    payload: Dict,
+    payload: dict,
     *,
     chunk_size: int = 1200,
     overlap: int = 200,
     include: Optional[Sequence[str]] = None,
     exclude: Optional[Sequence[str]] = None,
-) -> List[Chunk]:
+) -> list[Chunk]:
     docs = payload.get("documents", [])
-    chunks: List[Chunk] = []
+    chunks: list[Chunk] = []
     for d in docs:
         src = d.get("path", "")
         if not path_allowed(src, include, exclude):
@@ -155,13 +156,13 @@ def make_chunks(
 
 
 def build_index(
-    payload: Dict,
+    payload: dict,
     *,
     chunk_size: int = 1200,
     overlap: int = 200,
     include: Optional[Sequence[str]] = None,
     exclude: Optional[Sequence[str]] = None,
-) -> Tuple[List[Chunk], BM25Index]:
+) -> tuple[list[Chunk], BM25Index]:
     chunks = make_chunks(payload, chunk_size=chunk_size, overlap=overlap, include=include, exclude=exclude)
     index = BM25Index(chunks)
     return chunks, index

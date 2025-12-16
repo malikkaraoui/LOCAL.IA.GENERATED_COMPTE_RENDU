@@ -1,6 +1,7 @@
 import os
 import re
 import unicodedata
+
 import requests
 from docx import Document
 from pypdf import PdfReader
@@ -149,7 +150,7 @@ def extraire_texte_fichier(path):
     path_lower = path.lower()
 
     if path_lower.endswith(".txt"):
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(path, encoding="utf-8", errors="ignore") as f:
             return f.read()
 
     if path_lower.endswith(".pdf"):

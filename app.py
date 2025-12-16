@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Interface Streamlit pour piloter l'orchestrateur de rapports."""
 
 from __future__ import annotations
@@ -8,15 +7,15 @@ import html
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
 from urllib import request as urlrequest
 
 import streamlit as st
 
-from rapport_orchestrator import PipelineConfig, RapportOrchestrator
-from core.generate import check_llm_status, DEFAULT_FIELDS
-from core.location_date import build_location_date
 from core.avs import detect_avs_number
+from core.generate import DEFAULT_FIELDS, check_llm_status
+from core.location_date import build_location_date
+from rapport_orchestrator import PipelineConfig, RapportOrchestrator
 
 
 def _load_version() -> str:
@@ -110,7 +109,7 @@ LLM_PRESETS = [
 
 
 @st.cache_data(ttl=30)
-def list_ollama_models(host: str) -> List[str]:
+def list_ollama_models(host: str) -> list[str]:
     if not host:
         return []
     base = host.rstrip("/")
@@ -127,7 +126,7 @@ def list_ollama_models(host: str) -> List[str]:
     elif isinstance(payload, list):
         raw_models = payload
 
-    names: List[str] = []
+    names: list[str] = []
     for item in raw_models:
         if isinstance(item, dict):
             name = item.get("name") or item.get("model")
@@ -240,7 +239,7 @@ def make_field_progress_renderer(container):
     return _render
 
 
-def initialize_field_progress(fields_def: List[Dict[str, Any]]) -> None:
+def initialize_field_progress(fields_def: list[dict[str, Any]]) -> None:
     st.session_state.field_progress = {}
     st.session_state.field_order = []
     now_iso = datetime.now().isoformat()
@@ -289,14 +288,14 @@ PREREQ_LABELS = {
 }
 
 
-def list_subdirs(root: Path) -> List[Path]:
+def list_subdirs(root: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted([p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")])
 
 
 def build_callback(area, live_now=None, llm_box=None):
-    logs: List[str] = st.session_state.last_logs.copy()
+    logs: list[str] = st.session_state.last_logs.copy()
 
     def _cb(msg: str) -> None:
         logs.append(msg)
@@ -316,7 +315,7 @@ def build_config(
     *,
     clients_root: Path,
     selected_client: str,
-    client_dirs: List[Path],
+    client_dirs: list[Path],
     template_path: Path,
     output_dir_input: str,
     model: str,
@@ -388,7 +387,7 @@ def reset_downstream_state(stage_key: str = "generate") -> None:
     reset_stages_from(stage_key)
 
 
-def ensure_prereq(keys: List[str]) -> bool:
+def ensure_prereq(keys: list[str]) -> bool:
     missing_labels = []
     for key in keys:
         if not st.session_state.get(key):
@@ -565,7 +564,7 @@ with layout_cols[1]:
     llm_host = st.text_input("Serveur", value=llm_host_default, placeholder="http://localhost:11434")
     st.session_state.llm_host_value = llm_host
     detected_models = list_ollama_models(llm_host)
-    merged_models: List[str] = []
+    merged_models: list[str] = []
     for candidate in LLM_PRESETS + detected_models:
         if candidate and candidate not in merged_models:
             merged_models.append(candidate)

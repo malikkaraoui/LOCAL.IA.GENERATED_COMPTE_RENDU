@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Optional
 from urllib import request
 
 from .context import build_index
@@ -39,7 +39,7 @@ def ollama_generate(model: str, prompt: str, host: str, temperature: float, top_
     return out.get("response", "")
 
 
-def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.0) -> Tuple[bool, str]:
+def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.0) -> tuple[bool, str]:
     base = host.rstrip("/")
     try:
         with request.urlopen(base + "/api/version", timeout=timeout) as resp:
@@ -89,7 +89,7 @@ def truncate_chars(text: str, max_chars: int) -> str:
     return text
 
 
-def validate_allowed_value(text: str, allowed: Optional[List[str]]) -> Tuple[str, Optional[str]]:
+def validate_allowed_value(text: str, allowed: Optional[list[str]]) -> tuple[str, Optional[str]]:
     if not allowed:
         return text, None
     norm_map = {normalize_allowed_value(val): val for val in allowed}
@@ -99,8 +99,8 @@ def validate_allowed_value(text: str, allowed: Optional[List[str]]) -> Tuple[str
     return "", "NON_AUTORISE"
 
 
-def build_prompt(spec: FieldSpec, instruction: str, context_blocks: List[Dict[str, Any]]) -> str:
-    lines: List[str] = [
+def build_prompt(spec: FieldSpec, instruction: str, context_blocks: list[dict[str, Any]]) -> str:
+    lines: list[str] = [
         "Tu es un assistant RH.",
         "Tu réponds uniquement en français.",
         "Tu n'utilises jamais JSON ni Markdown.",
@@ -134,7 +134,7 @@ def build_prompt(spec: FieldSpec, instruction: str, context_blocks: List[Dict[st
 def _write_debug(
     debug_path: Optional[Path],
     key: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> None:
     if not debug_path:
         return
@@ -146,7 +146,7 @@ def _write_debug(
 
 
 def generate_fields(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
     model: str,
     host: str,
@@ -156,13 +156,13 @@ def generate_fields(
     include_filters: Optional[Sequence[str]] = None,
     exclude_filters: Optional[Sequence[str]] = None,
     debug_dir: Optional[Path] = None,
-    fields: Optional[List[Dict[str, Any]]] = None,
+    fields: Optional[list[dict[str, Any]]] = None,
     chunk_size: int = 1200,
     overlap: int = 200,
-    deterministic_values: Optional[Dict[str, str]] = None,
+    deterministic_values: Optional[dict[str, str]] = None,
     status_callback: StatusCallback = None,
     progress_callback: FieldProgressCallback = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     fields = fields or DEFAULT_FIELDS
     deterministic_lookup = {k.upper(): v for k, v in (deterministic_values or {}).items()}
     chunks, index = build_index(
@@ -174,7 +174,7 @@ def generate_fields(
     )
     debug_path = debug_dir.expanduser().resolve() if debug_dir else None
 
-    answers: Dict[str, Any] = {}
+    answers: dict[str, Any] = {}
     for field in fields:
         key = field["key"]
         spec = get_field_spec(key)
@@ -186,7 +186,7 @@ def generate_fields(
             status_callback(f"LLM [{key}] préparation du contexte…")
 
         top = index.topk(query, topk)
-        context_blocks: List[Dict[str, Any]] = []
+        context_blocks: list[dict[str, Any]] = []
         for idx, score in top:
             ch = chunks[idx]
             context_blocks.append(
@@ -203,7 +203,7 @@ def generate_fields(
             progress_callback(key, "context", f"{len(context_blocks)} passages sélectionnés")
         raw_response = ""
         cleaned_value = ""
-        missing_info: List[str] = []
+        missing_info: list[str] = []
 
         if spec.field_type == "deterministic":
             cleaned_value = (deterministic_lookup.get(key.upper()) or "").strip()

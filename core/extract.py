@@ -5,14 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Optional
 
 import fitz  # PyMuPDF
 from docx import Document
@@ -42,7 +42,7 @@ def file_mtime_iso(path: Path) -> str:
         return ""
 
 
-def extract_pdf(path: Path) -> Dict:
+def extract_pdf(path: Path) -> dict:
     pages_text = []
     with fitz.open(path) as doc:
         for i, page in enumerate(doc, start=1):
@@ -53,9 +53,9 @@ def extract_pdf(path: Path) -> Dict:
     return {"text": full_text, "pages": pages_text}
 
 
-def extract_docx(path: Path) -> Dict:
+def extract_docx(path: Path) -> dict:
     doc = Document(path)
-    parts: List[str] = []
+    parts: list[str] = []
     for p in doc.paragraphs:
         t = (p.text or "").strip()
         if t:
@@ -69,7 +69,7 @@ def extract_docx(path: Path) -> Dict:
     return {"text": full_text, "pages": None}
 
 
-def extract_txt(path: Path) -> Dict:
+def extract_txt(path: Path) -> dict:
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -81,7 +81,7 @@ def soffice_available() -> Optional[str]:
     return shutil.which("soffice")
 
 
-def extract_via_soffice(path: Path, soffice_bin: str) -> Dict:
+def extract_via_soffice(path: Path, soffice_bin: str) -> dict:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         cmd = [
@@ -110,8 +110,16 @@ def extract_via_soffice(path: Path, soffice_bin: str) -> Dict:
         return {"text": normalize_text(text), "pages": None}
 
 
-def walk_files(root: Path) -> List[Path]:
-    return sorted([p for p in root.rglob("*") if p.is_file()])
+def walk_files(root: Path) -> list[Path]:
+    """Liste récursivement tous les fichiers, en excluant les fichiers/dossiers cachés."""
+    def _is_hidden(path: Path) -> bool:
+        """Retourne True si le fichier ou un de ses parents est caché."""
+        for part in path.parts:
+            if part.startswith('.'):
+                return True
+        return False
+
+    return sorted([p for p in root.rglob("*") if p.is_file() and not _is_hidden(p.relative_to(root))])
 
 
 def extract_sources(
@@ -119,14 +127,14 @@ def extract_sources(
     *,
     enable_soffice: bool = False,
     include_extensions: Optional[Sequence[str]] = None,
-) -> Dict:
+) -> dict:
     root = Path(root).expanduser().resolve()
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"Dossier introuvable: {root}")
 
     allow_exts = set(include_extensions or [])
     files = walk_files(root)
-    documents: List[SourceDoc] = []
+    documents: list[SourceDoc] = []
     ok = errors = skipped = 0
 
     for path in files:
@@ -200,7 +208,7 @@ def extract_sources(
     return payload
 
 
-def write_payload(payload: Dict, out_path: Path) -> Path:
+def write_payload(payload: dict, out_path: Path) -> Path:
     out_path = Path(out_path).expanduser().resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -16,7 +16,7 @@ class SourceDoc:
     extractor: str
     text: str
     text_sha256: str
-    pages: Optional[List[Dict[str, Any]]] = None
+    pages: Optional[list[dict[str, Any]]] = None
     error: Optional[str] = None
 
 
@@ -25,8 +25,8 @@ class ExtractionPayload:
     root: Path
     generated_at: str
     enable_soffice: bool
-    counts: Dict[str, int]
-    documents: List[SourceDoc]
+    counts: dict[str, int]
+    documents: list[SourceDoc]
 
 
 @dataclass

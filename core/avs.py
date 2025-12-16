@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 AVS_PATTERN = re.compile(r"756(?:[ .\-]?\d){10}")
 
@@ -25,7 +25,7 @@ def detect_avs_in_text(text: Optional[str]) -> Optional[str]:
     return None
 
 
-def detect_avs_number(payload: Optional[Dict[str, Any]]) -> Optional[str]:
+def detect_avs_number(payload: Optional[dict[str, Any]]) -> Optional[str]:
     if not payload:
         return None
     documents = payload.get("documents") or []

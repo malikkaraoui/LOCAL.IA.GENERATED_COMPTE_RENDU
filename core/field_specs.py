@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import unicodedata
-from typing import Dict, List, Optional
-
+from dataclasses import dataclass
+from typing import Optional
 
 LANGUAGE_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Non évalué"]
 TOOL_LEVELS = ["Faible", "Moyen", "Bon", "Très bon", "Non évalué"]
@@ -22,7 +21,7 @@ class FieldSpec:
     max_lines: int
     require_sources: bool = False
     skip_llm_if_no_sources: bool = False
-    allowed_values: Optional[List[str]] = None
+    allowed_values: Optional[list[str]] = None
     deterministic_source: Optional[str] = None  # e.g. config.name
 
 
@@ -49,8 +48,8 @@ def _default_instructions(key: str, field_type: str) -> str:
     return "Réponds brièvement en français."
 
 
-def _register_specs() -> Dict[str, FieldSpec]:
-    specs: Dict[str, FieldSpec] = {}
+def _register_specs() -> dict[str, FieldSpec]:
+    specs: dict[str, FieldSpec] = {}
 
     deterministic = {
         "MONSIEUR_OU_MADAME": "civility",

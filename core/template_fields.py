@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Optional
 
 from docx import Document
 
@@ -13,11 +14,11 @@ from .field_specs import get_field_spec
 PLACEHOLDER_RE = re.compile(r"\{\{([^{}]+)\}\}")
 
 
-def extract_placeholders_from_docx(template_path: Path) -> List[str]:
+def extract_placeholders_from_docx(template_path: Path) -> list[str]:
     """Retourne les placeholders uniques trouvés dans un template DOCX."""
 
     doc = Document(str(Path(template_path).expanduser().resolve()))
-    placeholders: List[str] = []
+    placeholders: list[str] = []
 
     def register(text: str) -> None:
         if not text:
@@ -41,12 +42,12 @@ def extract_placeholders_from_docx(template_path: Path) -> List[str]:
 
 def build_field_specs(
     placeholders: Sequence[str],
-    fallback_defs: Optional[Sequence[Dict[str, Any]]] = None,
-) -> List[Dict[str, Any]]:
+    fallback_defs: Optional[Sequence[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
     """Construit les spécifications de champs à partir des placeholders."""
 
     fallback_lookup = {item["key"]: item for item in (fallback_defs or []) if item.get("key")}
-    specs: List[Dict[str, Any]] = []
+    specs: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     for raw in placeholders:

@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.text.paragraph import Paragraph
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ def _norm(text: str) -> str:
     return text
 
 
-def _style_ok(paragraph: Paragraph, prefixes: Optional[List[str]]) -> bool:
+def _style_ok(paragraph: Paragraph, prefixes: Optional[list[str]]) -> bool:
     name = getattr(getattr(paragraph, "style", None), "name", "") or ""
     if name.startswith("TOC"):
         return False
@@ -36,7 +35,7 @@ def find_paragraph(
     text: str,
     *,
     after: int = 0,
-    style_prefixes: Optional[List[str]] = None,
+    style_prefixes: Optional[list[str]] = None,
 ) -> tuple[Optional[int], Optional[Paragraph]]:
     target = _norm(text)
     for idx in range(after, len(doc.paragraphs)):
@@ -67,7 +66,7 @@ def insert_paragraph_after(paragraph: Paragraph, text: str, style_name: Optional
     return para
 
 
-def replace_text_everywhere(doc: Document, mapping: Dict[str, str]) -> None:
+def replace_text_everywhere(doc: Document, mapping: dict[str, str]) -> None:
     # Replace longer tokens first to avoid partial overlaps (e.g. {NAME} vs {{NAME}})
     ordered_items = sorted(
         ((old, new) for old, new in mapping.items() if old),
@@ -121,8 +120,8 @@ def _stringify_answer(value: Any) -> str:
     return str(value).strip()
 
 
-def build_moustache_mapping(answers: Dict[str, Any]) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
+def build_moustache_mapping(answers: dict[str, Any]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
     for key, value in answers.items():
         text = _stringify_answer(value)
         if not text:
@@ -139,8 +138,8 @@ def replace_section(
     start_text: str,
     end_text: str,
     answer_text: str,
-    start_style_prefixes: Optional[List[str]] = None,
-    end_style_prefixes: Optional[List[str]] = None,
+    start_style_prefixes: Optional[list[str]] = None,
+    end_style_prefixes: Optional[list[str]] = None,
 ) -> None:
     start_idx, start_par = find_paragraph(doc, start_text, style_prefixes=start_style_prefixes)
     if start_par is None or start_idx is None:
@@ -176,7 +175,7 @@ def replace_section(
 
 def render_report(
     template: Union[str, Path],
-    answers: Union[Dict[str, Any], str, Path],
+    answers: Union[dict[str, Any], str, Path],
     output: Union[str, Path],
     *,
     name: str = "",
@@ -190,7 +189,7 @@ def render_report(
     doc = Document(str(template_path))
 
     if isinstance(answers, (str, Path)):
-        answers_dict: Dict[str, Any] = json.loads(Path(answers).expanduser().read_text(encoding="utf-8"))
+        answers_dict: dict[str, Any] = json.loads(Path(answers).expanduser().read_text(encoding="utf-8"))
     else:
         answers_dict = answers
 

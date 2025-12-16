@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Interface Streamlit pour piloter l'orchestrateur de rapports."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import streamlit as st
 
@@ -43,14 +42,14 @@ PREREQ_LABELS = {
 }
 
 
-def list_subdirs(root: Path) -> List[Path]:
+def list_subdirs(root: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted([p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")])
 
 
 def build_callback(area):
-    logs: List[str] = []
+    logs: list[str] = []
 
     def _cb(msg: str) -> None:
         logs.append(msg)
@@ -64,7 +63,7 @@ def build_config(
     *,
     clients_root: Path,
     selected_client: str,
-    client_dirs: List[Path],
+    client_dirs: list[Path],
     template_path: Path,
     output_dir_input: str,
     model: str,
@@ -115,7 +114,7 @@ def reset_downstream_state() -> None:
     st.session_state.progress = 0.0
 
 
-def ensure_prereq(keys: List[str]) -> bool:
+def ensure_prereq(keys: list[str]) -> bool:
     missing_labels = []
     for key in keys:
         if not st.session_state.get(key):

@@ -1,7 +1,7 @@
 """Tests pour le module core/extract.py."""
 
-import pytest
 from pathlib import Path
+
 from core.extract import walk_files
 
 
@@ -19,7 +19,7 @@ class TestWalkFiles:
         """Exclut les fichiers cachés."""
         (tmp_path / ".hidden").write_text("secret")
         (tmp_path / "visible.txt").write_text("public")
-        
+
         files = walk_files(tmp_path)
         assert len(files) == 1
         assert files[0].name == "visible.txt"
@@ -30,7 +30,7 @@ class TestWalkFiles:
         git_dir.mkdir()
         (git_dir / "config").write_text("git config")
         (tmp_path / "file.txt").write_text("normal file")
-        
+
         files = walk_files(tmp_path)
         assert len(files) == 1
         assert files[0].name == "file.txt"

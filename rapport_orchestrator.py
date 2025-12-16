@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Orchestrateur unique pour la génération de rapports."""
 
 from __future__ import annotations
@@ -8,18 +7,19 @@ import json
 import logging
 import time
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
 
 from core.avs import detect_avs_number
+from core.export import docx_to_pdf
 from core.extract import extract_sources, walk_files
 from core.generate import DEFAULT_FIELDS, generate_fields
-from core.template_fields import build_field_specs, extract_placeholders_from_docx
-from core.render import render_report
-from core.export import docx_to_pdf
 from core.location_date import build_location_date
+from core.render import render_report
+from core.template_fields import build_field_specs, extract_placeholders_from_docx
 
 StatusCallback = Callable[[str], None]
 
@@ -34,9 +34,9 @@ class PipelineConfig:
     topk: int = 10
     temperature: float = 0.2
     top_p: float = 0.9
-    include_filters: List[str] = field(default_factory=list)
-    exclude_filters: List[str] = field(default_factory=list)
-    fields: Optional[List[Dict[str, Any]]] = None
+    include_filters: list[str] = field(default_factory=list)
+    exclude_filters: list[str] = field(default_factory=list)
+    fields: Optional[list[dict[str, Any]]] = None
     name: str = ""
     surname: str = ""
     civility: str = "Monsieur"
@@ -61,7 +61,7 @@ class PipelineResult:
     pdf_path: Optional[Path]
     debug_dir: Path
     elapsed_seconds: float
-    steps: List[Dict[str, Any]]
+    steps: list[dict[str, Any]]
 
 
 def slugify(value: str) -> str:
@@ -96,7 +96,7 @@ class RapportOrchestrator:
         job_dir: Path,
         *,
         force: Optional[bool] = None,
-    ) -> tuple[Path, Dict[str, Any], bool]:
+    ) -> tuple[Path, dict[str, Any], bool]:
         files = walk_files(config.client_dir)
         return self._handle_extraction(
             config,
@@ -109,17 +109,17 @@ class RapportOrchestrator:
         self,
         config: PipelineConfig,
         job_dir: Path,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         *,
         progress_callback: Optional[Callable[[str, str, str], None]] = None,
-    ) -> tuple[Path, Dict[str, Any]]:
+    ) -> tuple[Path, dict[str, Any]]:
         return self._handle_generation(config, job_dir, payload, progress_callback=progress_callback)
 
     def render_docx(
         self,
         config: PipelineConfig,
         job_dir: Path,
-        answers: Dict[str, Any],
+        answers: dict[str, Any],
     ) -> Path:
         return self._handle_render(config, job_dir, answers)
 
@@ -135,7 +135,7 @@ class RapportOrchestrator:
 
         resolved_cfg = self.resolve_config(config)
         job_dir = self.ensure_job_dir(resolved_cfg)
-        steps: List[Dict[str, Any]] = []
+        steps: list[dict[str, Any]] = []
 
         extracted_path, payload, reused_extraction = self.extract_sources(
             resolved_cfg, job_dir, force=resolved_cfg.force_reextract
@@ -182,9 +182,9 @@ class RapportOrchestrator:
         self,
         config: PipelineConfig,
         job_dir: Path,
-        files: List[Path],
+        files: list[Path],
         force_override: Optional[bool] = None,
-    ) -> tuple[Path, Dict[str, Any], bool]:
+    ) -> tuple[Path, dict[str, Any], bool]:
         extracted_path = job_dir / "extracted.json"
 
         if not files:
@@ -213,10 +213,10 @@ class RapportOrchestrator:
         self,
         config: PipelineConfig,
         job_dir: Path,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         *,
         progress_callback: Optional[Callable[[str, str, str], None]] = None,
-    ) -> tuple[Path, Dict[str, Any]]:
+    ) -> tuple[Path, dict[str, Any]]:
         answers_path = job_dir / "answers.json"
         debug_dir = job_dir / config.debug_subdir
         self._log("Génération des champs via le LLM...")
@@ -261,7 +261,7 @@ class RapportOrchestrator:
         self,
         config: PipelineConfig,
         job_dir: Path,
-        answers: Dict[str, Any],
+        answers: dict[str, Any],
     ) -> Path:
         report_name = config.report_filename or f"rapport_{slugify(config.client_dir.name)}.docx"
         report_path = job_dir / report_name
@@ -307,7 +307,7 @@ class RapportOrchestrator:
         self._log(f"Répertoire de sortie: {job_dir}")
         return job_dir
 
-    def _needs_extraction(self, files: List[Path], extracted_path: Path, force: bool) -> bool:
+    def _needs_extraction(self, files: list[Path], extracted_path: Path, force: bool) -> bool:
         if force or not extracted_path.exists():
             return True
         extracted_mtime = extracted_path.stat().st_mtime

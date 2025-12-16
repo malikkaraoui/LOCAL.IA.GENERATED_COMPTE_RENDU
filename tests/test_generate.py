@@ -1,11 +1,10 @@
 """Tests pour le module core/generate.py."""
 
-import pytest
 from core.generate import (
-    sanitize_output,
     looks_like_json_or_markdown,
-    truncate_lines,
+    sanitize_output,
     truncate_chars,
+    truncate_lines,
     validate_allowed_value,
 )
 

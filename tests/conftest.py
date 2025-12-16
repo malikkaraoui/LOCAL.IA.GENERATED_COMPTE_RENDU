@@ -1,12 +1,13 @@
 """Configuration pytest partagée pour tous les tests."""
 
-import pytest
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import pytest
 
 
 @pytest.fixture
-def sample_payload() -> Dict[str, Any]:
+def sample_payload() -> dict[str, Any]:
     """Payload d'extraction type pour les tests."""
     return {
         "documents": [
@@ -28,11 +29,11 @@ def temp_client_dir(tmp_path: Path) -> Path:
     """Crée un dossier client temporaire pour les tests."""
     client_dir = tmp_path / "test_client"
     client_dir.mkdir()
-    
+
     # Créer quelques fichiers test
     (client_dir / "cv.txt").write_text("Nom: John Doe\nProfession: Développeur")
     (client_dir / "notes.txt").write_text("Excellent candidat avec 5 ans d'expérience")
-    
+
     return client_dir
 
 
