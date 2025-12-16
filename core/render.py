@@ -68,13 +68,20 @@ def insert_paragraph_after(paragraph: Paragraph, text: str, style_name: Optional
 
 
 def replace_text_everywhere(doc: Document, mapping: Dict[str, str]) -> None:
+    # Replace longer tokens first to avoid partial overlaps (e.g. {NAME} vs {{NAME}})
+    ordered_items = sorted(
+        ((old, new) for old, new in mapping.items() if old),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+
     def replace_in_par(par: Paragraph):
-        if not mapping:
+        if not ordered_items:
             return
         text = "".join(run.text for run in par.runs) if par.runs else par.text
         replaced = False
-        for old, new in mapping.items():
-            if not old or old not in text:
+        for old, new in ordered_items:
+            if old not in text:
                 continue
             text = text.replace(old, new)
             replaced = True

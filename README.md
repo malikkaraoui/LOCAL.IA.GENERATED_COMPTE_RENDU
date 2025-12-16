@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-FF4B4B?logo=streamlit&logoColor=white)
-![Version](https://img.shields.io/badge/Version-V00.00.01-0A0A0A)
+![Version](https://img.shields.io/badge/Version-auto--git-0A0A0A)
 ![Status](https://img.shields.io/badge/LLM-ready-brightgreen)
 
 Application locale permettant d’orchestrer l’extraction de documents clients, la génération de champs via Ollama et le rendu automatique en DOCX/PDF. L’objectif est de produire des comptes rendus fiables en gardant toutes les données sensibles sur votre machine.
@@ -26,7 +26,7 @@ app.py (UI Streamlit)
 └── CLIENTS/ (données locales ignorées par Git)
 ```
 
-La version courante de la pile est stockée dans `VERSION` (`V00.00.01`).
+La version courante de la pile est stockée dans `VERSION` (mise à jour automatiquement via Git).
 
 ## 📦 Prérequis
 
@@ -66,12 +66,23 @@ Les sorties (`out/`, `uploaded_templates/`, `CLIENTS/`, etc.) restent sur ta mac
 
 - `CLIENTS/generate_fields.py` : génération autonome des champs depuis un payload + template.
 - `CLIENTS/render_docx.py` : rendu DOCX sans passer par l’UI.
+- `tools/versioning/update_version.py` : calcule et écrit la version applicative à partir de l’état Git.
 
 Chaque script expose `--help` pour détailler les options (batch size, modèle, filtres include/exclude…).
 
 ## 📝 Versioning
 
-La version applicative est centralisée dans le fichier `VERSION`. Mets‑le à jour (par ex. `V00.00.02`) avant de livrer une nouvelle release.
+La version applicative est centralisée dans le fichier `VERSION`. Avant chaque commit significatif, exécute :
+
+```bash
+python tools/versioning/update_version.py
+```
+
+Le script génère une chaîne basée sur `git describe`, le nombre de commits et un timestamp UTC pour assurer une trace professionnelle par livraison.
+
+## 📚 Dépendances
+
+Les librairies Python obligatoires sont listées dans `requirements.txt` **et** documentées dans `docs/dependencies.md` (similaire au projet Cookie). Mets à jour les deux fichiers lorsque tu ajoutes/supprimes une dépendance.
 
 ## 🔒 Licence
 

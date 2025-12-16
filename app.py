@@ -5,15 +5,18 @@
 from __future__ import annotations
 
 import html
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from urllib import request as urlrequest
 
 import streamlit as st
 
 from rapport_orchestrator import PipelineConfig, RapportOrchestrator
 from core.generate import check_llm_status, DEFAULT_FIELDS
 from core.location_date import build_location_date
+from core.avs import detect_avs_number
 
 
 def _load_version() -> str:
@@ -53,6 +56,8 @@ SESSION_DEFAULTS = {
     "auto_location_date": True,
     "location_date": "",
     "avs_number": "",
+    "llm_model_choice": "mistral:latest",
+    "llm_model_custom": "",
 }
 for key, val in SESSION_DEFAULTS.items():
     st.session_state.setdefault(key, val)
@@ -96,6 +101,43 @@ FIELD_STAGE_ICONS = {
     "error": "❌",
 }
 FIELD_STUCK_THRESHOLD = 90  # seconds
+
+LLM_PRESETS = [
+    "mistral:latest",
+    "llama3.1:8b",
+    "qwen3-vl:2b",
+]
+
+
+@st.cache_data(ttl=30)
+def list_ollama_models(host: str) -> List[str]:
+    if not host:
+        return []
+    base = host.rstrip("/")
+    url = f"{base}/api/tags"
+    try:
+        with urlrequest.urlopen(url, timeout=3) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return []
+
+    raw_models = []
+    if isinstance(payload, dict) and isinstance(payload.get("models"), list):
+        raw_models = payload["models"]
+    elif isinstance(payload, list):
+        raw_models = payload
+
+    names: List[str] = []
+    for item in raw_models:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("model")
+        else:
+            name = str(item)
+        if not name:
+            continue
+        if name not in names:
+            names.append(name)
+    return names
 
 
 def _ensure_stage_states() -> None:
@@ -461,26 +503,30 @@ with cols[0]:
         help="Les jobs et artefacts seront stockés ici",
     )
 with cols[1]:
-    name = st.text_input("Prénom", value="")
-    surname = st.text_input("Nom", value="")
-    civility = st.selectbox("Civilité", ["Monsieur", "Madame", "Autre"], index=0)
-    location_city = st.text_input(
-        "Lieu",
+    st.markdown("#### Identité")
+    identity_cols = st.columns([1, 1, 1])
+    name = identity_cols[0].text_input("Prénom", value="", placeholder="Prénom")
+    surname = identity_cols[1].text_input("Nom", value="", placeholder="Nom")
+    civility = identity_cols[2].selectbox("Civilité", ["Monsieur", "Madame", "Autre"], index=0)
+
+    st.markdown("#### Lieu & date")
+    loc_cols = st.columns([1.2, 0.8, 1])
+    location_city = loc_cols[0].text_input(
+        "Ville",
         value=st.session_state.get("location_city", "Genève"),
         placeholder="Genève",
-        help="Nom de la ville affichée dans {{LIEU_ET_DATE}}",
+        help="Ville affichée dans {{LIEU_ET_DATE}}",
     )
-    auto_location_date = st.checkbox(
-        "Utiliser automatiquement la date du jour",
+    auto_location_date = loc_cols[1].checkbox(
+        "Date auto",
         value=st.session_state.get("auto_location_date", True),
-        help="Si coché, la date sera recalculée à chaque lancement de la génération.",
+        help="Réutilise la date du jour à chaque génération.",
     )
-    manual_location_date = st.text_input(
-        "Date / texte manuel",
+    manual_location_date = loc_cols[2].text_input(
+        "Date manuelle",
         value=st.session_state.get("location_date_manual", st.session_state.get("location_date", "")),
-        placeholder="15/12/2025 ou Genève, le 15/12/2025",
+        placeholder="15/12/2025",
         disabled=auto_location_date,
-        help="Renseigner ici la date complète si tu désactives l'automatisation.",
     )
     location_preview = build_location_date(
         location_city,
@@ -492,24 +538,69 @@ with cols[1]:
     st.session_state.location_date_manual = manual_location_date
     st.session_state.location_date = location_preview
     st.caption(f"Prévisualisation {{LIEU_ET_DATE}} : {location_preview or '—'}")
-    avs_number = st.text_input(
-        "Numéro AVS (jamais généré)",
+
+    avs_cols = st.columns([1, 1])
+    avs_number = avs_cols[0].text_input(
+        "Numéro AVS",
         value=st.session_state.get("avs_number", ""),
         placeholder="756.XXXX.XXXX.XX",
-        help="Saisir manuellement le numéro AVS exact, sans passer par l'IA.",
     )
     st.session_state.avs_number = avs_number
-    model = st.text_input("Modèle Ollama", value="mistral:latest")
-    llm_host = st.text_input("Serveur Ollama", value=st.session_state.get("llm_host_value", "http://localhost:11434"))
+
+    st.markdown("#### Modèle LLM")
+    llm_host_default = st.session_state.get("llm_host_value", "http://localhost:11434")
+    model_host_cols = st.columns([2, 1])
+    with model_host_cols[1]:
+        llm_host = st.text_input("Serveur", value=llm_host_default, placeholder="http://localhost:11434")
     st.session_state.llm_host_value = llm_host
-    topk = st.slider("Top-K passages", min_value=3, max_value=20, value=10)
-    temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
-    top_p = st.slider("Top-p", min_value=0.1, max_value=1.0, value=0.9, step=0.05)
-    include_filters = st.text_input("Inclure chemins (séparés par ,)", value="")
-    exclude_filters = st.text_input("Exclure chemins (séparés par ,)", value="")
-    force_reextract = st.checkbox("Forcer la ré-extraction", value=False)
-    enable_soffice = st.checkbox("Activer LibreOffice (DOC/RTF)", value=False)
-    auto_pdf = st.checkbox("Exporter automatiquement en PDF", value=False)
+    detected_models = list_ollama_models(llm_host)
+    merged_models: List[str] = []
+    for candidate in LLM_PRESETS + detected_models:
+        if candidate and candidate not in merged_models:
+            merged_models.append(candidate)
+    if not merged_models:
+        merged_models = list(LLM_PRESETS)
+    custom_label = "Autre (personnalisé)"
+    llm_options = merged_models + [custom_label]
+    current_model = st.session_state.get("llm_model_choice", merged_models[0])
+    current_custom = st.session_state.get("llm_model_custom", "")
+    if current_model not in merged_models and not current_custom:
+        current_custom = current_model
+    default_index = llm_options.index(current_model) if current_model in merged_models else len(merged_models)
+    with model_host_cols[0]:
+        selected_option = st.selectbox("Modèle", options=llm_options, index=default_index)
+        if selected_option == custom_label:
+            model = st.text_input(
+                "Custom",
+                value=current_custom or (current_model if current_model not in LLM_PRESETS else ""),
+                help="Nom exact d'un modèle installé (ex: phi3:mini).",
+            ).strip()
+            if not model:
+                model = current_custom or current_model or LLM_PRESETS[0]
+            st.session_state.llm_model_custom = model
+        else:
+            model = selected_option
+            st.session_state.llm_model_custom = current_custom
+        if detected_models:
+            st.caption(f"{len(detected_models)} modèle(s) détecté(s) via {llm_host}.")
+        else:
+            st.caption("Liste Ollama indisponible – utilisation des favoris.")
+    st.session_state.llm_model_choice = model
+
+with st.expander("⚙️ Options avancées (RAG & sortie)", expanded=False):
+    tuning_cols = st.columns(3)
+    topk = tuning_cols[0].slider("Top-K passages", min_value=3, max_value=20, value=10)
+    temperature = tuning_cols[1].slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
+    top_p = tuning_cols[2].slider("Top-p", min_value=0.1, max_value=1.0, value=0.9, step=0.05)
+
+    filter_cols = st.columns(2)
+    include_filters = filter_cols[0].text_input("Inclure chemins (,)", value="")
+    exclude_filters = filter_cols[1].text_input("Exclure chemins (,) ", value="")
+
+    option_cols = st.columns(3)
+    force_reextract = option_cols[0].checkbox("Forcer extraction", value=False)
+    enable_soffice = option_cols[1].checkbox("LibreOffice", value=False)
+    auto_pdf = option_cols[2].checkbox("PDF auto", value=False)
 
 logs_placeholder = st.empty()
 progress_bar = st.progress(st.session_state.progress)
@@ -572,6 +663,157 @@ field_progress_placeholder = st.empty()
 render_field_progress = make_field_progress_renderer(field_progress_placeholder)
 render_field_progress()
 
+
+def acquire_orchestrator(existing: Optional[RapportOrchestrator] = None) -> RapportOrchestrator:
+    if existing is not None:
+        return existing
+    callback = build_callback(logs_placeholder, live_status_placeholder, llm_stream_placeholder)
+    return RapportOrchestrator(status_callback=callback)
+
+
+def run_extraction_stage(config: Optional[PipelineConfig], orchestrator: Optional[RapportOrchestrator] = None) -> bool:
+    if config is None:
+        set_stage_status("extract", "pending", "Complète les champs requis")
+        return False
+    set_stage_status("extract", "running", "Préparation de l'extraction...")
+    orch = acquire_orchestrator(orchestrator)
+    try:
+        cfg = orch.resolve_config(config)
+        job_dir = orch.ensure_job_dir(cfg)
+        extracted_path, payload, _ = orch.extract_sources(
+            cfg,
+            job_dir,
+            force=config.force_reextract or False,
+        )
+    except Exception as exc:
+        st.error(f"Erreur lors de l'extraction : {exc}")
+        set_stage_status("extract", "error", str(exc))
+        return False
+    st.success("Extraction terminée.")
+    if not (cfg.avs_number or st.session_state.get("avs_number")):
+        detected_avs = detect_avs_number(payload)
+        if detected_avs:
+            cfg.avs_number = detected_avs
+            st.session_state.avs_number = detected_avs
+            st.info(f"Numéro AVS détecté automatiquement : {detected_avs}")
+    st.session_state.config_obj = cfg
+    st.session_state.job_dir = str(job_dir)
+    st.session_state.extracted_path = str(extracted_path)
+    st.session_state.payload = payload
+    reset_downstream_state("generate")
+    st.session_state.progress = 0.25
+    progress_bar.progress(st.session_state.progress)
+    set_stage_status("extract", "done", "Extraction terminée")
+    return True
+
+
+def run_generation_stage(orchestrator: Optional[RapportOrchestrator] = None) -> bool:
+    if not ensure_prereq(["payload", "config_obj", "job_dir"]):
+        return False
+    set_stage_status("generate", "running", "Préparation de la requête LLM...")
+    st.session_state.live_llm_logs = []
+    fields_def = (st.session_state.config_obj.fields or DEFAULT_FIELDS) if st.session_state.config_obj else DEFAULT_FIELDS
+    initialize_field_progress(fields_def)
+    render_field_progress()
+    orch = acquire_orchestrator(orchestrator)
+    try:
+        answers_path, answers = orch.generate_fields(
+            st.session_state.config_obj,
+            Path(st.session_state.job_dir),
+            st.session_state.payload,
+            progress_callback=field_progress_callback,
+        )
+    except Exception as exc:
+        st.error(f"Erreur lors de la génération des champs : {exc}")
+        set_stage_status("generate", "error", str(exc))
+        return False
+    st.success("Champs générés.")
+    st.session_state.answers_path = str(answers_path)
+    st.session_state.answers = answers
+    st.session_state.report_path = None
+    st.session_state.pdf_path = None
+    st.session_state.progress = max(st.session_state.progress, 0.5)
+    progress_bar.progress(st.session_state.progress)
+    set_stage_status("generate", "done", "Champs générés")
+    reset_stages_from("render")
+    return True
+
+
+def run_pdf_stage(
+    orchestrator: Optional[RapportOrchestrator] = None,
+    *,
+    message: str = "Conversion PDF en cours...",
+    success_message: str = "PDF généré.",
+) -> tuple[bool, Optional[str]]:
+    if not ensure_prereq(["report_path"]):
+        return False, None
+    set_stage_status("pdf", "running", message)
+    orch = acquire_orchestrator(orchestrator)
+    try:
+        pdf_path = orch.export_pdf(Path(st.session_state.report_path))
+    except Exception as exc:
+        st.error(f"Erreur lors de l'export PDF : {exc}")
+        set_stage_status("pdf", "error", str(exc))
+        return False, None
+    st.success(success_message)
+    st.session_state.pdf_path = str(pdf_path)
+    st.session_state.progress = max(st.session_state.progress, 1.0)
+    progress_bar.progress(st.session_state.progress)
+    set_stage_status("pdf", "done", "PDF généré")
+    return True, str(pdf_path)
+
+
+def run_render_stage(orchestrator: Optional[RapportOrchestrator] = None) -> bool:
+    if not ensure_prereq(["answers", "config_obj", "job_dir"]):
+        return False
+    set_stage_status("render", "running", "Génération du DOCX en cours...")
+    orch = acquire_orchestrator(orchestrator)
+    try:
+        report_path = orch.render_docx(
+            st.session_state.config_obj,
+            Path(st.session_state.job_dir),
+            st.session_state.answers,
+        )
+    except Exception as exc:
+        st.error(f"Erreur lors du rendu DOCX : {exc}")
+        set_stage_status("render", "error", str(exc))
+        return False
+    st.success("DOCX généré.")
+    st.session_state.report_path = str(report_path)
+    st.session_state.progress = max(st.session_state.progress, 0.75)
+    progress_bar.progress(st.session_state.progress)
+    set_stage_status("render", "done", "DOCX généré")
+
+    auto_pdf_path = None
+    if st.session_state.config_obj and st.session_state.config_obj.export_pdf:
+        success, auto_pdf_path = run_pdf_stage(
+            orchestrator=orch,
+            message="Conversion PDF automatique...",
+            success_message="PDF généré automatiquement.",
+        )
+        if not success:
+            auto_pdf_path = None
+
+    record_history(
+        st.session_state.report_path,
+        st.session_state.answers_path,
+        st.session_state.extracted_path,
+        st.session_state.pdf_path or auto_pdf_path,
+    )
+    return True
+
+
+def run_full_pipeline(config: Optional[PipelineConfig]) -> None:
+    if config is None:
+        run_extraction_stage(None)
+        return
+    orchestrator = acquire_orchestrator()
+    if not run_extraction_stage(config, orchestrator):
+        return
+    if not run_generation_stage(orchestrator):
+        return
+    run_render_stage(orchestrator)
+
 extract_disabled = st.session_state.stage_status["extract"] in ("running", "done")
 generate_disabled = (
     st.session_state.stage_status["extract"] != "done"
@@ -586,11 +828,45 @@ pdf_disabled = (
     or st.session_state.stage_status["pdf"] in ("running", "done")
 )
 
+config_kwargs = dict(
+    clients_root=clients_root,
+    selected_client=selected_client,
+    client_dirs=client_dirs,
+    template_path=template_path,
+    output_dir_input=output_dir_input,
+    model=model,
+    host=llm_host,
+    topk=topk,
+    temperature=temperature,
+    top_p=top_p,
+    include_filters=include_filters,
+    exclude_filters=exclude_filters,
+    name=name,
+    surname=surname,
+    civility=civility,
+    location_city=location_city,
+    location_date_manual=manual_location_date,
+    auto_location_date=auto_location_date,
+    avs_number=avs_number,
+    force_reextract=force_reextract,
+    enable_soffice=enable_soffice,
+    auto_pdf=auto_pdf,
+)
+
 step_cols = st.columns(4)
 extract_clicked = step_cols[0].button("1) Extraire", use_container_width=True, disabled=extract_disabled)
 create_fields_clicked = step_cols[1].button("2) Générer les champs", use_container_width=True, disabled=generate_disabled)
 render_clicked = step_cols[2].button("3) Rendre le DOCX", use_container_width=True, disabled=render_disabled)
 pdf_clicked = step_cols[3].button("4) Export PDF", use_container_width=True, disabled=pdf_disabled)
+
+pipeline_running = any(status == "running" for status in st.session_state.stage_status.values())
+run_all_clicked = st.button(
+    "🚀 Lancer toutes les étapes (1→3)",
+    use_container_width=True,
+    disabled=pipeline_running,
+    type="primary",
+    help="Enchaîne automatiquement extraction, génération et rendu (PDF si option activée).",
+)
 
 if st.session_state.config_obj:
     st.session_state.config_obj.host = llm_host
@@ -602,144 +878,21 @@ if st.session_state.config_obj:
     st.session_state.config_obj.avs_number = avs_number
 
 if extract_clicked:
-    set_stage_status("extract", "running", "Préparation de l'extraction...")
-    config = build_config(
-        clients_root=clients_root,
-        selected_client=selected_client,
-        client_dirs=client_dirs,
-        template_path=template_path,
-        output_dir_input=output_dir_input,
-        model=model,
-        host=llm_host,
-        topk=topk,
-        temperature=temperature,
-        top_p=top_p,
-        include_filters=include_filters,
-        exclude_filters=exclude_filters,
-        name=name,
-        surname=surname,
-        civility=civility,
-        location_city=location_city,
-        location_date_manual=manual_location_date,
-        auto_location_date=auto_location_date,
-        avs_number=avs_number,
-        force_reextract=force_reextract,
-        enable_soffice=enable_soffice,
-        auto_pdf=auto_pdf,
-    )
-    if config:
-        callback = build_callback(logs_placeholder, live_status_placeholder, llm_stream_placeholder)
-        orchestrator = RapportOrchestrator(status_callback=callback)
-        try:
-            cfg = orchestrator.resolve_config(config)
-            job_dir = orchestrator.ensure_job_dir(cfg)
-            extracted_path, payload, reused = orchestrator.extract_sources(
-                cfg, job_dir, force=config.force_reextract or False
-            )
-        except Exception as exc:
-            st.error(f"Erreur lors de l'extraction : {exc}")
-            set_stage_status("extract", "error", str(exc))
-        else:
-            st.success("Extraction terminée.")
-            st.session_state.config_obj = cfg
-            st.session_state.job_dir = str(job_dir)
-            st.session_state.extracted_path = str(extracted_path)
-            st.session_state.payload = payload
-            reset_downstream_state("generate")
-            st.session_state.progress = 0.25
-            progress_bar.progress(st.session_state.progress)
-            set_stage_status("extract", "done", "Extraction terminée")
-    else:
-        set_stage_status("extract", "pending", "Complète les champs requis")
+    config = build_config(**config_kwargs)
+    run_extraction_stage(config)
 
 if create_fields_clicked:
-    if ensure_prereq(["payload", "config_obj", "job_dir"]):
-        set_stage_status("generate", "running", "Préparation de la requête LLM...")
-        st.session_state.live_llm_logs = []
-        fields_def = (st.session_state.config_obj.fields or DEFAULT_FIELDS) if st.session_state.config_obj else DEFAULT_FIELDS
-        initialize_field_progress(fields_def)
-        render_field_progress()
-        callback = build_callback(logs_placeholder, live_status_placeholder, llm_stream_placeholder)
-        orchestrator = RapportOrchestrator(status_callback=callback)
-        try:
-            answers_path, answers = orchestrator.generate_fields(
-                st.session_state.config_obj,
-                Path(st.session_state.job_dir),
-                st.session_state.payload,
-                progress_callback=field_progress_callback,
-            )
-        except Exception as exc:
-            st.error(f"Erreur lors de la génération des champs : {exc}")
-            set_stage_status("generate", "error", str(exc))
-        else:
-            st.success("Champs générés.")
-            st.session_state.answers_path = str(answers_path)
-            st.session_state.answers = answers
-            st.session_state.report_path = None
-            st.session_state.pdf_path = None
-            st.session_state.progress = max(st.session_state.progress, 0.5)
-            progress_bar.progress(st.session_state.progress)
-            set_stage_status("generate", "done", "Champs générés")
-            reset_stages_from("render")
+    run_generation_stage()
 
 if render_clicked:
-    if ensure_prereq(["answers", "config_obj", "job_dir"]):
-        set_stage_status("render", "running", "Génération du DOCX en cours...")
-        callback = build_callback(logs_placeholder, live_status_placeholder, llm_stream_placeholder)
-        orchestrator = RapportOrchestrator(status_callback=callback)
-        try:
-            report_path = orchestrator.render_docx(
-                st.session_state.config_obj,
-                Path(st.session_state.job_dir),
-                st.session_state.answers,
-            )
-        except Exception as exc:
-            st.error(f"Erreur lors du rendu DOCX : {exc}")
-            set_stage_status("render", "error", str(exc))
-        else:
-            st.success("DOCX généré.")
-            st.session_state.report_path = str(report_path)
-            st.session_state.progress = max(st.session_state.progress, 0.75)
-            progress_bar.progress(st.session_state.progress)
-            set_stage_status("render", "done", "DOCX généré")
-
-            auto_pdf_path = None
-            if st.session_state.config_obj and st.session_state.config_obj.export_pdf:
-                set_stage_status("pdf", "running", "Conversion PDF automatique...")
-                try:
-                    auto_pdf_path = orchestrator.export_pdf(Path(report_path))
-                except Exception as exc:
-                    st.error(f"Conversion PDF automatique échouée : {exc}")
-                    set_stage_status("pdf", "error", str(exc))
-                else:
-                    st.session_state.pdf_path = str(auto_pdf_path)
-                    st.session_state.progress = max(st.session_state.progress, 1.0)
-                    progress_bar.progress(st.session_state.progress)
-                    set_stage_status("pdf", "done", "PDF généré")
-
-            record_history(
-                st.session_state.report_path,
-                st.session_state.answers_path,
-                st.session_state.extracted_path,
-                st.session_state.pdf_path or (str(auto_pdf_path) if auto_pdf_path else None),
-            )
+    run_render_stage()
 
 if pdf_clicked:
-    if ensure_prereq(["report_path"]):
-        set_stage_status("pdf", "running", "Conversion PDF en cours...")
-        callback = build_callback(logs_placeholder, live_status_placeholder, llm_stream_placeholder)
-        orchestrator = RapportOrchestrator(status_callback=callback)
-        try:
-            pdf_path = orchestrator.export_pdf(Path(st.session_state.report_path))
-        except Exception as exc:
-            st.error(f"Erreur lors de l'export PDF : {exc}")
-            set_stage_status("pdf", "error", str(exc))
-        else:
-            st.success("PDF généré.")
-            st.session_state.pdf_path = str(pdf_path)
-            st.session_state.progress = max(st.session_state.progress, 1.0)
-            progress_bar.progress(st.session_state.progress)
-            set_stage_status("pdf", "done", "PDF généré")
+    run_pdf_stage()
+
+if run_all_clicked:
+    config = build_config(**config_kwargs)
+    run_full_pipeline(config)
 
 st.subheader("Téléchargements")
 download_cols = st.columns(2)

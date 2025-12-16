@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from core.generate import generate_fields
 from core.template_fields import build_field_specs, extract_placeholders_from_docx
 from core.location_date import build_location_date
+from core.avs import detect_avs_number
 
 
 def parse_list(value: str) -> List[str]:
@@ -67,6 +68,12 @@ def main() -> int:
         raise SystemExit("Aucun champ {{...}} détecté dans le template.")
 
     payload = json.loads(Path(args.extracted).expanduser().read_text(encoding="utf-8"))
+    avs_value = (args.avs_number or "").strip()
+    if not avs_value:
+        detected_avs = detect_avs_number(payload)
+        if detected_avs:
+            avs_value = detected_avs
+            print(f"➡️  Numéro AVS détecté dans les sources : {avs_value}")
     custom_fields = None
     if args.fields:
         custom_fields = json.loads(Path(args.fields).expanduser().read_text(encoding="utf-8"))
@@ -84,7 +91,7 @@ def main() -> int:
         "NAME": args.name,
         "SURNAME": args.surname,
         "LIEU_ET_DATE": location_date_value,
-        "NUMERO_AVS": args.avs_number,
+        "NUMERO_AVS": avs_value,
     }
 
     answers = generate_fields(

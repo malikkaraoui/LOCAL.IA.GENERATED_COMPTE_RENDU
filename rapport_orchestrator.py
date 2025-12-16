@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from core.avs import detect_avs_number
 from core.extract import extract_sources, walk_files
 from core.generate import DEFAULT_FIELDS, generate_fields
 from core.template_fields import build_field_specs, extract_placeholders_from_docx
@@ -221,6 +222,11 @@ class RapportOrchestrator:
         self._log("Génération des champs via le LLM...")
         self._log(f"Cible LLM : {config.model} @ {config.host}")
         self._refresh_location_date(config)
+        if not config.avs_number:
+            detected_avs = detect_avs_number(payload)
+            if detected_avs:
+                config.avs_number = detected_avs
+                self._log(f"Numéro AVS détecté automatiquement : {detected_avs}")
         deterministic_values = {
             "MONSIEUR_OU_MADAME": config.civility,
             "NAME": config.name,
