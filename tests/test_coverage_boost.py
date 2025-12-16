@@ -62,8 +62,9 @@ class TestExtractPdf:
         
         result = extract_pdf(pdf_file)
         
-        assert "text" in result
-        assert "Test PDF Content" in result["text"]
+        assert result.success is True
+        assert "text" in result.value
+        assert "Test PDF Content" in result.value["text"]
 
 
 class TestExtractDocx:
@@ -80,8 +81,9 @@ class TestExtractDocx:
         
         result = extract_docx(docx_file)
         
-        assert "text" in result
-        assert "Test DOCX Content" in result["text"]
+        assert result.success is True
+        assert "text" in result.value
+        assert "Test DOCX Content" in result.value["text"]
 
     def test_handles_tables(self, tmp_path):
         """Gère les tableaux."""
@@ -95,9 +97,10 @@ class TestExtractDocx:
         
         result = extract_docx(docx_file)
         
-        assert "text" in result
+        assert result.success is True
+        assert "text" in result.value
         # Le texte du tableau devrait être extrait
-        assert "Cell Content" in result["text"]
+        assert "Cell Content" in result.value["text"]
 
 
 class TestExtractTxt:
@@ -110,8 +113,9 @@ class TestExtractTxt:
         
         result = extract_txt(txt_file)
         
-        assert "text" in result
-        assert "Contenu français" in result["text"]
+        assert result.success is True
+        assert "text" in result.value
+        assert "Contenu français" in result.value["text"]
 
     def test_handles_large_file(self, tmp_path):
         """Gère un gros fichier."""
@@ -121,8 +125,10 @@ class TestExtractTxt:
         
         result = extract_txt(txt_file)
         
-        assert "text" in result
-        assert len(result["text"]) > 0
+        assert result.success is True
+        assert "text" in result.value
+        # Le fichier ne devrait pas être vide
+        assert len(result.value["text"]) > 0
 
 
 class TestDetectAvsInText:

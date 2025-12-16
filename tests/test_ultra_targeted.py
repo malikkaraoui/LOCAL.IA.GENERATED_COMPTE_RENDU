@@ -108,9 +108,10 @@ class TestUltraTargeted:
         from core.extract import extract_pdf
         result = extract_pdf(pdf_file)
         
-        assert "ligne 1" in result["text"]
-        assert "ligne 2" in result["text"]
-        assert "ligne 3" in result["text"]
+        assert result.success is True
+        assert "ligne 1" in result.value["text"]
+        assert "ligne 2" in result.value["text"]
+        assert "ligne 3" in result.value["text"]
 
     def test_extract_docx_paragraphs_and_tables(self, tmp_path):
         """DOCX paragraphes ET tableaux."""
@@ -133,10 +134,11 @@ class TestUltraTargeted:
         
         result = extract_docx(docx_file)
         
-        assert "Avant tableau" in result["text"]
-        assert "Après tableau" in result["text"]
-        assert "Cell1" in result["text"]
-        assert "Cell4" in result["text"]
+        assert result.success is True
+        assert "Avant tableau" in result.value["text"]
+        assert "Après tableau" in result.value["text"]
+        assert "Cell1" in result.value["text"]
+        assert "Cell4" in result.value["text"]
 
     def test_chunk_text_with_overlap(self):
         """chunk_text avec overlap important."""

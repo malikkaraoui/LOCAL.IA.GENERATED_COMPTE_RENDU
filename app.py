@@ -277,7 +277,12 @@ def field_progress_callback(field_key: str, stage: str, message: str) -> None:
 
 @st.cache_data(ttl=30)
 def cached_llm_status(host: str, model: str):
-    return check_llm_status(host, model)
+    result = check_llm_status(host, model)
+    # Convertir Result[str] en tuple (bool, str) pour compatibilité
+    if result.success:
+        return True, result.value
+    else:
+        return False, str(result.error)
 
 PREREQ_LABELS = {
     "payload": "Extraction",

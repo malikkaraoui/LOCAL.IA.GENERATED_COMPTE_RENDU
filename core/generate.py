@@ -8,9 +8,14 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Optional
 from urllib import request
+from urllib.error import URLError, HTTPError
 
 from .context import build_index
+from .errors import Result, GenerationError, OllamaError
 from .field_specs import FieldSpec, get_field_spec, normalize_allowed_value
+from .logger import get_logger
+
+LOG = get_logger("core.generate")
 
 StatusCallback = Optional[Callable[[str], None]]
 FieldProgressCallback = Optional[Callable[[str, str, str], None]]
@@ -24,33 +29,87 @@ RE_JSON = re.compile(r"\A\s*[{[]")
 RE_CODEBLOCK = re.compile(r"```|\bjson\b", re.IGNORECASE)
 
 
-def ollama_generate(model: str, prompt: str, host: str, temperature: float, top_p: float) -> str:
-    url = host.rstrip("/") + "/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": temperature, "top_p": top_p},
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with request.urlopen(req, timeout=300) as resp:
-        out = json.loads(resp.read().decode("utf-8"))
-    return out.get("response", "")
+def ollama_generate(
+    model: str, 
+    prompt: str, 
+    host: str, 
+    temperature: float, 
+    top_p: float,
+    timeout: float = 300.0,
+) -> Result[str]:
+    """Génère une réponse via l'API Ollama.
+    
+    Args:
+        model: Nom du modèle Ollama
+        prompt: Prompt à envoyer
+        host: URL du serveur Ollama
+        temperature: Température (0-1)
+        top_p: Paramètre top_p (0-1)
+        timeout: Timeout en secondes (défaut 300)
+        
+    Returns:
+        Result[str]: Succès avec la réponse générée ou échec avec OllamaError
+    """
+    try:
+        LOG.info("Requête Ollama: model=%s, temp=%.2f, top_p=%.2f", model, temperature, top_p)
+        url = host.rstrip("/") + "/api/generate"
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": temperature, "top_p": top_p},
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        
+        with request.urlopen(req, timeout=timeout) as resp:
+            out = json.loads(resp.read().decode("utf-8"))
+        
+        response = out.get("response", "")
+        LOG.debug("Réponse Ollama: %d caractères", len(response))
+        return Result.ok(response)
+        
+    except (URLError, HTTPError) as exc:
+        error = OllamaError(f"Échec connexion Ollama {host}: {exc}")
+        LOG.error("Erreur connexion Ollama: %s", exc)
+        return Result.fail(error)
+    except TimeoutError as exc:
+        error = OllamaError(f"Timeout Ollama après {timeout}s: {exc}")
+        LOG.error("Timeout Ollama: %s", exc)
+        return Result.fail(error)
+    except Exception as exc:
+        error = OllamaError(f"Erreur Ollama: {exc}")
+        LOG.error("Erreur Ollama: %s", exc)
+        return Result.fail(error)
 
 
-def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.0) -> tuple[bool, str]:
+def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.0) -> Result[str]:
+    """Vérifie la disponibilité du serveur Ollama et du modèle.
+    
+    Args:
+        host: URL du serveur Ollama
+        model: Nom du modèle à vérifier (optionnel)
+        timeout: Timeout en secondes
+        
+    Returns:
+        Result[str]: Succès avec message de statut ou échec avec OllamaError
+    """
+    LOG.info("Évérification serveur Ollama: %s", host)
     base = host.rstrip("/")
+    
     try:
         with request.urlopen(base + "/api/version", timeout=timeout) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
         version = payload.get("version") or payload.get("name") or "inconnue"
         message = f"Serveur accessible ({version})"
+        LOG.info("Serveur Ollama OK: %s", version)
     except Exception as exc:
-        return False, f"Serveur injoignable : {exc}"
+        error = OllamaError(f"Serveur injoignable : {exc}")
+        LOG.error("Échec connexion serveur Ollama: %s", exc)
+        return Result.fail(error)
 
     if not model:
-        return True, message
+        return Result.ok(message)
 
     try:
         with request.urlopen(base + "/api/tags", timeout=timeout) as resp:
@@ -58,10 +117,16 @@ def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.
         models = tags_payload.get("models", []) if isinstance(tags_payload, dict) else []
         names = {m.get("name") for m in models if isinstance(m, dict)}
         if model in names:
-            return True, message + f" — modèle '{model}' disponible"
-        return False, message + f" — modèle '{model}' introuvable"
+            full_message = message + f" — modèle '{model}' disponible"
+            LOG.info("Modèle '%s' disponible", model)
+            return Result.ok(full_message)
+        error = OllamaError(message + f" — modèle '{model}' introuvable")
+        LOG.warning("Modèle '%s' introuvable", model)
+        return Result.fail(error)
     except Exception as exc:
-        return False, message + f" — vérification du modèle impossible : {exc}"
+        error = OllamaError(message + f" — vérification du modèle impossible : {exc}")
+        LOG.error("Échec vérification modèle: %s", exc)
+        return Result.fail(error)
 
 
 def sanitize_output(text: str) -> str:
@@ -220,14 +285,17 @@ def generate_fields(
                     status_callback(
                         f"LLM [{key}] envoi du prompt ({len(context_blocks)} sources, {len(prompt)} caractères)…"
                     )
-                try:
-                    raw_response = ollama_generate(model, prompt, host, temperature, top_p)
-                except Exception as exc:
+                
+                llm_result = ollama_generate(model, prompt, host, temperature, top_p)
+                if not llm_result.success:
+                    error_msg = str(llm_result.error)
                     if status_callback:
-                        status_callback(f"LLM [{key}] échec : {exc}")
+                        status_callback(f"LLM [{key}] échec : {error_msg}")
                     if progress_callback:
-                        progress_callback(key, "error", f"Erreur LLM : {exc}")
-                    raise
+                        progress_callback(key, "error", f"Erreur LLM : {error_msg}")
+                    raise GenerationError(f"Échec génération {key}: {error_msg}")
+                
+                raw_response = llm_result.value
                 if status_callback:
                     status_callback(f"LLM [{key}] réponse reçue ({len(raw_response)} caractères)")
                 if progress_callback:
@@ -242,13 +310,19 @@ def generate_fields(
                         prompt
                         + "\n\nTu as répondu dans un format interdit. Recommence en texte brut, sans JSON ni markdown."
                     )
-                    response_text = ollama_generate(
+                    retry_result = ollama_generate(
                         model,
                         anti_prompt,
                         host,
                         temperature=0.0,
                         top_p=top_p,
                     )
+                    if retry_result.success:
+                        response_text = retry_result.value
+                    else:
+                        # Si la retry échoue, on garde la réponse originale
+                        LOG.warning("Retry failed for %s, using original response", key)
+                        response_text = raw_response
                 cleaned_value = sanitize_output(response_text)
                 if cleaned_value == "__VIDE__":
                     cleaned_value = ""

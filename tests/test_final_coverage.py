@@ -27,11 +27,12 @@ class TestFinalCoverageBoost:
         
         result = extract_pdf(pdf_file)
         
-        assert "Page 1" in result["text"]
-        assert "Page 2" in result["text"]
-        assert "Page 3" in result["text"]
-        assert "pages" in result
-        assert len(result["pages"]) == 3
+        assert result.success is True
+        assert "Page 1" in result.value["text"]
+        assert "Page 2" in result.value["text"]
+        assert "Page 3" in result.value["text"]
+        assert "pages" in result.value
+        assert len(result.value["pages"]) == 3
 
     def test_extract_docx_complex_structure(self, tmp_path):
         """DOCX avec structure complexe."""
@@ -55,12 +56,13 @@ class TestFinalCoverageBoost:
         
         result = extract_docx(docx_file)
         
-        assert "Titre Principal" in result["text"]
-        assert "Paragraphe 1" in result["text"]
-        assert "Sous-titre" in result["text"]
+        assert result.success is True
+        assert "Titre Principal" in result.value["text"]
+        assert "Paragraphe 1" in result.value["text"]
+        assert "Sous-titre" in result.value["text"]
         # Les cellules du tableau devraient être extraites
-        assert "A1" in result["text"]
-        assert "B2" in result["text"]
+        assert "A1" in result.value["text"]
+        assert "B2" in result.value["text"]
 
     def test_extract_txt_various_encodings(self, tmp_path):
         """Teste extraction avec différents contenus."""
@@ -71,9 +73,10 @@ class TestFinalCoverageBoost:
         
         result = extract_txt(txt_file)
         
-        assert "éàü" in result["text"]
-        assert "ñ" in result["text"]
-        assert "€" in result["text"]
+        assert result.success is True
+        assert "éàü" in result.value["text"]
+        assert "ñ" in result.value["text"]
+        assert "€" in result.value["text"]
 
     def test_walk_files_recursive_structure(self, tmp_path):
         """walk_files avec structure récursive."""

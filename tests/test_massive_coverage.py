@@ -26,9 +26,10 @@ class TestExtractComprehensive:
         doc.close()
         
         result = extract_pdf(pdf_file)
-        assert "Page 1" in result["text"]
-        assert "Page 2" in result["text"]
-        assert "pages" in result
+        assert result.success is True
+        assert "Page 1" in result.value["text"]
+        assert "Page 2" in result.value["text"]
+        assert "pages" in result.value
 
     def test_extract_docx_with_multiple_paragraphs(self, tmp_path):
         """Extrait DOCX avec plusieurs paragraphes."""
@@ -39,8 +40,9 @@ class TestExtractComprehensive:
         doc.save(docx_file)
         
         result = extract_docx(docx_file)
+        assert result.success is True
         for i in range(5):
-            assert f"Paragraphe {i}" in result["text"]
+            assert f"Paragraphe {i}" in result.value["text"]
 
     def test_extract_txt_utf8_with_accents(self, tmp_path):
         """Extrait texte UTF-8 avec accents."""
@@ -49,8 +51,9 @@ class TestExtractComprehensive:
         txt_file.write_text(content, encoding="utf-8")
         
         result = extract_txt(txt_file)
-        assert "français" in result["text"]
-        assert "español" in result["text"]
+        assert result.success is True
+        assert "français" in result.value["text"]
+        assert "español" in result.value["text"]
 
     def test_file_mtime_returns_iso_format(self, tmp_path):
         """file_mtime_iso retourne format ISO."""

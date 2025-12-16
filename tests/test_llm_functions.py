@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import patch, Mock
 from core.generate import check_llm_status, validate_allowed_value
+from core.errors import Result
 import json
 
 
@@ -18,18 +19,18 @@ class TestCheckLlmStatus:
         mock_response.__exit__ = Mock(return_value=False)
         mock_urlopen.return_value = mock_response
         
-        success, message = check_llm_status("http://localhost:11434")
-        assert success is True
-        assert "accessible" in message.lower()
+        result = check_llm_status("http://localhost:11434")
+        assert result.success is True
+        assert "accessible" in result.value.lower()
 
     @patch('core.generate.request.urlopen')
     def test_server_inaccessible(self, mock_urlopen):
         """Serveur inaccessible."""
         mock_urlopen.side_effect = Exception("Connection refused")
         
-        success, message = check_llm_status("http://localhost:11434")
-        assert success is False
-        assert "injoignable" in message.lower()
+        result = check_llm_status("http://localhost:11434")
+        assert result.success is False
+        assert "injoignable" in str(result.error).lower()
 
     @patch('core.generate.request.urlopen')
     def test_model_available(self, mock_urlopen):
@@ -49,10 +50,10 @@ class TestCheckLlmStatus:
         
         mock_urlopen.side_effect = side_effect
         
-        success, message = check_llm_status("http://localhost:11434", model="llama2")
-        assert success is True
-        assert "llama2" in message
-        assert "disponible" in message
+        result = check_llm_status("http://localhost:11434", model="llama2")
+        assert result.success is True
+        assert "llama2" in result.value
+        assert "disponible" in result.value
 
     @patch('core.generate.request.urlopen')
     def test_model_not_found(self, mock_urlopen):
@@ -72,9 +73,9 @@ class TestCheckLlmStatus:
         
         mock_urlopen.side_effect = side_effect
         
-        success, message = check_llm_status("http://localhost:11434", model="gpt-4")
-        assert success is False
-        assert "introuvable" in message
+        result = check_llm_status("http://localhost:11434", model="gpt-4")
+        assert result.success is False
+        assert "introuvable" in str(result.error)
 
 
 class TestValidateAllowedValueAdvanced:
