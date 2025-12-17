@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
+from pathlib import Path
 
 from backend.main import app
 
@@ -166,6 +167,64 @@ class TestReportsRoutes:
         assert response.status_code == 200
         assert "supprimé" in response.json()["message"]
         mock_job.delete.assert_called_once()
+
+
+class TestBrandingRoutes:
+    """Tests pour les routes /branding."""
+
+    def test_apply_branding_success(self, client, tmp_path):
+        """Test POST /api/branding/apply - succès (retourne un docx)."""
+        # Préparer un template de base fictif
+        tpl_dir = tmp_path / "uploaded_templates"
+        tpl_dir.mkdir(parents=True)
+        (tpl_dir / "TEMPLATE_SIMPLE_BASE.docx").write_bytes(b"PK\x03\x04fake-docx")
+
+        # Mock du branding: écrit un docx de sortie
+        def _fake_apply(template_docx, output_docx, fields, logo_header=None, logo_footer=None, **kwargs):
+            Path(output_docx).write_bytes(b"PK\x03\x04branded")
+            return Path(output_docx)
+
+        with patch('backend.api.routes.branding.settings') as mock_settings:
+            mock_settings.TEMPLATES_DIR = tpl_dir
+
+            with patch('backend.api.routes.branding.apply_branding_to_docx', side_effect=_fake_apply):
+                resp = client.post(
+                    "/api/branding/apply",
+                    data={
+                        "titre_document": "Titre",
+                        "societe": "ACME",
+                        "rue": "Rue",
+                        "numero": "1",
+                        "cp": "1200",
+                        "ville": "Genève",
+                        "tel": "000",
+                        "email": "a@b.ch",
+                    },
+                )
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert resp.content.startswith(b"PK\x03\x04")
+
+    def test_apply_branding_rejects_bad_logo_extension(self, client, tmp_path):
+        """Test POST /api/branding/apply - refuse un logo avec extension interdite."""
+        tpl_dir = tmp_path / "uploaded_templates"
+        tpl_dir.mkdir(parents=True)
+        (tpl_dir / "TEMPLATE_SIMPLE_BASE.docx").write_bytes(b"PK\x03\x04fake-docx")
+
+        with patch('backend.api.routes.branding.settings') as mock_settings:
+            mock_settings.TEMPLATES_DIR = tpl_dir
+
+            resp = client.post(
+                "/api/branding/apply",
+                data={"societe": "ACME"},
+                files={"logo_header": ("logo.exe", b"not-an-image", "application/octet-stream")},
+            )
+
+        assert resp.status_code == 400
+        assert "Format logo" in resp.json()["detail"]
 
 
 class TestReportWorker:

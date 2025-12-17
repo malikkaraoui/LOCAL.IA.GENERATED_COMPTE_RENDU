@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { reportsAPI, healthAPI } from '../services/api';
+import { reportsAPI, healthAPI, brandingAPI } from '../services/api';
 import './ClientSelection.css';
 
 /**
@@ -29,6 +29,7 @@ function ClientSelection() {
   const [templateName, setTemplateName] = useState('');
   const [templates, setTemplates] = useState([]);
   const [templateUploading, setTemplateUploading] = useState(false);
+  const [templateLocalFile, setTemplateLocalFile] = useState(null);
   const [outputDir, setOutputDir] = useState('./out');
 
   // LLM
@@ -49,6 +50,19 @@ function ClientSelection() {
   const [forceReextract, setForceReextract] = useState(false);
   const [enableSoffice, setEnableSoffice] = useState(false);
   const [autoPdf, setAutoPdf] = useState(false);
+
+  // Branding (entête/pied) – appliqué AVANT la génération du rapport
+  const [brandingEnabled, setBrandingEnabled] = useState(false);
+  const [brandingTitreDocument, setBrandingTitreDocument] = useState('');
+  const [brandingSociete, setBrandingSociete] = useState('');
+  const [brandingRue, setBrandingRue] = useState('');
+  const [brandingNumero, setBrandingNumero] = useState('');
+  const [brandingCp, setBrandingCp] = useState('');
+  const [brandingVille, setBrandingVille] = useState('');
+  const [brandingTel, setBrandingTel] = useState('');
+  const [brandingEmail, setBrandingEmail] = useState('');
+  const [brandingLogoHeader, setBrandingLogoHeader] = useState(null);
+  const [brandingLogoFooter, setBrandingLogoFooter] = useState(null);
 
   // Fonction pour charger les modèles Ollama  
   const loadOllamaModels = async () => {
@@ -102,6 +116,7 @@ function ClientSelection() {
 
   const handleTemplateFileSelected = async (file) => {
     if (!file) return;
+    setTemplateLocalFile(file);
     if (!file.name?.toLowerCase().endsWith('.docx')) {
       setError('Le template doit être un fichier .docx');
       return;
@@ -124,6 +139,48 @@ function ClientSelection() {
     }
   };
 
+  const FilePicker = ({
+    id,
+    accept,
+    disabled,
+    file,
+    onFileSelected,
+    buttonLabel,
+    placeholder,
+  }) => {
+    return (
+      <div className="flex items-center gap-3">
+        <input
+          id={id}
+          type="file"
+          accept={accept}
+          className="sr-only"
+          disabled={disabled}
+          onChange={(e) => onFileSelected?.(e.target.files?.[0] || null)}
+        />
+        <label
+          htmlFor={id}
+          className={
+            "inline-flex items-center rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm " +
+            "hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 " +
+            (disabled ? "opacity-50 cursor-not-allowed hover:bg-slate-900" : "cursor-pointer")
+          }
+        >
+          {buttonLabel}
+        </label>
+        <div
+          className={
+            "min-w-0 flex-1 truncate rounded-md border px-3 py-2 text-sm " +
+            (file ? "border-slate-200 bg-slate-50 text-slate-900" : "border-slate-200 bg-white text-slate-500")
+          }
+          title={file?.name || ''}
+        >
+          {file ? file.name : placeholder}
+        </div>
+      </div>
+    );
+  };
+
   const getLocationDatePreview = () => {
     if (autoDate) {
       const today = new Date();
@@ -136,6 +193,72 @@ function ClientSelection() {
     return manualDate ? `${locationCity}, le ${manualDate}` : locationCity;
   };
 
+  const extractDetailFromAxiosBlobError = async (err) => {
+    const data = err?.response?.data;
+    const ct = err?.response?.headers?.['content-type'] || err?.response?.headers?.['Content-Type'];
+
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text();
+        if ((ct && String(ct).includes('application/json')) || text.trim().startsWith('{')) {
+          const parsed = JSON.parse(text);
+          return parsed?.detail || text;
+        }
+        return text;
+      } catch {
+        return null;
+      }
+    }
+
+    return err?.response?.data?.detail || null;
+  };
+
+  const applyBrandingAndUploadTemplateIfNeeded = async () => {
+    if (!brandingEnabled) {
+      return templateName || null;
+    }
+
+    // Construire FormData pour /api/branding/apply
+    const fd = new FormData();
+
+    // Template: idéalement template_name (upload/liste). template_path reste un fallback dev.
+    if (templateName) {
+      fd.append('template_name', templateName);
+    } else if (templatePath) {
+      fd.append('template_path', templatePath);
+    }
+
+    fd.append('titre_document', brandingTitreDocument);
+    fd.append('societe', brandingSociete);
+    fd.append('rue', brandingRue);
+    fd.append('numero', brandingNumero);
+    fd.append('cp', brandingCp);
+    fd.append('ville', brandingVille);
+    fd.append('tel', brandingTel);
+    fd.append('email', brandingEmail);
+
+    if (brandingLogoHeader) fd.append('logo_header', brandingLogoHeader);
+    if (brandingLogoFooter) fd.append('logo_footer', brandingLogoFooter);
+
+    // Appeler l'API branding (retourne un DOCX)
+    const { blob, filename } = await brandingAPI.applyBranding(fd);
+    const docxName = filename || `template_brande_${Date.now()}.docx`;
+    const file = new File([blob], docxName, {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+
+    // Uploader le template brandé côté serveur puis l'utiliser pour le rapport
+    const uploadResp = await reportsAPI.uploadTemplate(file);
+    const newTemplateName = uploadResp.template_name;
+    if (newTemplateName) {
+      setTemplateName(newTemplateName);
+      if (!templates.includes(newTemplateName)) {
+        setTemplates((prev) => [newTemplateName, ...prev]);
+      }
+    }
+    return newTemplateName || null;
+  };
+
   const handleCreateReport = async () => {
     if (!selectedClient) {
       setError('Veuillez sélectionner un client');
@@ -146,6 +269,19 @@ function ClientSelection() {
     setError(null);
 
     try {
+      // 1) Branding (optionnel) avant génération: produit un template brandé et le sélectionne
+      let effectiveTemplateName = templateName || null;
+      if (brandingEnabled) {
+        try {
+          effectiveTemplateName = await applyBrandingAndUploadTemplateIfNeeded();
+        } catch (err) {
+          const detail = await extractDetailFromAxiosBlobError(err);
+          setError(detail || 'Erreur lors de l\'application du branding');
+          setLoading(false);
+          return;
+        }
+      }
+
       const finalModel = useCustomModel ? llmCustom : llmModel;
       
       const response = await reportsAPI.createReport(
@@ -163,8 +299,8 @@ function ClientSelection() {
           clients_root: clientsRoot,
           // IMPORTANT: un navigateur ne peut pas transmettre un chemin local exploitable;
           // si un template est choisi via upload/liste, on utilise template_name.
-          template_name: templateName || undefined,
-          template_path: templateName ? undefined : templatePath,
+          template_name: effectiveTemplateName || undefined,
+          template_path: effectiveTemplateName ? undefined : templatePath,
           output_dir: outputDir,
           llm_host: llmHost,
           llm_model: finalModel,
@@ -231,14 +367,17 @@ function ClientSelection() {
               <label>Template DOCX</label>
               <div className="template-picker">
                 <div className="template-picker-row">
-                  <input
-                    type="file"
+                  <FilePicker
+                    id="template-docx"
                     accept=".docx"
                     disabled={loading || templateUploading}
-                    onChange={(e) => handleTemplateFileSelected(e.target.files?.[0])}
+                    file={templateLocalFile}
+                    onFileSelected={(file) => handleTemplateFileSelected(file)}
+                    buttonLabel={templateUploading ? 'Upload…' : 'Parcourir…'}
+                    placeholder="Aucun template sélectionné"
                   />
-                  {templateUploading && (
-                    <span className="template-uploading">Upload…</span>
+                  {templateName && (
+                    <small className="hint">Template côté serveur: <strong>{templateName}</strong></small>
                   )}
                 </div>
 
@@ -287,6 +426,145 @@ function ClientSelection() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Section Branding */}
+        <div className="form-section">
+          <h3>🎨 Branding DOCX (avant génération)</h3>
+
+          <div className="form-row">
+            <div className="form-group checkbox-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={brandingEnabled}
+                  onChange={(e) => setBrandingEnabled(e.target.checked)}
+                />
+                <span>Appliquer l’entête/pied de page (logos + champs)</span>
+              </label>
+            </div>
+          </div>
+
+          {brandingEnabled && (
+            <>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Titre document (TITRE_DOCUMENT)</label>
+                  <input
+                    type="text"
+                    value={brandingTitreDocument}
+                    onChange={(e) => setBrandingTitreDocument(e.target.value)}
+                    placeholder="ESSAI"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Société (SOCIETE)</label>
+                  <input
+                    type="text"
+                    value={brandingSociete}
+                    onChange={(e) => setBrandingSociete(e.target.value)}
+                    placeholder="MALIK SAS"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Rue</label>
+                  <input
+                    type="text"
+                    value={brandingRue}
+                    onChange={(e) => setBrandingRue(e.target.value)}
+                    placeholder="Joseph DessaiX"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Numéro</label>
+                  <input
+                    type="text"
+                    value={brandingNumero}
+                    onChange={(e) => setBrandingNumero(e.target.value)}
+                    placeholder="2"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>CP</label>
+                  <input
+                    type="text"
+                    value={brandingCp}
+                    onChange={(e) => setBrandingCp(e.target.value)}
+                    placeholder="74000"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Ville</label>
+                  <input
+                    type="text"
+                    value={brandingVille}
+                    onChange={(e) => setBrandingVille(e.target.value)}
+                    placeholder="ANNECY"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Téléphone</label>
+                  <input
+                    type="text"
+                    value={brandingTel}
+                    onChange={(e) => setBrandingTel(e.target.value)}
+                    placeholder="+33..."
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Email</label>
+                  <input
+                    type="text"
+                    value={brandingEmail}
+                    onChange={(e) => setBrandingEmail(e.target.value)}
+                    placeholder="contact@..."
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Logo entête (PNG/JPG/TIFF)</label>
+                  <FilePicker
+                    id="branding-logo-header"
+                    accept="image/png,image/jpeg,image/tiff"
+                    disabled={loading}
+                    file={brandingLogoHeader}
+                    onFileSelected={(file) => setBrandingLogoHeader(file)}
+                    buttonLabel="Parcourir…"
+                    placeholder="Aucun logo sélectionné"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Logo pied de page (PNG/JPG/TIFF)</label>
+                  <FilePicker
+                    id="branding-logo-footer"
+                    accept="image/png,image/jpeg,image/tiff"
+                    disabled={loading}
+                    file={brandingLogoFooter}
+                    onFileSelected={(file) => setBrandingLogoFooter(file)}
+                    buttonLabel="Parcourir…"
+                    placeholder="Aucun logo sélectionné"
+                  />
+                </div>
+              </div>
+
+              {!templateName && (
+                <div className="preview-box">
+                  <strong>Note :</strong> Pour un branding fiable en mode navigateur, sélectionne un template via “Parcourir…” ou la liste.
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Section Identité */}

@@ -31,6 +31,29 @@ body {
   font-weight: bold;
 }
 
+.app-nav {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+}
+
+.app-nav a {
+  color: #9ad0ff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.app-nav a:hover {
+  text-decoration: underline;
+}
+
+.app-nav .sep {
+  opacity: 0.8;
+}
+
 .app-main {
   flex: 1;
   padding: 20px;

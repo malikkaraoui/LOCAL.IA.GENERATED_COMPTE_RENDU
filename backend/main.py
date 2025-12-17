@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.config import settings
-from backend.api.routes import reports, health, auth
+from backend.api.routes import reports, health, auth, branding
 
 # Créer l'application
 app = FastAPI(
@@ -31,6 +31,7 @@ app.add_middleware(
 app.include_router(health.router, prefix=settings.API_PREFIX, tags=["health"])
 app.include_router(auth.router, prefix=settings.API_PREFIX, tags=["auth"])
 app.include_router(reports.router, prefix=settings.API_PREFIX, tags=["reports"])
+app.include_router(branding.router, prefix=settings.API_PREFIX, tags=["branding"])
 
 
 def _configure_logging() -> None:

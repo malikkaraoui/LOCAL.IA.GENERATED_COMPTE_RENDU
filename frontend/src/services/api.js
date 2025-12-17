@@ -156,4 +156,39 @@ export const reportsAPI = {
   },
 };
 
+/**
+ * API Branding (header/footer DOCX)
+ */
+export const brandingAPI = {
+  /**
+   * Appliquer le branding et télécharger le DOCX résultat.
+   * Retour: { blob, filename }
+   */
+  applyBranding: async (formData) => {
+    const response = await apiClient.post('/branding/apply', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      responseType: 'blob',
+    });
+
+    // Essayer de récupérer le nom de fichier depuis Content-Disposition
+    const cd = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
+    let filename = 'branding.docx';
+    if (cd) {
+      const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+      const raw = match?.[1] || match?.[2];
+      if (raw) {
+        try {
+          filename = decodeURIComponent(raw);
+        } catch {
+          filename = raw;
+        }
+      }
+    }
+
+    return { blob: response.data, filename };
+  },
+};
+
 export default apiClient;
