@@ -28,6 +28,12 @@ DEFAULT_FIELDS = [
 RE_JSON = re.compile(r"\A\s*[{[]")
 RE_CODEBLOCK = re.compile(r"```|\bjson\b", re.IGNORECASE)
 
+# Sorties interdites: placeholders, traces de sources, etc.
+RE_FORBIDDEN_PLACEHOLDERS = re.compile(r"\{\{|\}\}")
+RE_FORBIDDEN_SOURCE_REF = re.compile(r"\bsource\s*\d+\b|\(\s*source\b", re.IGNORECASE)
+RE_FORBIDDEN_TOKENS = re.compile(r"\bXX\b|\bNAME\b|\bsurname\b", re.IGNORECASE)
+
+
 
 def ollama_generate(
     model: str, 
@@ -141,6 +147,31 @@ def looks_like_json_or_markdown(text: str) -> bool:
     return bool(RE_JSON.match(stripped) or RE_CODEBLOCK.search(stripped))
 
 
+def find_forbidden_output_reasons(text: str) -> list[str]:
+    """Retourne la liste des raisons pour lesquelles le texte ne doit pas être accepté."""
+    reasons: list[str] = []
+    if not text:
+        return reasons
+
+    if RE_FORBIDDEN_PLACEHOLDERS.search(text):
+        reasons.append("PLACEHOLDER")
+    if RE_FORBIDDEN_TOKENS.search(text):
+        reasons.append("TOKENS")
+    if RE_FORBIDDEN_SOURCE_REF.search(text):
+        reasons.append("SOURCE_REF")
+
+    # Ponctuation: interdiction de "::" et au plus un ":" par ligne
+    if "::" in text:
+        reasons.append("MULTI_COLON")
+    else:
+        for ln in text.splitlines():
+            if ln.count(":") > 1:
+                reasons.append("MULTI_COLON")
+                break
+
+    return reasons
+
+
 def truncate_lines(text: str, max_lines: int) -> str:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     if max_lines and len(lines) > max_lines:
@@ -164,11 +195,20 @@ def validate_allowed_value(text: str, allowed: Optional[list[str]]) -> tuple[str
     return "", "NON_AUTORISE"
 
 
+def _looks_like_timeout(error_message: str) -> bool:
+    msg = (error_message or "").lower()
+    return "timeout" in msg or "timed out" in msg
+
+
 def build_prompt(spec: FieldSpec, instruction: str, context_blocks: list[dict[str, Any]]) -> str:
     lines: list[str] = [
         "Tu es un assistant RH.",
         "Tu réponds uniquement en français.",
         "Tu n'utilises jamais JSON ni Markdown.",
+        "Interdit d'écrire des placeholders ({{...}}, {...}, XX, NAME, surname).",
+        "Interdit d'écrire 'source 1', 'source 2' ou '(source X)' dans la réponse.",
+        "Ne répète jamais un titre/label déjà présent dans le template : fournis uniquement le contenu sous le titre.",
+        "Ponctuation : pas de '::'. Un seul ':' maximum par ligne.",
         "Si l'information n'existe pas dans les sources : écris __VIDE__.",
     ]
     format_rule = "Réponds en 1 ligne." if spec.max_lines == 1 else "Maximum 4 lignes courtes."
@@ -227,6 +267,9 @@ def generate_fields(
     deterministic_values: Optional[dict[str, str]] = None,
     status_callback: StatusCallback = None,
     progress_callback: FieldProgressCallback = None,
+    # Résilience
+    continue_on_llm_error: bool = True,
+    llm_timeout_retries: int = 1,
 ) -> dict[str, Any]:
     fields = fields or DEFAULT_FIELDS
     deterministic_lookup = {k.upper(): v for k, v in (deterministic_values or {}).items()}
@@ -289,11 +332,76 @@ def generate_fields(
                 llm_result = ollama_generate(model, prompt, host, temperature, top_p)
                 if not llm_result.success:
                     error_msg = str(llm_result.error)
-                    if status_callback:
-                        status_callback(f"LLM [{key}] échec : {error_msg}")
-                    if progress_callback:
-                        progress_callback(key, "error", f"Erreur LLM : {error_msg}")
-                    raise GenerationError(f"Échec génération {key}: {error_msg}")
+                    is_timeout = _looks_like_timeout(error_msg)
+
+                    # Retry sur timeout (souvent dû à un prompt trop long / serveur chargé)
+                    retried = False
+                    if is_timeout and llm_timeout_retries and context_blocks:
+                        for attempt in range(int(llm_timeout_retries)):
+                            retried = True
+                            # Réduire le contexte pour accélérer
+                            reduced_k = max(3, len(context_blocks) // 2)
+                            reduced_context = context_blocks[:reduced_k]
+                            prompt_retry = build_prompt(spec, instruction, reduced_context)
+
+                            if progress_callback:
+                                progress_callback(key, "retry", f"Timeout, retry avec contexte réduit (Top-K={reduced_k})")
+                            if status_callback:
+                                status_callback(
+                                    f"LLM [{key}] timeout → retry avec contexte réduit (Top-K={reduced_k})…"
+                                )
+
+                            llm_result2 = ollama_generate(
+                                model,
+                                prompt_retry,
+                                host,
+                                temperature=0.0,
+                                top_p=top_p,
+                            )
+                            if llm_result2.success:
+                                llm_result = llm_result2
+                                prompt = prompt_retry
+                                sources_ids = [ctx["chunk_id"] for ctx in reduced_context]
+                                context_blocks = reduced_context
+                                error_msg = ""
+                                break
+                            error_msg = str(llm_result2.error)
+
+                    if not llm_result.success:
+                        # Ne pas figer tout le pipeline: marquer le champ en erreur et continuer
+                        if status_callback:
+                            status_callback(f"LLM [{key}] échec : {error_msg}")
+                        if progress_callback:
+                            progress_callback(key, "error", f"Erreur LLM : {error_msg}")
+
+                        missing_info.append("LLM_TIMEOUT" if (is_timeout or _looks_like_timeout(error_msg)) else "LLM_ERROR")
+                        answers[key] = {
+                            "field": key,
+                            "answer": "",
+                            "value": "",
+                            "missing_info": missing_info,
+                            "sources_used": sources_ids,
+                        }
+
+                        spec_dump = {name: getattr(spec, name) for name in spec.__dataclass_fields__}
+                        debug_payload = {
+                            "field": key,
+                            "query": query,
+                            "instructions": instruction,
+                            "spec": spec_dump,
+                            "context": context_blocks,
+                            "raw_response": raw_response,
+                            "clean_response": "",
+                            "missing_info": missing_info,
+                            "llm_error": error_msg,
+                            "retried": retried,
+                        }
+                        _write_debug(debug_path, key, debug_payload)
+
+                        if not continue_on_llm_error:
+                            raise GenerationError(f"Échec génération {key}: {error_msg}")
+                        # Champ suivant
+                        continue
                 
                 raw_response = llm_result.value
                 if status_callback:
@@ -306,6 +414,8 @@ def generate_fields(
                 if looks_like_json_or_markdown(response_text):
                     retry = True
                 if retry:
+                    if progress_callback:
+                        progress_callback(key, "retry", "Réponse non conforme, nouvelle tentative")
                     anti_prompt = (
                         prompt
                         + "\n\nTu as répondu dans un format interdit. Recommence en texte brut, sans JSON ni markdown."
@@ -323,6 +433,46 @@ def generate_fields(
                         # Si la retry échoue, on garde la réponse originale
                         LOG.warning("Retry failed for %s, using original response", key)
                         response_text = raw_response
+
+                # Auto-contrôle: interdire placeholders / traces de sources / ponctuation invalide
+                forbidden_reasons = find_forbidden_output_reasons(response_text)
+                if forbidden_reasons:
+                    reason_text = ",".join(forbidden_reasons)
+                    if progress_callback:
+                        progress_callback(key, "retry", f"Sortie interdite détectée ({reason_text}), correction")
+                    if status_callback:
+                        status_callback(
+                            f"LLM [{key}] sortie interdite détectée ({reason_text}) → correction…"
+                        )
+
+                    anti_forbidden = (
+                        prompt
+                        + "\n\nAUTO-CONTROLE OBLIGATOIRE AVANT RÉPONSE :"
+                        + "\n- Interdit d'écrire des placeholders: {{...}}, {...}, XX, NAME, surname"
+                        + "\n- Interdit d'écrire 'source 1/2' ou '(source X)'"
+                        + "\n- Interdit d'écrire des titres/labels déjà présents dans le template"
+                        + "\n- Ponctuation: pas de '::' et un seul ':' maximum par ligne"
+                        + "\nSi une info manque: écris __VIDE__."
+                        + "\nRecommence maintenant en texte brut."
+                    )
+
+                    retry2 = ollama_generate(
+                        model,
+                        anti_forbidden,
+                        host,
+                        temperature=0.0,
+                        top_p=top_p,
+                    )
+                    if retry2.success:
+                        response_text = retry2.value
+                    else:
+                        LOG.warning("Forbidden-output retry failed for %s", key)
+
+                    # Si malgré correction, encore interdit → on vide
+                    if find_forbidden_output_reasons(response_text):
+                        missing_info.append("FORBIDDEN_OUTPUT")
+                        response_text = "__VIDE__"
+
                 cleaned_value = sanitize_output(response_text)
                 if cleaned_value == "__VIDE__":
                     cleaned_value = ""

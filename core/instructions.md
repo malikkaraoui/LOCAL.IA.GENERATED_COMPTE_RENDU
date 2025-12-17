@@ -45,6 +45,26 @@ Ce fichier sert de “source de vérité” pour :
 - Interdit : JSON, YAML, Markdown, code fences (```), listes JSON `[{...}]`.
 - Si le LLM ne sait pas : il doit répondre **exactement** `__VIDE__`.
 
+### 2.2 bis Règles de sortie (obligatoires)
+Ces règles visent à garantir qu'aucun artefact “technique” n'apparaisse dans le rapport final.
+
+- **Interdit d'écrire des placeholders** : `{{...}}`, `{...}`, `XX`, `NAME`, `surname`, `{monsieur ou madame ...}`.
+- Si une info manque → écrire une phrase neutre **ou laisser vide** (selon le champ), **mais ne jamais afficher** de variable/placeholder.
+- **Interdit d'écrire** “source 1 / source 2 / (source X)” dans le document final.
+   - Si tu dois tracer les sources : mets-les dans un champ séparé `__trace_sources` (hors rapport), jamais dans le texte.
+- **Ne jamais répéter un titre/label déjà présent** dans le template.
+   - Exemple interdit : `Compétences Professionnelles & Sociales : Compétences Professionnelles : ...`
+   - Tu fournis uniquement le contenu attendu sous le titre (paragraphe ou liste), **pas le titre**.
+- **Ponctuation** :
+   - Pas de chaînes de `:` (interdit : `:`, `::`, `:::` en rafale)
+   - Un `:` maximum par ligne, et uniquement après un label court si nécessaire.
+- **Longueur** :
+   - Champs “moyens” = **3 à 4 lignes** (≈ 40–70 mots)
+   - Champs “courts” (Nom/Prénom/AVS/Profession) = **1 ligne**
+- **Style** : français professionnel, phrases complètes, pas de jargon, pas de parenthèses “techniques”.
+- **Auto-contrôle avant de rendre la réponse** :
+   - Re-scan du texte final : s’il reste `{`, `}`, `{{`, `}}`, `source`, `XX` → corrige et régénère.
+
 ### 2.3 Zéro hallucination (pas d’invention)
 - Si la donnée n’est pas dans les sources (ex: AVS, CV, lettre), on laisse vide.
 - Le LLM **n’invente jamais** un numéro / une date / une info admin.
@@ -121,6 +141,17 @@ Si après retry c’est encore invalide → réponse vide.
 
 ## 6) Règles par champ (spécification)
 
+---
+
+## 6 bis) Résilience aux erreurs LLM (timeout, serveur indisponible)
+
+Objectif : ne jamais "figer" la génération sur un champ.
+
+- Si un champ LLM échoue (ex: **Timeout Ollama**), le script doit :
+   1) tenter **au moins 1 retry** (idéalement avec un contexte réduit / prompt plus court)
+   2) si échec persistant : **laisser le champ vide** et passer au champ suivant
+   3) tracer l'erreur uniquement dans les logs/debug (`missing_info`, fichiers debug), **jamais** dans le rapport final.
+
 ### 6.1 Champs identité / administratifs (FACTUELS, jamais inventés)
 Règles :
 - `require_sources = True`
@@ -132,7 +163,7 @@ Champs :
 - `{{MONSIEUR_OU_MADAME}}` (valeurs autorisées : `Monsieur`, `Madame`)
 - `{{NAME}}`
 - `{{SURNAME}}`
-- `{{NUMERO_AVS}}` (jamais généré)
+- `{{NUMERO_AVS}}` (jamais généré) (ex: `756.XXXX.XXXX.XX` , avec points ou sans points) - le numéro AVS doit être extrait textuellement du document source, sans modification ni invention (lors du RAG).
 
 ### 6.2 Champs narratifs (3–4 lignes max)
 Règles :

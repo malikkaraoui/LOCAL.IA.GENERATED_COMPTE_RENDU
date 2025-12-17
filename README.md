@@ -1,89 +1,350 @@
-# LOCAL.IA – Generated Compte Rendu
+# SCRIPT.IA – Générateur de Rapports Automatique 🚀
 
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.x-FF4B4B?logo=streamlit&logoColor=white)
-![Version](https://img.shields.io/badge/Version-auto--git-0A0A0A)
-![Status](https://img.shields.io/badge/LLM-ready-brightgreen)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white)
+![Version](https://img.shields.io/badge/Version-2.0.0-0A0A0A)
+![Status](https://img.shields.io/badge/LLM-Ollama-brightgreen)
 
-Application locale permettant d’orchestrer l’extraction de documents clients, la génération de champs via Ollama et le rendu automatique en DOCX/PDF. L’objectif est de produire des comptes rendus fiables en gardant toutes les données sensibles sur votre machine.
+Système complet de génération automatique de rapports pour clients, utilisant l'IA locale (Ollama) pour créer des documents professionnels au format DOCX.
 
-## 🚀 Fonctionnalités principales
+## 🎯 Démarrage Rapide - UN CLIC
 
-- **Extraction unifiée** : ingestion PDF/DOCX/TXT (et DOC/RTF via LibreOffice) avec historisation des sources.
-- **Recherche contextuelle** : découpage intelligent + index BM25 pour envoyer au LLM uniquement les passages pertinents.
-- **Génération contrôlée** : prompts stricts (format `CHAMP=VALEUR`) avec batchs, suivi temps réel et journalisation `WHY`.
-- **Rendu DOCX/PDF** : remplacement automatique des placeholders `{{CHAMP}}`, insertion des sections clés et export PDF optionnel.
-- **Interface Streamlit** : pipeline guidé en 4 étapes + logs live LLM.
+### Démarrer tous les services
 
-## 🧱 Architecture
-
-```
-app.py (UI Streamlit)
-├── rapport_orchestrator.py (pipeline)
-├── core/
-│   ├── extract.py / context.py / generate.py / render.py
-│   └── template_fields.py (détection des placeholders)
-└── CLIENTS/ (données locales ignorées par Git)
+```bash
+./scripts/start-all.sh
 ```
 
-La version courante de la pile est stockée dans `VERSION` (mise à jour automatiquement via Git).
+Ce script unique lance automatiquement :
+- ✅ Vérification de Redis et Ollama
+- ✅ Worker RQ pour le traitement en arrière-plan
+- ✅ Backend FastAPI (API REST)
+- ✅ Frontend React (interface utilisateur)
+- ✅ Ouverture du navigateur sur http://localhost:5173
+
+### Arrêter tous les services
+
+```bash
+./scripts/stop.sh
+```
+
+## 📱 Accès aux Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Frontend** | http://localhost:5173 | Interface utilisateur React |
+| **Backend** | http://localhost:8000/api/health | API REST FastAPI |
+| **API Docs** | http://localhost:8000/api/docs | Documentation Swagger interactive |
+| **Login** | admin / admin123 | Identifiants de test |
+
+## 🔄 Workflow de Génération - UN CLIC
+
+1. **Ouvrez le navigateur** : http://localhost:5173
+2. **Sélectionnez un client** : Choisissez dans la liste déroulante
+3. **Cliquez sur "Générer le Rapport"** : Un seul clic suffit !
+4. **Le système exécute automatiquement** :
+   - 📂 Extraction des données depuis les fichiers .msg et documents
+   - 🤖 Génération de contenu par l'IA (Mistral/LLaMA)
+   - 📝 Remplissage du template DOCX
+   - 💾 Sauvegarde du rapport final
+
+5. **Téléchargez le DOCX** : Cliquez sur "Télécharger" quand le statut est "completed"
+
+## 🛠️ Architecture du Système
+
+```
+┌─────────────────┐
+│  Frontend React │  ← Interface utilisateur (port 5173)
+│   (Vite + TS)   │
+└────────┬────────┘
+         │ HTTP
+         ▼
+┌─────────────────┐
+│  Backend API    │  ← Orchestrateur (port 8000)
+│   (FastAPI)     │
+└────────┬────────┘
+         │ Redis Queue
+         ▼
+┌─────────────────┐
+│  Worker RQ      │  ← Traitement asynchrone
+│                 │
+│  1. Extraction  │──► extract_sources.py (68KB de données)
+│  2. Génération  │──► Ollama LLM (~1m35s avec Mistral)
+│  3. Rendu DOCX  │──► python-docx (37KB final)
+│  4. Export PDF  │──► docx2pdf (optionnel)
+│                 │
+└─────────────────┘
+```
 
 ## 📦 Prérequis
 
-- Python 3.13 (ou ≥3.10 recommandé)
-- [Ollama](https://ollama.com/) avec le modèle `mistral:latest` (modifiable dans l’UI)
-- LibreOffice (`soffice`) si vous souhaitez convertir les fichiers DOC/RTF.
+### Services Requis
 
-## ⚙️ Installation
+1. **Redis** (file d'attente de tâches)
+   ```bash
+   brew install redis
+   brew services start redis
+   ```
+
+2. **Ollama** (modèles LLM locaux)
+   ```bash
+   brew install ollama
+   ollama serve
+   ollama pull mistral  # ou llama3.1
+   ```
+
+3. **Node.js** (frontend)
+   ```bash
+   brew install node
+   ```
+
+4. **Python 3.13+** (backend)
+   ```bash
+   brew install python@3.13
+   ```
+
+### Installation des Dépendances
 
 ```bash
-# Cloner le dépôt
-git clone https://github.com/malikkaraoui/LOCAL.IA.GENERATED_COMPTE_RENDU.git
-cd LOCAL.IA.GENERATED_COMPTE_RENDU
-
-# Créer un environnement virtuel
-python -m venv .venv
-source .venv/bin/activate  # sous Windows: .venv\Scripts\activate
-
-# Installer les dépendances
+# Backend Python
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+
+# Frontend Node
+cd frontend
+npm install
 ```
 
-## ▶️ Lancer l’application
+## 📊 Suivi de l'Exécution
+
+### Logs en Temps Réel
 
 ```bash
-streamlit run app.py --server.port 8590
+# Worker (traitement des tâches)
+tail -f /tmp/worker.log
+
+# Backend (API)
+tail -f /tmp/backend.log
+
+# Frontend (interface)
+tail -f /tmp/frontend.log
 ```
 
-1. Indique le dossier client (non versionné) et le template DOCX local.
-2. Clique sur **Extraire** pour générer `extracted.json`.
-3. Clique sur **Générer les champs** : suis la progression champ par champ.
-4. Termine avec **Rendre le DOCX** puis **Export PDF** si nécessaire.
-
-Les sorties (`out/`, `uploaded_templates/`, `CLIENTS/`, etc.) restent sur ta machine et sont ignorées par Git.
-
-## 🧪 Scripts CLI utiles
-
-- `CLIENTS/generate_fields.py` : génération autonome des champs depuis un payload + template.
-- `CLIENTS/render_docx.py` : rendu DOCX sans passer par l’UI.
-- `tools/versioning/update_version.py` : calcule et écrit la version applicative à partir de l’état Git.
-
-Chaque script expose `--help` pour détailler les options (batch size, modèle, filtres include/exclude…).
-
-## 📝 Versioning
-
-La version applicative est centralisée dans le fichier `VERSION`. Avant chaque commit significatif, exécute :
+### Vérification de l'État
 
 ```bash
-python tools/versioning/update_version.py
+# Health check backend
+curl http://localhost:8000/api/health
+
+# Liste des clients disponibles
+curl http://localhost:8000/api/clients
+
+# Statut d'un rapport
+curl http://localhost:8000/api/reports/{report_id}/status
 ```
 
-Le script génère une chaîne basée sur `git describe`, le nombre de commits et un timestamp UTC pour assurer une trace professionnelle par livraison.
+## 🔐 Authentification JWT
 
-## 📚 Dépendances
+Le système utilise JWT pour sécuriser l'API :
 
-Les librairies Python obligatoires sont listées dans `requirements.txt` **et** documentées dans `docs/dependencies.md` (similaire au projet Cookie). Mets à jour les deux fichiers lorsque tu ajoutes/supprimes une dépendance.
+```bash
+# Login
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
 
-## 🔒 Licence
+# Réponse
+{
+  "access_token": "eyJhbGc...",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
 
-Projet interne / propriétaire. Merci de ne pas diffuser les données client : elles restent dans des dossiers ignorés (`CLIENTS/`, `out/`, etc.).
+# Utilisation du token
+curl http://localhost:8000/api/reports \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+### Utilisateurs de Test
+
+| Username | Password | Rôle |
+|----------|----------|------|
+| admin | admin123 | Administrateur (tous droits) |
+| user | user123 | Utilisateur (lecture seule) |
+
+## 📝 Structure des Rapports
+
+### Template DOCX
+
+Le fichier template se trouve dans :
+```
+CLIENTS/templates/template_rapport.docx
+```
+
+### Champs Dynamiques
+
+Les marqueurs suivants sont remplacés automatiquement :
+
+- `{{nom_prenom}}` - Nom complet du client
+- `{{date_bilan}}` - Date du bilan
+- `{{competences_transferables}}` - Liste des compétences
+- `{{projet_professionnel}}` - Description du projet
+- `{{plan_action}}` - Plan d'action détaillé
+- ... et 20+ autres champs
+
+### Sources de Données
+
+Le système extrait automatiquement depuis :
+- 📧 Fichiers .msg (emails Outlook)
+- 📄 Documents Word (.docx)
+- 📊 PDFs de tests psychométriques
+- 📑 Bulletins de salaire
+- 🎓 Diplômes et certificats
+
+## 🧪 Tests
+
+### Lancer les Tests Unitaires
+
+```bash
+# Installation des dépendances de test
+pip install -r tests/requirements.txt
+
+# Exécution avec couverture
+pytest tests/ -v --cov=backend --cov-report=term-missing
+
+# Tests spécifiques
+pytest tests/test_api.py::TestReportsRoutes::test_create_report -v
+```
+
+### Tests Manuels via Swagger
+
+1. Ouvrez http://localhost:8000/api/docs
+2. Testez les endpoints interactivement
+3. Utilisez "Authorize" avec un token JWT
+
+## 🐛 Dépannage
+
+### Redis n'est pas accessible
+
+```bash
+# Vérifier Redis
+redis-cli ping  # Devrait répondre "PONG"
+
+# Redémarrer Redis
+brew services restart redis
+```
+
+### Ollama ne répond pas
+
+```bash
+# Vérifier Ollama
+curl http://localhost:11434/api/version
+
+# Relancer Ollama
+ollama serve &
+
+# Vérifier les modèles
+ollama list
+```
+
+### Worker ne traite pas les tâches
+
+```bash
+# Vérifier les logs
+tail -f /tmp/worker.log
+
+# Vérifier la queue Redis
+redis-cli
+> LLEN rq:queue:default
+> LRANGE rq:queue:default 0 -1
+
+# Redémarrer le worker
+pkill -f start_worker.py
+.venv/bin/python scripts/start_worker.py &
+```
+
+### Frontend ne se connecte pas au backend
+
+1. Vérifiez que le backend tourne : `curl http://localhost:8000/api/health`
+2. Vérifiez les CORS dans `backend/core/config.py`
+3. Inspectez la console navigateur (F12)
+
+## 🌐 Déploiement Windows
+
+Consultez le guide complet : [docs/WINDOWS_DEPLOYMENT.md](docs/WINDOWS_DEPLOYMENT.md)
+
+Résumé :
+- Installation avec `winget` et PowerShell
+- Redis via WSL2 ou Memurai
+- Services Windows avec NSSM
+- Scripts PowerShell automatisés
+
+## 📊 Performance
+
+### Temps de Génération Typiques
+
+| Étape | Durée | Détails |
+|-------|-------|---------|
+| Extraction | ~2-5s | Lecture fichiers .msg + PDFs |
+| Génération LLM | ~1m30s | Mistral 7B (varie selon modèle) |
+| Rendu DOCX | ~1-2s | python-docx |
+| **Total** | **~2min** | Pour un rapport complet |
+
+### Optimisations
+
+- **Modèle plus rapide** : `ollama pull llama3.1:8b` (30% plus rapide)
+- **GPU** : Ollama utilise automatiquement Metal/CUDA
+- **Cache Redis** : Réutilise les extractions existantes
+
+## 🔧 Configuration Avancée
+
+### Variables d'Environnement
+
+Créez `.env` à la racine :
+
+```env
+# API
+API_HOST=0.0.0.0
+API_PORT=8000
+API_PREFIX=/api
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Ollama
+OLLAMA_BASE_URL=http://localhost:11434
+DEFAULT_MODEL=mistral:latest
+
+# JWT
+SECRET_KEY=votre-clé-secrète-changez-moi
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+### Personnalisation du Template
+
+1. Modifiez `CLIENTS/templates/template_rapport.docx`
+2. Ajoutez vos propres marqueurs `{{nouveau_champ}}`
+3. Mettez à jour `CLIENTS/generate_fields.py` pour générer le contenu
+
+## 📚 Documentation Complète
+
+- **API Backend** : http://localhost:8000/api/docs (Swagger)
+- **Tests** : [tests/README.md](tests/README.md)
+- **Windows** : [docs/WINDOWS_DEPLOYMENT.md](docs/WINDOWS_DEPLOYMENT.md)
+
+## 🤝 Support
+
+Pour toute question ou problème :
+1. Consultez les logs : `tail -f /tmp/*.log`
+2. Vérifiez les services : `./scripts/start-all.sh`
+3. Testez l'API : http://localhost:8000/api/docs
+
+## 📄 Licence
+
+Projet interne - Tous droits réservés

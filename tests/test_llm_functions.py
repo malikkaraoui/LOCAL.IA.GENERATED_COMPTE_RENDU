@@ -14,7 +14,7 @@ class TestCheckLlmStatus:
     def test_server_accessible(self, mock_urlopen):
         """Serveur accessible."""
         mock_response = Mock()
-        mock_response.read.return_value = b'{"version": "1.0.0"}'
+        mock_response.read.return_value = b'{"version": "2.0.0"}'
         mock_response.__enter__ = Mock(return_value=mock_response)
         mock_response.__exit__ = Mock(return_value=False)
         mock_urlopen.return_value = mock_response
