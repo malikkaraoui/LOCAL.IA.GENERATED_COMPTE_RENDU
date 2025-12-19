@@ -128,7 +128,7 @@ CLIENTS/KARAOUI Malik/06 Rapport final/
 ```bash
 # Backend
 curl http://localhost:8000/api/health
-# Attendu: {"status":"healthy","version":"2.0.0"}
+# Attendu: {"status":"healthy","version":"2.0.1"}
 
 # Frontend
 curl http://localhost:5173 | grep "<title>"

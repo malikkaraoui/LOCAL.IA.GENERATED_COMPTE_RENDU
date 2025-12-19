@@ -29,7 +29,15 @@ class Settings(BaseSettings):
     
     # API
     API_PREFIX: str = "/api"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # Important: Vite peut tourner sur localhost OU 127.0.0.1 selon le host.
+    # Si l'origine n'est pas listée, le navigateur bloque les requêtes (CORS) et l'UI
+    # tombe en fallback (liste modèles "fake", boutons qui semblent ne rien faire).
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     # Server
     API_HOST: str = "127.0.0.1"

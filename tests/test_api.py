@@ -70,6 +70,44 @@ class TestHealthRoutes:
         data = response.json()
         assert "error" in data
 
+    @patch('backend.api.routes.llm.requests.post')
+    @patch('backend.api.routes.llm.requests.get')
+    def test_ollama_restart_success_unloads_running_models(self, mock_get, mock_post, client):
+        """Test POST /api/ollama/restart - succès avec modèles actifs."""
+
+        def get_side_effect(url, timeout=None):
+            resp = Mock()
+            resp.raise_for_status.return_value = None
+            if str(url).endswith('/api/version'):
+                resp.json.return_value = {"version": "1.0"}
+                return resp
+            if str(url).endswith('/api/ps'):
+                resp.json.return_value = {"models": [{"name": "mistral:latest"}, {"name": "llama3.1:8b"}]}
+                return resp
+            raise AssertionError(f"URL inattendue: {url}")
+
+        mock_get.side_effect = get_side_effect
+
+        post_resp = Mock()
+        post_resp.raise_for_status.return_value = None
+        mock_post.return_value = post_resp
+
+        response = client.post("/api/ollama/restart", json={"host": "http://localhost:11434"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["host"].startswith("http://localhost:11434")
+        assert set(data["running_models"]) == {"mistral:latest", "llama3.1:8b"}
+        assert set(data["unloaded"]) == {"mistral:latest", "llama3.1:8b"}
+        assert data["errors"] == []
+
+    @patch('backend.api.routes.llm.requests.get')
+    def test_ollama_restart_503_when_unreachable(self, mock_get, client):
+        """Test POST /api/ollama/restart - 503 si Ollama injoignable."""
+        mock_get.side_effect = Exception("Connection refused")
+        response = client.post("/api/ollama/restart", json={"host": "http://localhost:11434"})
+        assert response.status_code == 503
+
 
 class TestReportsRoutes:
     """Tests pour les routes /reports."""
@@ -177,7 +215,7 @@ class TestBrandingRoutes:
         # Préparer un template de base fictif
         tpl_dir = tmp_path / "uploaded_templates"
         tpl_dir.mkdir(parents=True)
-        (tpl_dir / "TEMPLATE_SIMPLE_BASE.docx").write_bytes(b"PK\x03\x04fake-docx")
+        (tpl_dir / "TEMPLATE_SIMPLE_BASE1.docx").write_bytes(b"PK\x03\x04fake-docx")
 
         # Mock du branding: écrit un docx de sortie
         def _fake_apply(template_docx, output_docx, fields, logo_header=None, logo_footer=None, **kwargs):
@@ -212,7 +250,7 @@ class TestBrandingRoutes:
         """Test POST /api/branding/apply - refuse un logo avec extension interdite."""
         tpl_dir = tmp_path / "uploaded_templates"
         tpl_dir.mkdir(parents=True)
-        (tpl_dir / "TEMPLATE_SIMPLE_BASE.docx").write_bytes(b"PK\x03\x04fake-docx")
+        (tpl_dir / "TEMPLATE_SIMPLE_BASE1.docx").write_bytes(b"PK\x03\x04fake-docx")
 
         with patch('backend.api.routes.branding.settings') as mock_settings:
             mock_settings.TEMPLATES_DIR = tpl_dir

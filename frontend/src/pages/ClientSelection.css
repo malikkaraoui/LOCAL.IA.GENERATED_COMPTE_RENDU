@@ -90,6 +90,51 @@
   cursor: not-allowed;
 }
 
+.btn-restart-llm {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-restart-llm:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.btn-restart-llm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.llm-restart-message {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+
+.llm-restart-success {
+  background: #ecfdf5;
+  border-color: #10b98133;
+  color: #065f46;
+}
+
+.llm-restart-warning {
+  background: #fffbeb;
+  border-color: #f59e0b33;
+  color: #92400e;
+}
+
+.llm-restart-error {
+  background: #fef2f2;
+  border-color: #ef444433;
+  color: #991b1b;
+}
+
 .form-group input[type="text"],
 .form-group input[type="number"],
 .form-group select {

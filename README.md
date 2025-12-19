@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white)
-![Version](https://img.shields.io/badge/Version-2.0.0-0A0A0A)
+![Version](https://img.shields.io/badge/Version-2.0.1-0A0A0A)
 ![Status](https://img.shields.io/badge/LLM-Ollama-brightgreen)
 
 Système complet de génération automatique de rapports pour clients, utilisant l'IA locale (Ollama) pour créer des documents professionnels au format DOCX.

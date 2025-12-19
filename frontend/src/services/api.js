@@ -30,8 +30,18 @@ export const healthAPI = {
   /**
    * Récupérer la liste des modèles Ollama disponibles
    */
-  getOllamaModels: async () => {
-    const response = await apiClient.get('/ollama/models');
+  getOllamaModels: async (host) => {
+    const response = await apiClient.get('/ollama/models', {
+      params: host ? { host } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
+   * Restart soft des LLM (unload des modèles actifs via keep_alive=0)
+   */
+  restartOllama: async (host) => {
+    const response = await apiClient.post('/ollama/restart', { host });
     return response.data;
   },
 };

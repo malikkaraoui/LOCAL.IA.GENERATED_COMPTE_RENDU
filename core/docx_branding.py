@@ -9,19 +9,28 @@ Important:
 """
 from __future__ import annotations
 
-import io
 import re
 import zipfile
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 from xml.sax.saxutils import escape as xml_escape
 
+import logging
+
 from lxml import etree as ET  # type: ignore
-from PIL import Image  # type: ignore
+
+from core.docx_logo_replace import (
+    MissingLogoPlaceholderError,
+    build_logo_image_replacements,
+    strip_logo_crop_in_part_xml,
+)
+from core.logo_processing import LogoNormalizeConfig
 
 
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 REL = f"{{{PKG_REL_NS}}}Relationship"
+
+logger = logging.getLogger(__name__)
 
 
 def _build_mapping(cfg: dict) -> Dict[str, str]:
@@ -92,32 +101,11 @@ def _find_parts(z: zipfile.ZipFile, kind: str) -> Tuple[list[str], list[str]]:
     return xmls, rels
 
 
-def _convert_logo_bytes(logo_path: Path, target_ext: str) -> bytes:
-    """Convertit le logo en bytes du format attendu par le fichier cible (png/jpg/tif)."""
-    target_ext = target_ext.lower().lstrip(".")
-    with Image.open(logo_path) as im:
-        # Pour éviter des surprises avec transparence, on conserve si possible en PNG,
-        # sinon on convertit en RGB.
-        if target_ext in ("jpg", "jpeg", "tif", "tiff"):
-            if im.mode in ("RGBA", "LA"):
-                bg = Image.new("RGB", im.size, (255, 255, 255))
-                bg.paste(im, mask=im.split()[-1])
-                im2 = bg
-            else:
-                im2 = im.convert("RGB") if im.mode != "RGB" else im
-        else:
-            im2 = im  # PNG ok en RGBA
-
-        buf = io.BytesIO()
-        if target_ext in ("tif", "tiff"):
-            im2.save(buf, format="TIFF", compression="tiff_deflate")
-        elif target_ext in ("jpg", "jpeg"):
-            im2.save(buf, format="JPEG", quality=95)
-        elif target_ext == "png":
-            im2.save(buf, format="PNG", optimize=True)
-        else:
-            im2.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
+def _read_logo_bytes(p: Path) -> bytes:
+    data = p.read_bytes()
+    if not data:
+        raise ValueError(f"Logo vide: {p}")
+    return data
 
 
 def _pick_image_targets_from_rels(rels_xml: bytes) -> list[str]:
@@ -170,33 +158,77 @@ def update_docx_header(
         # Images à remplacer
         image_replacements: Dict[str, bytes] = {}
 
-        # --- Logo HEADER
-        if logo_path:
-            rels_to_process = header_rels if replace_logo_in_all_headers else [r for r in header_rels if r.endswith("header2.xml.rels")]
-            for rels_name in rels_to_process:
-                rels_bytes = zin.read(rels_name)
-                targets = _pick_image_targets_from_rels(rels_bytes)
-                if len(targets) != 1:
-                    continue
-                media_path = "word/" + targets[0]
-                if media_path not in zin.namelist():
-                    continue
-                ext = Path(media_path).suffix
-                image_replacements[media_path] = _convert_logo_bytes(logo_path, ext)
+        # --- Logo HEADER/FOOTER (robuste via Alt Text LOGO_HEADER/LOGO_FOOTER)
+        # Important: on ne touche pas aux XML de géométrie, seulement aux fichiers word/media/.
+        # IMPORTANT:
+        # - Entête: rendu actuel conservé (logo collé à gauche dans sa box).
+        # - Pied de page: rendu différent, logo centré (horizontalement + verticalement) dans la box.
+        cfg_header = LogoNormalizeConfig(
+            mode="contain",
+            align="left",
+            valign="center",
+            trim=True,
+            padding_pct=0.08,
+            background="transparent",
+            dpi=300,
+        )
+        cfg_footer = LogoNormalizeConfig(
+            mode="contain",
+            align="center",
+            valign="center",
+            trim=True,
+            padding_pct=0.08,
+            background="transparent",
+            dpi=300,
+        )
 
-        # --- Logo FOOTER
+        if logo_path:
+            logo_bytes = _read_logo_bytes(logo_path)
+            try:
+                # si replace_logo_in_all_headers=False, on limite au premier header rencontré
+                img_map = build_logo_image_replacements(
+                    zin,
+                    tag="LOGO_HEADER",
+                    logo_bytes=logo_bytes,
+                    cfg=cfg_header,
+                    kinds=("header",),
+                    limit_to_first_part_per_kind=not replace_logo_in_all_headers,
+                )
+                image_replacements.update(img_map)
+            except MissingLogoPlaceholderError as exc:
+                raise ValueError(str(exc))
+
+            # Enlever le rognage stocké dans le template (si présent), sans toucher à la géométrie.
+            # NB: si replace_logo_in_all_headers=False, on ne modifie que le 1er header (cohérent avec la recherche).
+            target_headers = headers[:1] if (headers and not replace_logo_in_all_headers) else headers
+            for part in target_headers:
+                current = new_xml.get(part, zin.read(part))
+                stripped, changed = strip_logo_crop_in_part_xml(current, tag="LOGO_HEADER")
+                if changed:
+                    new_xml[part] = stripped
+
         if footer_logo_path:
-            rels_to_process = footer_rels if replace_logo_in_all_footers else [r for r in footer_rels if r.endswith("footer1.xml.rels")]
-            for rels_name in rels_to_process:
-                rels_bytes = zin.read(rels_name)
-                targets = _pick_image_targets_from_rels(rels_bytes)
-                if len(targets) != 1:
-                    continue
-                media_path = "word/" + targets[0]
-                if media_path not in zin.namelist():
-                    continue
-                ext = Path(media_path).suffix
-                image_replacements[media_path] = _convert_logo_bytes(footer_logo_path, ext)
+            logo_bytes = _read_logo_bytes(footer_logo_path)
+            try:
+                img_map = build_logo_image_replacements(
+                    zin,
+                    tag="LOGO_FOOTER",
+                    logo_bytes=logo_bytes,
+                    cfg=cfg_footer,
+                    kinds=("footer",),
+                    limit_to_first_part_per_kind=not replace_logo_in_all_footers,
+                )
+                image_replacements.update(img_map)
+            except MissingLogoPlaceholderError as exc:
+                raise ValueError(str(exc))
+
+            # Idem pour le footer.
+            target_footers = footers[:1] if (footers and not replace_logo_in_all_footers) else footers
+            for part in target_footers:
+                current = new_xml.get(part, zin.read(part))
+                stripped, changed = strip_logo_crop_in_part_xml(current, tag="LOGO_FOOTER")
+                if changed:
+                    new_xml[part] = stripped
 
         # Écrit le nouveau docx
         output_docx.parent.mkdir(parents=True, exist_ok=True)
@@ -206,6 +238,7 @@ def update_docx_header(
                 if name in new_xml:
                     zout.writestr(item, new_xml[name])
                 elif name in image_replacements:
+                    logger.info("branding: replace media %s (%d bytes)", name, len(image_replacements[name]))
                     zout.writestr(item, image_replacements[name])
                 else:
                     zout.writestr(item, zin.read(name))

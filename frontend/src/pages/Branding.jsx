@@ -4,8 +4,9 @@ import { brandingAPI, reportsAPI } from '../services/api';
 import './Branding.css';
 
 function Branding() {
+  const DEFAULT_TEMPLATE = 'TEMPLATE_SIMPLE_BASE1.docx';
   const [templates, setTemplates] = useState([]);
-  const [templateName, setTemplateName] = useState('');
+  const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
 
   const [titreDocument, setTitreDocument] = useState('');
   const [societe, setSociete] = useState('');
@@ -27,10 +28,19 @@ function Branding() {
     (async () => {
       try {
         const resp = await reportsAPI.listTemplates();
-        setTemplates(resp.templates || []);
+        const list = resp.templates || [];
+        // Mode "template unique": s'assurer que le template par défaut est toujours présent.
+        const merged = [DEFAULT_TEMPLATE, ...list.filter((t) => t !== DEFAULT_TEMPLATE)];
+        setTemplates(merged);
+        if (!templateName) {
+          setTemplateName(DEFAULT_TEMPLATE);
+        }
       } catch (err) {
         console.warn('Branding: impossible de charger la liste des templates', err);
-        setTemplates([]);
+        setTemplates([DEFAULT_TEMPLATE]);
+        if (!templateName) {
+          setTemplateName(DEFAULT_TEMPLATE);
+        }
       }
     })();
   }, []);
@@ -158,7 +168,7 @@ function Branding() {
             <div className="field">
               <label>Template DOCX côté serveur</label>
               <select value={templateName} onChange={(e) => setTemplateName(e.target.value)}>
-                <option value="">— Par défaut (TEMPLATE_SIMPLE_BASE ou TEMPLATE_PATH) —</option>
+                <option value={DEFAULT_TEMPLATE}>— Par défaut ({DEFAULT_TEMPLATE}) —</option>
                 {templates.map((t) => (
                   <option key={t} value={t}>{t}</option>
                 ))}
@@ -246,7 +256,7 @@ function Branding() {
         </button>
 
         <p className="hint">
-          Note: le template utilisé côté serveur est <code>uploaded_templates/TEMPLATE_SIMPLE_BASE.docx</code>.
+          Note: le template utilisé côté serveur est <code>uploaded_templates/TEMPLATE_SIMPLE_BASE1.docx</code>.
         </p>
       </form>
     </div>

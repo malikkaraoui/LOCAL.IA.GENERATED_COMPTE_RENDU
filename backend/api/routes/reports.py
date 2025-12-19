@@ -46,23 +46,17 @@ async def list_templates():
     - `uploaded_templates/` (settings.TEMPLATES_DIR)
     - `CLIENTS/templates/` (si présent)
     """
-    templates: set[str] = set()
+    # NOTE (déc. 2025): mode "template unique".
+    # On expose uniquement le template de base (évite que des backups/exports apparaissent dans l'UI).
+    default_name = "TEMPLATE_SIMPLE_BASE1.docx"
 
-    # 1) uploaded_templates
     tpl_dir = settings.TEMPLATES_DIR
-    if tpl_dir.exists():
-        for p in tpl_dir.iterdir():
-            if p.is_file() and p.suffix.lower() == ".docx":
-                templates.add(p.name)
+    cand = tpl_dir / default_name
+    if cand.exists() and cand.is_file() and cand.suffix.lower() == ".docx":
+        return {"templates": [default_name]}
 
-    # 2) CLIENTS/templates
-    client_tpl_dir = settings.CLIENTS_DIR / "templates"
-    if client_tpl_dir.exists():
-        for p in client_tpl_dir.iterdir():
-            if p.is_file() and p.suffix.lower() == ".docx":
-                templates.add(p.name)
-
-    return {"templates": sorted(templates)}
+    # Si absent, on renvoie vide (l'UI affichera quand même le nom par défaut).
+    return {"templates": []}
 
 
 @router.post("/templates/upload")

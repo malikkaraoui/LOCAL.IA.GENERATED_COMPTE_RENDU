@@ -7,13 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.config import settings
-from backend.api.routes import reports, health, auth, branding
+from backend.api.routes import reports, health, auth, branding, llm
 
 # Créer l'application
 app = FastAPI(
     title=settings.APP_NAME,
     description="API de génération de rapports RH avec LLM",
-    version="2.0.0",
+    version="2.0.1",
     docs_url=f"{settings.API_PREFIX}/docs",
     redoc_url=f"{settings.API_PREFIX}/redoc",
 )
@@ -32,6 +32,7 @@ app.include_router(health.router, prefix=settings.API_PREFIX, tags=["health"])
 app.include_router(auth.router, prefix=settings.API_PREFIX, tags=["auth"])
 app.include_router(reports.router, prefix=settings.API_PREFIX, tags=["reports"])
 app.include_router(branding.router, prefix=settings.API_PREFIX, tags=["branding"])
+app.include_router(llm.router, prefix=settings.API_PREFIX, tags=["llm"])
 
 
 def _configure_logging() -> None:
@@ -52,7 +53,7 @@ async def root():
     """Page d'accueil de l'API."""
     return {
         "message": "RapportIA API",
-        "version": "2.0.0",
+        "version": "2.0.1",
         "docs": f"{settings.API_PREFIX}/docs",
     }
 

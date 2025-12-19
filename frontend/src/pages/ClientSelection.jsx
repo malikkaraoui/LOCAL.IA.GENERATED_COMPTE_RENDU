@@ -6,6 +6,7 @@ import './ClientSelection.css';
  * Page de configuration et génération de rapport.
  */
 function ClientSelection() {
+  const DEFAULT_TEMPLATE = 'TEMPLATE_SIMPLE_BASE1.docx';
   // États principaux
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState('');
@@ -26,7 +27,7 @@ function ClientSelection() {
   // Chemins
   const [clientsRoot, setClientsRoot] = useState('./CLIENTS');
   const [templatePath, setTemplatePath] = useState('./TemplateRapportStage.docx');
-  const [templateName, setTemplateName] = useState('');
+  const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
   const [templates, setTemplates] = useState([]);
   const [templateUploading, setTemplateUploading] = useState(false);
   const [templateLocalFile, setTemplateLocalFile] = useState(null);
@@ -39,6 +40,9 @@ function ClientSelection() {
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [llmRestarting, setLlmRestarting] = useState(false);
+  const [llmRestartMessage, setLlmRestartMessage] = useState(null);
+  const [llmModelsError, setLlmModelsError] = useState(null);
 
   // Options avancées
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -67,8 +71,9 @@ function ClientSelection() {
   // Fonction pour charger les modèles Ollama  
   const loadOllamaModels = async () => {
     setModelsLoading(true);
+    setLlmModelsError(null);
     try {
-      const response = await healthAPI.getOllamaModels();
+      const response = await healthAPI.getOllamaModels(llmHost);
       setAvailableModels(response.models || []);
       
       if (response.models && response.models.length > 0 && !llmModel) {
@@ -76,6 +81,8 @@ function ClientSelection() {
       }
     } catch (err) {
       console.error('Erreur lors du chargement des modèles:', err);
+      const detail = err?.response?.data?.detail || err?.message;
+      setLlmModelsError(detail || "Erreur lors du chargement des modèles");
       setAvailableModels([
         { name: 'mistral:latest', available: false },
         { name: 'llama3.1:8b', available: false },
@@ -83,6 +90,34 @@ function ClientSelection() {
       ]);
     } finally {
       setModelsLoading(false);
+    }
+  };
+
+  const restartAllLlm = async () => {
+    setLlmRestarting(true);
+    setLlmRestartMessage(null);
+    try {
+      const resp = await healthAPI.restartOllama(llmHost);
+      const unloadedCount = Array.isArray(resp?.unloaded) ? resp.unloaded.length : 0;
+      const runningCount = Array.isArray(resp?.running_models) ? resp.running_models.length : 0;
+      const errCount = Array.isArray(resp?.errors) ? resp.errors.length : 0;
+
+      const msg =
+        runningCount === 0
+          ? '✅ Aucun modèle actif à redémarrer (Ollama répond bien)'
+          : `✅ Restart demandé : ${unloadedCount}/${runningCount} modèle(s) déchargé(s)` + (errCount ? ` (⚠️ ${errCount} erreur(s))` : '');
+
+      setLlmRestartMessage({ type: errCount ? 'warning' : 'success', text: msg });
+      // Rafraîchir la liste des modèles (et l'état)
+      await loadOllamaModels();
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setLlmRestartMessage({
+        type: 'error',
+        text: detail || '❌ Impossible de redémarrer les LLM (Ollama)'
+      });
+    } finally {
+      setLlmRestarting(false);
     }
   };
 
@@ -106,10 +141,18 @@ function ClientSelection() {
     (async () => {
       try {
         const resp = await reportsAPI.listTemplates();
-        setTemplates(resp.templates || []);
+        const list = resp.templates || [];
+        const merged = [DEFAULT_TEMPLATE, ...list.filter((t) => t !== DEFAULT_TEMPLATE)];
+        setTemplates(merged);
+        if (!templateName) {
+          setTemplateName(DEFAULT_TEMPLATE);
+        }
       } catch (err) {
         console.warn('Impossible de charger la liste des templates:', err);
-        setTemplates([]);
+        setTemplates([DEFAULT_TEMPLATE]);
+        if (!templateName) {
+          setTemplateName(DEFAULT_TEMPLATE);
+        }
       }
     })();
   }, []);
@@ -387,7 +430,7 @@ function ClientSelection() {
                     onChange={(e) => setTemplateName(e.target.value)}
                     disabled={loading}
                   >
-                    <option value="">— Utiliser le template par défaut / chemin —</option>
+                    <option value={DEFAULT_TEMPLATE}>— Par défaut ({DEFAULT_TEMPLATE}) —</option>
                     {templates.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
@@ -696,6 +739,15 @@ function ClientSelection() {
                 >
                   🔄
                 </button>
+                <button
+                  type="button"
+                  className="btn-restart-llm"
+                  onClick={restartAllLlm}
+                  disabled={llmRestarting}
+                  title="Restart all LLM (unload des modèles actifs)"
+                >
+                  ♻️
+                </button>
               </div>
               <select
                 value={useCustomModel ? 'custom' : llmModel}
@@ -718,6 +770,21 @@ function ClientSelection() {
                 )}
                 <option value="custom">✏️ Autre (personnalisé)</option>
               </select>
+
+              {llmModelsError && (
+                <div className="llm-restart-message llm-restart-error">
+                  ❌ {llmModelsError}
+                  <div style={{ marginTop: 4, opacity: 0.9 }}>
+                    Astuce: si tu es sur <code>http://127.0.0.1:5173</code>, l'API doit autoriser cette origine (CORS).
+                  </div>
+                </div>
+              )}
+
+              {llmRestartMessage && (
+                <div className={`llm-restart-message llm-restart-${llmRestartMessage.type}`}>
+                  {llmRestartMessage.text}
+                </div>
+              )}
             </div>
           </div>
 

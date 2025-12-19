@@ -37,7 +37,7 @@ MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MiB
 ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff"}
 ALLOWED_IMAGE_MIMES = {"image/png", "image/jpeg", "image/tiff"}
 
-DEFAULT_TEMPLATE_NAME = "TEMPLATE_SIMPLE_BASE.docx"
+DEFAULT_TEMPLATE_NAME = "TEMPLATE_SIMPLE_BASE1.docx"
 
 
 def _resolve_template_path(template_name: Optional[str], template_path: Optional[str]) -> Path:
@@ -46,7 +46,7 @@ def _resolve_template_path(template_name: Optional[str], template_path: Optional
     Priorité:
     1) template_name (uploaded_templates/ ou CLIENTS/templates/)
     2) template_path (mode avancé/dev local côté serveur)
-    3) uploaded_templates/TEMPLATE_SIMPLE_BASE.docx
+    3) uploaded_templates/TEMPLATE_SIMPLE_BASE1.docx
     4) settings.TEMPLATE_PATH
     """
 
@@ -83,16 +83,6 @@ def _resolve_template_path(template_name: Optional[str], template_path: Optional
     base = settings.TEMPLATES_DIR / DEFAULT_TEMPLATE_NAME
     if base.exists():
         return _ensure_docx(base, f"default={DEFAULT_TEMPLATE_NAME}")
-
-    # 3bis) fallback: premier template disponible dans uploaded_templates
-    try:
-        if settings.TEMPLATES_DIR.exists():
-            docxs = sorted([p for p in settings.TEMPLATES_DIR.iterdir() if p.is_file() and p.suffix.lower() == ".docx"])
-            if docxs:
-                return _ensure_docx(docxs[0], "uploaded_templates:first")
-    except Exception:
-        # On ne veut pas masquer les erreurs plus loin; fallback silencieux.
-        pass
 
     # 4) fallback global
     if getattr(settings, "TEMPLATE_PATH", None):

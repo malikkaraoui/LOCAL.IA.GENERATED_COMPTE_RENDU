@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "script-ia-rapports"
-version = "2.0.0"
+version = "2.0.1"
 description = "Générateur de rapports assisté par LLM local"
 requires-python = ">=3.10"
 dependencies = [

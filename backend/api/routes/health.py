@@ -1,6 +1,6 @@
 """Routes de santé de l'API."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 import requests
@@ -14,7 +14,7 @@ async def health_check():
     """Vérification de santé de l'API."""
     return {
         "status": "healthy",
-        "version": "2.0.0"
+        "version": "2.0.1"
     }
 
 
@@ -35,10 +35,15 @@ async def ollama_health():
 
 
 @router.get("/ollama/models")
-async def list_ollama_models():
-    """Récupérer la liste des modèles Ollama disponibles."""
+async def list_ollama_models(host: str | None = Query(default=None, description="Host Ollama (optionnel)")):
+    """Récupérer la liste des modèles Ollama disponibles.
+
+    Note: l'UI permet de saisir un host Ollama; si on ignore ce champ et qu'on utilise
+    toujours settings.OLLAMA_HOST, la liste paraît "fake".
+    """
     try:
-        resp = requests.get(f"{settings.OLLAMA_HOST}/api/tags", timeout=5)
+        base = (host or settings.OLLAMA_HOST).rstrip("/")
+        resp = requests.get(f"{base}/api/tags", timeout=5)
         resp.raise_for_status()
 
         data = resp.json()
@@ -56,17 +61,9 @@ async def list_ollama_models():
 
         return {
             "models": model_list,
-            "host": settings.OLLAMA_HOST,
+            "host": base,
             "count": len(model_list)
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Ollama non accessible: {str(e)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la récupération des modèles: {str(e)}"
-        )
+        raise HTTPException(status_code=503, detail=f"Ollama non accessible: {str(e)}")
