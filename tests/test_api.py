@@ -354,6 +354,69 @@ class TestOrchestrator:
         assert extracted_path.exists()
         assert extracted_path.suffix == ".json"
 
+    @patch('backend.workers.orchestrator.walk_files')
+    @patch('backend.workers.orchestrator.extract_one')
+    def test_extraction_falls_back_to_client_dir_when_sources_empty(self, mock_extract, mock_walk, tmp_path):
+        """Si client_dir/sources existe mais ne donne rien d'extractible, on retombe sur client_dir."""
+        from backend.workers.orchestrator import ReportOrchestrator, ReportGenerationParams
+        from extract_sources import ExtractedDoc
+
+        # Simuler l'existence du dossier sources
+        (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
+
+        sources_file = tmp_path / "sources" / "note.bin"
+        client_file = tmp_path / "doc1.pdf"
+
+        def _walk_side_effect(root):
+            root = root  # Path
+            if str(root).endswith("/sources"):
+                return [sources_file]
+            return [client_file]
+
+        mock_walk.side_effect = _walk_side_effect
+
+        # 1) Extraction dans /sources: fichier non supporté => doc.text vide
+        empty_doc = ExtractedDoc(
+            path=str(sources_file),
+            ext="(sans_ext)",
+            size_bytes=1,
+            mtime_iso="2025-12-16T00:00:00",
+            extractor="unknown",
+            text="",
+            text_sha256="",
+            pages=None,
+        )
+        ok_doc = ExtractedDoc(
+            path=str(client_file),
+            ext=".pdf",
+            size_bytes=1000,
+            mtime_iso="2025-12-16T00:00:00",
+            extractor="pymupdf",
+            text="Test content",
+            text_sha256="abc123",
+            pages=None,
+        )
+
+        def _extract_side_effect(path, enable_soffice=False):
+            if str(path).endswith("note.bin"):
+                return empty_doc
+            return ok_doc
+
+        mock_extract.side_effect = _extract_side_effect
+
+        params = ReportGenerationParams(
+            client_dir=tmp_path,
+            template_path=tmp_path / "template.docx",
+            output_path=tmp_path / "output.docx",
+        )
+        orchestrator = ReportOrchestrator(params)
+        orchestrator.temp_dir = tmp_path / "temp"
+        orchestrator.temp_dir.mkdir()
+
+        extracted_path = orchestrator._extract_sources()
+        assert extracted_path.exists()
+        assert extracted_path.suffix == ".json"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

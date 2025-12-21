@@ -156,6 +156,43 @@ tail -f /tmp/backend.log
 
 # Terminal 3 - Frontend
 tail -f /tmp/frontend.log
+
+---
+
+## 🎙️ RAG audio 100% local (transcription FR)
+
+### Variables d'environnement
+
+Ces variables sont lues par le backend et le worker :
+
+- `AUDIO_WHISPER_MODEL` (défaut: `small`)
+- `AUDIO_MAX_SECONDS` (défaut: `300`)
+- `AUDIO_UPLOAD_DIR` (défaut: `data/uploads`)
+- `AUDIO_MODEL_CACHE_DIR` (défaut: `data/models/whisper`)
+
+### Pré-télécharger le modèle (machine bientôt offline)
+
+Le premier lancement de `faster-whisper` peut télécharger le modèle si absent.
+Pour préparer une machine qui n'aura plus Internet ensuite :
+
+1) Configure `AUDIO_MODEL_CACHE_DIR` vers un dossier contrôlé (ex: `./data/models/whisper`).
+2) Lance une transcription « à vide » (ou d'un petit WAV de test) une fois.
+
+Le modèle sera alors présent dans `AUDIO_MODEL_CACHE_DIR` et réutilisé ensuite.
+
+### Endpoint d'ingestion audio
+
+L'API expose :
+
+- `POST /api/rag/audio/ingest` (multipart/form-data)
+
+Champs attendus :
+
+- `source_id` : identifiant (dans ce repo, typiquement le nom du client sous `CLIENTS/`)
+- `file` : audio `.m4a` / `.mp3` / `.wav`
+
+Le backend enfile un job RQ, puis l'audio est transcrit en français (sans traduction, sans diarization)
+et sauvegardé en `.txt` + `.json` dans les sources du client pour être pris en compte par le pipeline RAG.
 ```
 
 ---

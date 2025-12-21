@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Response, UploadFile, File
+from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 from redis import Redis
@@ -345,6 +345,7 @@ async def stream_report_logs(job_id: str):
             meta_field_progress = meta.get("field_progress")
             meta_field_order = meta.get("field_order")
             meta_field_progress_version = meta.get("field_progress_version")
+            meta_source_stats = meta.get("source_stats")
             
             # Envoyer le log si nouveau message
             if meta_message and meta_message != last_meta_message:
@@ -358,6 +359,7 @@ async def stream_report_logs(job_id: str):
                         "field_progress": meta_field_progress,
                         "field_order": meta_field_order,
                         "field_progress_version": meta_field_progress_version,
+                        "source_stats": meta_source_stats,
                     })
                 }
                 last_meta_message = meta_message
@@ -374,6 +376,7 @@ async def stream_report_logs(job_id: str):
                             "field_order": meta_field_order,
                             "field_progress_version": meta_field_progress_version,
                             "timestamp": datetime.now().isoformat(),
+                            "source_stats": meta_source_stats,
                         }
                     ),
                 }
@@ -396,6 +399,7 @@ async def stream_report_logs(job_id: str):
                         "field_progress": meta_field_progress,
                         "field_order": meta_field_order,
                         "field_progress_version": meta_field_progress_version,
+                        "source_stats": meta_source_stats,
                     })
                 }
                 
@@ -452,11 +456,26 @@ async def download_report(job_id: str):
 
 
 @router.delete("/reports/{job_id}")
-async def delete_report(job_id: str):
-    """Supprimer un job de Redis."""
+async def delete_report(job_id: str, force: bool = Query(False, description="Forcer la suppression même si le job est en cours")):
+    """Supprimer un job de Redis.
+
+    Par défaut, on refuse de supprimer un job en cours (queued/started) afin
+    d'éviter des interruptions involontaires (ex: relance UI/script).
+    Utilisez `?force=true` pour forcer.
+    """
     try:
         job = Job.fetch(job_id, connection=redis_conn)
+        status = job.get_status(refresh=True)
+
+        if not force and status in {"queued", "started", "deferred", "scheduled"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job en cours (status={status}). Suppression refusée sans force=true.",
+            )
+
         job.delete()
         return {"message": "Job supprimé"}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=404, detail="Job introuvable")

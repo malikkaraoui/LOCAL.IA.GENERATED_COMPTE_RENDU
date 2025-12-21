@@ -9,3 +9,22 @@ Ce document récapitule les bibliothèques Python nécessaires au projet ainsi q
 | `PyMuPDF`      | 1.24         | Extraction du texte et des pages lors de l'étape d'ingestion des PDF. |
 
 > ℹ️  Les dépendances optionnelles (LibreOffice `soffice`, Ollama, etc.) sont documentées dans le README. Pensez à synchroniser ce tableau lorsque `requirements.txt` change.
+
+## Dépendances système (macOS)
+
+Certaines fonctionnalités nécessitent des outils **non-Python**.
+
+### Audio RAG (transcription)
+
+La transcription locale (STT) via `faster-whisper` nécessite:
+
+- `ffmpeg` + `ffprobe` (pour analyser/décoder les fichiers audio: `.m4a`, `.mp3`, `.wav`).
+
+Installation macOS (Homebrew):
+
+- `brew install ffmpeg`
+
+Notes:
+
+- Le **premier lancement** de la transcription peut télécharger le modèle Whisper (cache par défaut dans `data/models/whisper`).
+- En cas de rate-limit HuggingFace, vous pouvez définir `HF_TOKEN` (optionnel) dans l'environnement.

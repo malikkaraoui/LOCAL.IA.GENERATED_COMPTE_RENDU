@@ -10,6 +10,9 @@ requests>=2.31.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
+# STT local (audio -> texte)
+faster-whisper>=1.0.3
+
 # DOCX branding (logos + XML)
 pillow>=10.0.0
 lxml>=4.9.0

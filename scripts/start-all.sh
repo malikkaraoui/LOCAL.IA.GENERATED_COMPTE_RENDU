@@ -68,10 +68,16 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 echo -e "${CYAN}3️⃣  Nettoyage des anciens processus${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
-pkill -f "start_worker.py" 2>/dev/null && echo -e "${YELLOW}🛑 Worker arrêté${NC}" || echo -e "${GREEN}✓ Aucun worker en cours${NC}"
-pkill -f "backend.main" 2>/dev/null && echo -e "${YELLOW}🛑 Backend arrêté${NC}" || echo -e "${GREEN}✓ Aucun backend en cours${NC}"
-pkill -f "vite.*5173" 2>/dev/null && echo -e "${YELLOW}🛑 Frontend arrêté${NC}" || echo -e "${GREEN}✓ Aucun frontend en cours${NC}"
-sleep 2
+FORCE_RESTART="${FORCE_RESTART:-0}"
+if [ "$FORCE_RESTART" = "1" ]; then
+    pkill -f "start_worker.py" 2>/dev/null && echo -e "${YELLOW}🛑 Worker arrêté${NC}" || echo -e "${GREEN}✓ Aucun worker en cours${NC}"
+    pkill -f "backend.main" 2>/dev/null && echo -e "${YELLOW}🛑 Backend arrêté${NC}" || echo -e "${GREEN}✓ Aucun backend en cours${NC}"
+    pkill -f "vite.*5173" 2>/dev/null && echo -e "${YELLOW}🛑 Frontend arrêté${NC}" || echo -e "${GREEN}✓ Aucun frontend en cours${NC}"
+    sleep 2
+else
+    echo -e "${GREEN}✓ Mode safe: on ne coupe pas les services déjà démarrés.${NC}"
+    echo -e "${YELLOW}💡 Pour forcer un redémarrage propre (et interrompre les jobs en cours) : FORCE_RESTART=1 ./scripts/start-all.sh${NC}"
+fi
 echo ""
 
 # 4. Démarrer le Worker RQ
@@ -79,16 +85,20 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN}4️⃣  Démarrage du Worker RQ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-nohup .venv/bin/python scripts/start_worker.py > /tmp/worker.log 2>&1 &
-WORKER_PID=$!
-echo -e "${YELLOW}⏳ Attente du worker...${NC}"
-sleep 2
-if ps -p $WORKER_PID > /dev/null; then
-    echo -e "${GREEN}✅ Worker démarré (PID: $WORKER_PID) - SimpleWorker sans fork${NC}"
+if pgrep -f "scripts/start_worker.py" >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ Worker déjà actif${NC}"
 else
-    echo -e "${RED}❌ Échec démarrage worker${NC}"
-    tail -20 /tmp/worker.log
-    exit 1
+    nohup .venv/bin/python scripts/start_worker.py > /tmp/worker.log 2>&1 &
+    WORKER_PID=$!
+    echo -e "${YELLOW}⏳ Attente du worker...${NC}"
+    sleep 2
+    if ps -p $WORKER_PID > /dev/null; then
+        echo -e "${GREEN}✅ Worker démarré (PID: $WORKER_PID) - SimpleWorker sans fork${NC}"
+    else
+        echo -e "${RED}❌ Échec démarrage worker${NC}"
+        tail -20 /tmp/worker.log
+        exit 1
+    fi
 fi
 echo ""
 
@@ -96,21 +106,25 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 echo -e "${CYAN}5️⃣  Démarrage du Backend FastAPI${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
-nohup .venv/bin/python -m backend.main > /tmp/backend.log 2>&1 &
-BACKEND_PID=$!
-echo -e "${YELLOW}⏳ Attente du backend...${NC}"
-for i in {1..10}; do
-    if curl -s "${API_BASE_URL}/api/health" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Backend démarré (PID: $BACKEND_PID)${NC}"
-        break
-    fi
-    sleep 1
-done
+if curl -s "${API_BASE_URL}/api/health" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Backend déjà actif${NC}"
+else
+    nohup .venv/bin/python -m backend.main > /tmp/backend.log 2>&1 &
+    BACKEND_PID=$!
+    echo -e "${YELLOW}⏳ Attente du backend...${NC}"
+    for i in {1..10}; do
+        if curl -s "${API_BASE_URL}/api/health" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Backend démarré (PID: $BACKEND_PID)${NC}"
+            break
+        fi
+        sleep 1
+    done
 
-if ! curl -s "${API_BASE_URL}/api/health" > /dev/null 2>&1; then
-    echo -e "${RED}❌ Backend non accessible${NC}"
-    tail -20 /tmp/backend.log
-    exit 1
+    if ! curl -s "${API_BASE_URL}/api/health" > /dev/null 2>&1; then
+        echo -e "${RED}❌ Backend non accessible${NC}"
+        tail -20 /tmp/backend.log
+        exit 1
+    fi
 fi
 echo ""
 
@@ -118,23 +132,27 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 echo -e "${CYAN}6️⃣  Démarrage du Frontend React${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
-cd frontend
-nohup npm run dev > /tmp/frontend.log 2>&1 &
-FRONTEND_PID=$!
-cd ..
-echo -e "${YELLOW}⏳ Attente du frontend...${NC}"
-for i in {1..15}; do
-    if curl -s http://localhost:5173 > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Frontend démarré (PID: $FRONTEND_PID)${NC}"
-        break
-    fi
-    sleep 1
-done
+if curl -s http://localhost:5173 > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Frontend déjà actif${NC}"
+else
+    cd frontend
+    nohup npm run dev > /tmp/frontend.log 2>&1 &
+    FRONTEND_PID=$!
+    cd ..
+    echo -e "${YELLOW}⏳ Attente du frontend...${NC}"
+    for i in {1..15}; do
+        if curl -s http://localhost:5173 > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Frontend démarré (PID: $FRONTEND_PID)${NC}"
+            break
+        fi
+        sleep 1
+    done
 
-if ! curl -s http://localhost:5173 > /dev/null 2>&1; then
-    echo -e "${RED}❌ Frontend non accessible${NC}"
-    tail -20 /tmp/frontend.log
-    exit 1
+    if ! curl -s http://localhost:5173 > /dev/null 2>&1; then
+        echo -e "${RED}❌ Frontend non accessible${NC}"
+        tail -20 /tmp/frontend.log
+        exit 1
+    fi
 fi
 echo ""
 

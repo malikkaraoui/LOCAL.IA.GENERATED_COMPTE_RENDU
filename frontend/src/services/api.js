@@ -160,8 +160,56 @@ export const reportsAPI = {
   /**
    * Supprimer un rapport
    */
-  deleteReport: async (jobId) => {
-    const response = await apiClient.delete(`/reports/${jobId}`);
+  deleteReport: async (jobId, options = {}) => {
+    const params = options?.force ? { force: true } : undefined;
+    const response = await apiClient.delete(`/reports/${jobId}`, { params });
+    return response.data;
+  },
+};
+
+/**
+ * API Admin (local dev) — gestion des workers
+ */
+export const adminAPI = {
+  /**
+   * (Re)démarrer les workers RQ.
+   * - kill=true: coupe les workers existants avant de relancer
+   * - count: nombre de workers à lancer
+   */
+  restartWorkers: async ({ count = 1, kill = true } = {}) => {
+    const response = await apiClient.post('/admin/workers/restart', null, {
+      params: { count, kill },
+    });
+    return response.data;
+  },
+};
+
+/**
+ * API RAG Audio (local)
+ */
+export const ragAudioAPI = {
+  /**
+   * Enqueue l'ingestion (transcription) des audios déjà présents sur disque
+   * dans CLIENTS/<source_id>/... (scan côté serveur).
+   */
+  ingestLocal: async ({ sourceId, maxFiles = 25, skipAlreadyIngested = true } = {}) => {
+    const response = await apiClient.post('/rag/audio/ingest-local', null, {
+      params: {
+        source_id: sourceId,
+        max_files: maxFiles,
+        skip_already_ingested: skipAlreadyIngested,
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Statut d'ingestion: nb de transcriptions .txt/.json
+   */
+  status: async ({ sourceId } = {}) => {
+    const response = await apiClient.get('/rag/audio/status', {
+      params: { source_id: sourceId },
+    });
     return response.data;
   },
 };

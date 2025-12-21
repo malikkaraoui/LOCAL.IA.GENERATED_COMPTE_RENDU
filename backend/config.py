@@ -66,5 +66,20 @@ class Settings(BaseSettings):
 
     # Logging
     LOG_LEVEL: str = "INFO"
+
+    # -----------------
+    # Audio RAG (STT local)
+    # -----------------
+    # Modèle faster-whisper (téléchargé au 1er lancement si absent).
+    AUDIO_WHISPER_MODEL: str = "small"
+    # Durée max d'un audio uploadé (en secondes). Objectif: < 5 minutes.
+    AUDIO_MAX_SECONDS: int = 300
+
+    # Dossier d'upload audio (stockage temporaire côté serveur)
+    AUDIO_UPLOAD_DIR: Path = PROJECT_ROOT / "data" / "uploads"
+
+    # Dossier de cache contrôlé pour les modèles Whisper.
+    # (Local-friendly: permet de pré-télécharger puis d'être offline.)
+    AUDIO_MODEL_CACHE_DIR: Path = PROJECT_ROOT / "data" / "models" / "whisper"
     
 settings = Settings()

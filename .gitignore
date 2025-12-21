@@ -27,6 +27,10 @@ htmlcov/
 out/
 uploaded_templates/
 
+# Local data & model caches (do not version large binaries)
+data/**
+!data/.gitkeep
+
 # Client and sensitive documents
 CLIENTS/**/*
 !CLIENTS/*.py

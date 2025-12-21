@@ -177,14 +177,18 @@ def process_report_job(
         }
 
 
-def start_worker(queue_name: str = "reports"):
+def start_worker(queue_name: str = "reports,rag"):
     """
     Start RQ worker to process jobs.
     
     Args:
-        queue_name: Name of the queue to listen to
+        queue_name: Name(s) of the queue(s) to listen to (CSV)
     """
-    logger.info(f"Starting RQ worker for queue: {queue_name}")
+    queue_names = [q.strip() for q in (queue_name or "").split(",") if q.strip()]
+    if not queue_names:
+        queue_names = ["reports"]
+
+    logger.info(f"Starting RQ worker for queues: {queue_names}")
     
     redis_conn = Redis(
         host=settings.REDIS_HOST,
@@ -193,16 +197,16 @@ def start_worker(queue_name: str = "reports"):
         decode_responses=False
     )
     
-    queue = Queue(queue_name, connection=redis_conn)
+    queues = [Queue(name, connection=redis_conn) for name in queue_names]
     
     # Sur macOS, utiliser SimpleWorker pour éviter les problèmes de fork
     import platform
     if platform.system() == "Darwin":  # macOS
         from rq import SimpleWorker
-        worker = SimpleWorker([queue], connection=redis_conn)
+        worker = SimpleWorker(queues, connection=redis_conn)
         logger.info("Using SimpleWorker (no fork) for macOS compatibility")
     else:
-        worker = Worker([queue], connection=redis_conn)
+        worker = Worker(queues, connection=redis_conn)
     
     worker.work(with_scheduler=True)
 

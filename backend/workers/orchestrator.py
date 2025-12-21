@@ -5,6 +5,8 @@ Coordonne les 3 étapes : extraction, génération, rendu.
 import json
 import logging
 import tempfile
+import shutil
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 from dataclasses import dataclass
@@ -65,6 +67,13 @@ class ReportGenerationParams:
     force_reextract: bool = False
     export_pdf: bool = False
 
+    # Audio RAG
+    # Si True, transcrit automatiquement (Whisper local) les audios du client
+    # qui n'ont pas encore de manifest ingested_audio/*.json.
+    # Objectif: éviter de devoir lancer manuellement "ingest-local" avant chaque rapport.
+    auto_ingest_audio: bool = True
+    max_audio_ingest_files: int = 25
+
 
 class ReportOrchestrator:
     """Orchestrateur pour la génération de rapports."""
@@ -77,6 +86,8 @@ class ReportOrchestrator:
         self.field_progress: Dict[str, Dict[str, Any]] = {}
         self.field_order: List[str] = []
         self.field_progress_version: int = 0
+        # Statistiques sources (utile pour debug RAG / extraction)
+        self.source_stats: Optional[Dict[str, Any]] = None
         
     def _log_progress(self, status: str, message: str, progress: Optional[float] = None, *, include_fields: bool = False):
         """Log et appel du callback de progression."""
@@ -101,6 +112,9 @@ class ReportOrchestrator:
                 "logs": self.logs,
                 "timestamp": log_entry["timestamp"]
             }
+            # Toujours inclure les stats de sources si disponibles (frontend peut les afficher).
+            if self.source_stats:
+                payload["source_stats"] = self.source_stats
             if include_fields:
                 payload.update(
                     {
@@ -230,38 +244,232 @@ class ReportOrchestrator:
     def _extract_sources(self) -> Path:
         """Extraction des documents sources."""
         extracted_path = self.temp_dir / "extracted.json"
-        
+
+        def _audio_deps_ok() -> bool:
+            # Dépendances nécessaires à faster-whisper (ffmpeg/ffprobe + module Python)
+            if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+                return False
+            try:
+                import faster_whisper  # type: ignore  # noqa: F401
+            except Exception:
+                return False
+            return True
+
+        def _maybe_auto_ingest_audio() -> Dict[str, Any]:
+            """Transcrit automatiquement les audios manquants (idempotent via manifests JSON).
+
+            Retourne un petit résumé pour logs / debug.
+            Ne lève pas en cas d'échec: l'extraction de documents texte doit continuer.
+            """
+
+            summary: Dict[str, Any] = {
+                "enabled": bool(getattr(self.params, "auto_ingest_audio", False)),
+                "queued": 0,
+                "processed": 0,
+                "skipped": 0,
+                "errors": 0,
+            }
+
+            if not getattr(self.params, "auto_ingest_audio", False):
+                return summary
+
+            # Si deps manquantes, on ne bloque pas le rapport.
+            if not _audio_deps_ok():
+                summary["skipped_reason"] = "missing_deps"
+                return summary
+
+            client_dir = self.params.client_dir
+            ingested_dir = client_dir / "sources" / "ingested_audio"
+            ingested_dir.mkdir(parents=True, exist_ok=True)
+
+            # Détecter les audios déjà ingérés (via manifests JSON)
+            seen_audio_paths: set[str] = set()
+            try:
+                for mf in ingested_dir.glob("*.json"):
+                    try:
+                        payload = json.loads(mf.read_text(encoding="utf-8"))
+                        ap = payload.get("audio_path")
+                        if isinstance(ap, str) and ap:
+                            seen_audio_paths.add(str(Path(ap).expanduser().resolve()))
+                    except Exception:
+                        continue
+            except Exception:
+                # Non bloquant
+                pass
+
+            # Scanner les audios dans tout le dossier client (hors ingested_audio)
+            allowed_exts = {".m4a", ".mp3", ".wav"}
+            audio_files: list[Path] = []
+            try:
+                for p in client_dir.rglob("*"):
+                    if not p.is_file():
+                        continue
+                    if p.suffix.lower() not in allowed_exts:
+                        continue
+                    rp = p.expanduser().resolve()
+                    # Éviter de ré-ingérer ce qu'on a généré
+                    if "sources/ingested_audio" in str(rp).replace("\\", "/"):
+                        continue
+                    if str(rp) in seen_audio_paths:
+                        summary["skipped"] += 1
+                        continue
+                    audio_files.append(rp)
+            except Exception:
+                # Non bloquant
+                return summary
+
+            if not audio_files:
+                return summary
+
+            max_files = int(getattr(self.params, "max_audio_ingest_files", 25) or 0)
+            if max_files > 0:
+                audio_files = audio_files[:max_files]
+
+            # Import local (pour éviter d'alourdir le démarrage worker + facilités de tests)
+            try:
+                from script_ai.rag.ingest_audio import ingest_audio_file  # type: ignore
+            except Exception:
+                summary["skipped_reason"] = "import_error"
+                return summary
+
+            self._log_progress(
+                "EXTRACTING",
+                f"🎙️ Audio: transcription automatique de {len(audio_files)} fichier(s) (max={max_files})…",
+                0.11,
+            )
+
+            for p in audio_files:
+                try:
+                    ingest_audio_file(
+                        str(p),
+                        source_id=client_dir.name,
+                        extra_metadata={"origin": "auto_report", "relative_path": str(p.relative_to(client_dir)) if str(p).startswith(str(client_dir)) else str(p)},
+                    )
+                    summary["processed"] += 1
+                except Exception:
+                    summary["errors"] += 1
+                    # On continue, le rapport ne doit pas échouer pour l'audio.
+                    continue
+
+            return summary
+
+        def _attempt_extract(input_dir: Path) -> list[ExtractedDoc]:
+            # Liste des fichiers
+            files = walk_files(input_dir)
+            if not files:
+                raise ValueError(f"Aucun fichier trouvé dans {input_dir}")
+
+            # Stats de sources (debug RAG: vérifier qu'on scanne le bon dossier + que l'audio ingéré est présent)
+            ext_counts = Counter()
+            for fp in files:
+                ext = fp.suffix.lower() if fp.suffix else "(sans_ext)"
+                ext_counts[ext] += 1
+
+            ingested_dir = self.params.client_dir / "sources" / "ingested_audio"
+            ingested_txt = 0
+            ingested_json = 0
+            try:
+                if ingested_dir.exists() and ingested_dir.is_dir():
+                    ingested_txt = len(list(ingested_dir.glob("*.txt")))
+                    ingested_json = len(list(ingested_dir.glob("*.json")))
+            except Exception:
+                # Non bloquant (droits/FS)
+                pass
+
+            self.source_stats = {
+                "source_dir": str(input_dir),
+                "total_files": len(files),
+                "by_ext": dict(sorted(ext_counts.items(), key=lambda kv: (-kv[1], kv[0]))),
+                "audio_ingested": {"txt": ingested_txt, "json": ingested_json},
+            }
+
+            # Log utilisateur (simple) + push vers le frontend
+            pdf_n = ext_counts.get(".pdf", 0)
+            docx_n = ext_counts.get(".docx", 0)
+            txt_n = ext_counts.get(".txt", 0)
+            m4a_n = ext_counts.get(".m4a", 0)
+            mp3_n = ext_counts.get(".mp3", 0)
+            wav_n = ext_counts.get(".wav", 0)
+            self._log_progress(
+                "EXTRACTING",
+                (
+                    f"Sources détectées: {len(files)} fichier(s) "
+                    f"(pdf={pdf_n}, docx={docx_n}, txt={txt_n}, m4a={m4a_n}, mp3={mp3_n}, wav={wav_n}). "
+                    f"Audio RAG (transcriptions): {ingested_txt} .txt"
+                ),
+                0.12,
+            )
+
+            # Extraction de chaque fichier
+            docs: List[ExtractedDoc] = []
+            for file_path in files:
+                doc = extract_one(file_path, self.params.enable_soffice)
+                if doc.text:  # On ne garde que les docs avec du texte
+                    docs.append(doc)
+
+            # Stats post-extraction
+            if self.source_stats is None:
+                self.source_stats = {}
+            self.source_stats["extracted_docs"] = len(docs)
+
+            if not docs:
+                raise ValueError(f"Aucun document extrait avec succès dans {input_dir}")
+            return docs
+
         # Déterminer le dossier source
+        fallback_dir: Optional[Path] = None
         if self.params.source_file:
             source_path = Path(self.params.source_file)
             if not source_path.exists():
                 raise FileNotFoundError(f"Fichier source introuvable: {source_path}")
             input_dir = source_path.parent
         else:
-            # Par défaut, chercher un dossier "sources" ou utiliser le dossier client
+            # Par défaut, chercher un dossier "sources" (si c'est une vraie arborescence de sources)
+            # mais si ce dossier est vide/inutile, retomber sur le dossier client.
             sources_dir = self.params.client_dir / "sources"
-            input_dir = sources_dir if sources_dir.exists() else self.params.client_dir
-        
-        # Liste des fichiers
-        files = walk_files(input_dir)
-        if not files:
-            raise ValueError(f"Aucun fichier trouvé dans {input_dir}")
-        
-        # Extraction de chaque fichier
-        docs: List[ExtractedDoc] = []
-        for file_path in files:
-            doc = extract_one(file_path, self.params.enable_soffice)
-            if doc.text:  # On ne garde que les docs avec du texte
-                docs.append(doc)
-        
-        if not docs:
-            raise ValueError(f"Aucun document extrait avec succès dans {input_dir}")
+            if sources_dir.exists():
+                input_dir = sources_dir
+                fallback_dir = self.params.client_dir
+            else:
+                input_dir = self.params.client_dir
+
+        # Optionnel: ingestion audio automatique avant de lister / extraire.
+        # On le fait une seule fois (sinon, avec le fallback sources->client_dir,
+        # on pourrait rescanner 2x le même dossier).
+        try:
+            audio_summary = _maybe_auto_ingest_audio()
+            if audio_summary.get("processed"):
+                self._log_progress(
+                    "EXTRACTING",
+                    f"🎙️ Audio: {audio_summary.get('processed')} transcription(s) générée(s) automatiquement.",
+                    0.11,
+                )
+        except Exception:
+            # Non bloquant
+            pass
+
+        # Tentative 1 (dossier choisi)
+        try:
+            docs = _attempt_extract(input_dir)
+        except ValueError as exc:
+            if fallback_dir and fallback_dir != input_dir:
+                logger.info("Extraction vide dans %s, fallback sur %s (%s)", input_dir, fallback_dir, exc)
+                self._log_progress(
+                    "EXTRACTING",
+                    f"Aucun document utilisable dans {input_dir}. Nouvelle tentative dans {fallback_dir}…",
+                    0.12,
+                )
+                docs = _attempt_extract(fallback_dir)
+                input_dir = fallback_dir
+            else:
+                raise
         
         # Sauvegarde du JSON
         payload = {
             "documents": [
                 {
                     "path": doc.path,
+                    "ext": doc.ext,
                     "hash": doc.text_sha256,
                     "text": doc.text,
                     "pages": doc.pages,
@@ -274,7 +482,8 @@ class ReportOrchestrator:
             "metadata": {
                 "client": self.params.client_dir.name,
                 "source_dir": str(input_dir),
-                "doc_count": len(docs)
+                "doc_count": len(docs),
+                "source_stats": self.source_stats,
             }
         }
         
