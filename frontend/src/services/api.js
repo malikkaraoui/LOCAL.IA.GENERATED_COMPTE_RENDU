@@ -249,4 +249,25 @@ export const brandingAPI = {
   },
 };
 
+/**
+ * API Training (analyse de patterns)
+ */
+export const trainingAPI = {
+  /**
+   * Démarrer une analyse d'entraînement
+   */
+  start: async (payload) => {
+    const response = await apiClient.post('/training/start', payload);
+    return response.data;
+  },
+
+  /**
+   * Récupérer le statut d'un job d'entraînement
+   */
+  getStatus: async (jobId) => {
+    const response = await apiClient.get(`/training/${jobId}/status`);
+    return response.data;
+  },
+};
+
 export default apiClient;

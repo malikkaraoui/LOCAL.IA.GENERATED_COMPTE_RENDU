@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { trainingAPI } from "../services/api";
 
 const DEFAULT_CONFIG = {
   batch_name: "BATCH_20",
@@ -65,24 +66,19 @@ export default function Training() {
     appendLog("▶️ Démarrage…");
 
     try {
-      // Stub API: on branchera le backend ensuite
-      const res = await fetch("/api/training/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      appendLog(`✅ Job créé: ${data.job_id || "unknown"}`);
-      appendLog("ℹ️ (prochaine étape) polling status + affichage résultats");
+      // Appel API réel
+      const data = await trainingAPI.start(payload);
+      appendLog(`✅ Job créé: ${data.job_id}`);
+      appendLog(`📊 Statut: ${data.status}`);
+      
+      // Récupérer le statut détaillé
+      const statusData = await trainingAPI.getStatus(data.job_id);
+      appendLog(`💬 Message: ${statusData.message || 'N/A'}`);
+      
       setStatus("done");
     } catch (err) {
-      appendLog(`❌ Erreur: ${String(err.message || err)}`);
+      const errorMsg = err.response?.data?.detail || err.message || String(err);
+      appendLog(`❌ Erreur: ${errorMsg}`);
       setStatus("error");
     }
   };

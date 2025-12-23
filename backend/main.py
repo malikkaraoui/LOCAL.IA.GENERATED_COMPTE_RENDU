@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.config import settings
-from backend.api.routes import reports, health, auth, branding, llm, rag_audio, admin
+from backend.api.routes import reports, health, auth, branding, llm, rag_audio, admin, training
 
 # Créer l'application
 app = FastAPI(
@@ -35,6 +35,7 @@ app.include_router(branding.router, prefix=settings.API_PREFIX, tags=["branding"
 app.include_router(llm.router, prefix=settings.API_PREFIX, tags=["llm"])
 app.include_router(rag_audio.router, prefix=settings.API_PREFIX, tags=["rag"])
 app.include_router(admin.router, prefix=settings.API_PREFIX, tags=["admin"])
+app.include_router(training.router, prefix=settings.API_PREFIX, tags=["training"])
 
 
 def _configure_logging() -> None:
