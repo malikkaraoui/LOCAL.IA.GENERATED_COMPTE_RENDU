@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import ClientSelection from './pages/ClientSelection';
 import Progress from './pages/Progress';
 import Branding from './pages/Branding';
+import Training from './pages/Training';
 import { reportsAPI } from './services/api';
 import './App.css';
 
@@ -55,6 +56,8 @@ function AppHeader() {
         <Link to="/">Rapports</Link>
         <span className="sep">•</span>
         <Link to="/branding">Branding DOCX</Link>
+        <span className="sep">•</span>
+        <Link to="/training">Entraînement</Link>
 
         {jobId && (
           <>
@@ -87,6 +90,7 @@ function App() {
             <Route path="/" element={<ClientSelection />} />
             <Route path="/progress/:jobId" element={<Progress />} />
             <Route path="/branding" element={<Branding />} />
+            <Route path="/training" element={<Training />} />
           </Routes>
         </main>
         
