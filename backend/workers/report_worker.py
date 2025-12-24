@@ -177,7 +177,7 @@ def process_report_job(
         }
 
 
-def start_worker(queue_name: str = "reports,rag"):
+def start_worker(queue_name: str = "reports,rag,training"):
     """
     Start RQ worker to process jobs.
     

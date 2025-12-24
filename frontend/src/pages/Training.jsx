@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { trainingAPI } from "../services/api";
 
 const DEFAULT_CONFIG = {
@@ -33,8 +33,10 @@ function splitExt(s) {
 export default function Training() {
   const [cfg, setCfg] = useState(DEFAULT_CONFIG);
   const [extInput, setExtInput] = useState(joinExt(DEFAULT_CONFIG.allowed_ext));
-  const [status, setStatus] = useState("idle"); // idle | running | done | error
+  const [status, setStatus] = useState("idle"); // idle | queued | running | done | error
   const [logs, setLogs] = useState("");
+  const [progress, setProgress] = useState(0);
+  const pollingIntervalRef = useRef(null);
 
   const payload = useMemo(() => {
     return {
@@ -60,22 +62,62 @@ export default function Training() {
     setLogs((prev) => (prev ? `${prev}\n${line}` : line));
   };
 
+  // Polling du status
+  const pollStatus = async (jobId) => {
+    try {
+      const statusData = await trainingAPI.getStatus(jobId);
+      const newStatus = statusData.status;
+      const message = statusData.message || "";
+      const prog = statusData.progress || 0;
+
+      setStatus(newStatus);
+      setProgress(prog);
+      appendLog(`📊 [${newStatus.toUpperCase()}] ${message} (${prog}%)`);
+
+      // Arrêter le polling si terminé
+      if (newStatus === "done" || newStatus === "error") {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || err.message || String(err);
+      appendLog(`❌ Erreur polling: ${errorMsg}`);
+    }
+  };
+
+  // Cleanup du polling au unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
   const startTraining = async () => {
-    setStatus("running");
+    setStatus("queued");
     setLogs("");
-    appendLog("▶️ Démarrage…");
+    setProgress(0);
+    appendLog("▶️ Démarrage de l'analyse...");
 
     try {
-      // Appel API réel
+      // Appel API pour démarrer
       const data = await trainingAPI.start(payload);
-      appendLog(`✅ Job créé: ${data.job_id}`);
-      appendLog(`📊 Statut: ${data.status}`);
+      const jobId = data.job_id;
       
-      // Récupérer le statut détaillé
-      const statusData = await trainingAPI.getStatus(data.job_id);
-      appendLog(`💬 Message: ${statusData.message || 'N/A'}`);
+      appendLog(`✅ Job créé: ${jobId}`);
+      appendLog(`📊 Statut initial: ${data.status}`);
+
+      // Démarrer le polling toutes les 1 seconde
+      pollingIntervalRef.current = setInterval(() => {
+        pollStatus(jobId);
+      }, 1000);
+
+      // Premier poll immédiat
+      await pollStatus(jobId);
       
-      setStatus("done");
     } catch (err) {
       const errorMsg = err.response?.data?.detail || err.message || String(err);
       appendLog(`❌ Erreur: ${errorMsg}`);
@@ -245,12 +287,27 @@ export default function Training() {
         <div className="flex items-center gap-4 mb-5">
           <button
             onClick={startTraining}
-            disabled={status === "running"}
+            disabled={status === "queued" || status === "running"}
             className="px-7 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-semibold rounded-lg shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:bg-gray-600"
           >
-            {status === "running" ? "Analyse en cours…" : "Lancer analyse"}
+            {status === "queued" ? "⏳ En file..." : status === "running" ? "⚙️ Analyse en cours..." : "🚀 Lancer analyse"}
           </button>
-          <span className="text-white/70 text-sm">Status: <span className="font-medium text-white">{status}</span></span>
+          <div className="flex flex-col gap-1">
+            <span className="text-white/70 text-sm">
+              Status: <span className="font-medium text-white">{status}</span>
+            </span>
+            {(status === "queued" || status === "running") && (
+              <div className="flex items-center gap-2">
+                <div className="w-32 h-2 bg-white/20 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <span className="text-xs text-white/70">{progress}%</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div>
@@ -258,7 +315,7 @@ export default function Training() {
             Logs
           </label>
           <textarea
-            rows={8}
+            rows={12}
             value={logs}
             readOnly
             className="w-full px-4 py-3 bg-gray-900/80 border border-white/20 rounded-lg text-emerald-400 font-mono text-xs leading-relaxed focus:outline-none resize-y"

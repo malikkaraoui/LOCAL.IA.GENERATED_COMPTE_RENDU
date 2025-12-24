@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from redis import Redis
+from rq import Queue
 
 from backend.config import settings
 from backend.api.models.training import (
@@ -11,53 +12,55 @@ from backend.api.models.training import (
     TrainingStartResponse,
     TrainingStatusResponse,
 )
+from backend.api.services.training_status import (
+    set_training_status,
+    get_training_status,
+)
+from backend.workers.training_worker import training_analysis_job
 
 router = APIRouter(prefix="/training")
 
-# Redis connection (même pattern que reports.py et rag_audio.py)
+# Redis connection (même pattern que reports.py)
 redis_conn = Redis(
     host=settings.REDIS_HOST,
     port=settings.REDIS_PORT,
     db=settings.REDIS_DB,
-    decode_responses=True,
+    decode_responses=False,  # Must match worker configuration
 )
 
-
-def _job_key(job_id: str) -> str:
-    """Clé Redis pour un job d'entraînement."""
-    return f"training:job:{job_id}"
+# Queue RQ pour les jobs training
+training_queue = Queue("training", connection=redis_conn)
 
 
 @router.post("/start", response_model=TrainingStartResponse)
 def training_start(req: TrainingStartRequest):
-    """Démarre une analyse d'entraînement (stub pour l'instant).
+    """Démarre une analyse d'entraînement en arrière-plan.
     
-    Crée un job dans Redis et retourne le job_id.
-    Pour l'instant, marque directement le job comme 'done' (stub).
-    Étape 3 : envoi au worker RQ pour vraie analyse.
+    Crée un job dans Redis, l'enqueue dans RQ, et retourne immédiatement.
+    Le worker RQ exécutera l'analyse de manière asynchrone.
     """
     job_id = uuid4().hex
     payload = req.model_dump()
 
-    # ✅ Stockage minimal (pas de texte perso dans les logs)
-    job = {
-        "job_id": job_id,
-        "status": "queued",
-        "message": "queued",
-        "batch_name": payload.get("batch_name"),
-        "source_root": payload.get("source_root"),
-        "sandbox_root": payload.get("sandbox_root"),
-    }
+    # Initialiser le statut en "queued"
+    set_training_status(
+        job_id,
+        status="queued",
+        message="Job en file d'attente",
+        progress=0
+    )
 
-    redis_conn.set(_job_key(job_id), json.dumps(job, ensure_ascii=False))
+    # Enqueue le job dans RQ (pattern recommandé : job_id via get_current_job)
+    rq_job = training_queue.enqueue(
+        training_analysis_job,
+        payload,  # Passer payload comme argument positionnel
+        job_id=job_id,  # job_id pour RQ (récupérable via get_current_job())
+        job_timeout='30m',
+        result_ttl=86400,
+        failure_ttl=86400,
+    )
 
-    # Stub: on marque direct "done" pour valider le wiring front/back
-    # (étape 3 = envoi RQ worker + logs + vraie analyse)
-    job["status"] = "done"
-    job["message"] = "stub OK (backend branché)"
-    redis_conn.set(_job_key(job_id), json.dumps(job, ensure_ascii=False))
-
-    return TrainingStartResponse(job_id=job_id, status=job["status"])
+    return TrainingStartResponse(job_id=job_id, status="queued")
 
 
 @router.get("/{job_id}/status", response_model=TrainingStatusResponse)
@@ -73,13 +76,15 @@ def training_status(job_id: str):
     Raises:
         HTTPException 404 si le job n'existe pas
     """
-    raw = redis_conn.get(_job_key(job_id))
-    if not raw:
+    job = get_training_status(job_id)
+    
+    if not job:
         raise HTTPException(status_code=404, detail="Unknown training job_id")
 
-    job = json.loads(raw)
     return TrainingStatusResponse(
         job_id=job["job_id"],
         status=job["status"],
         message=job.get("message"),
+        progress=job.get("progress"),
+        artifact_path=job.get("artifact_path"),
     )
