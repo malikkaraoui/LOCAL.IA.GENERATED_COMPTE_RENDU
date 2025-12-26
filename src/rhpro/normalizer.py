@@ -486,41 +486,38 @@ class Normalizer:
     
     def _choose_gate_profile(self, segments: List[Segment], found_sections: List[Dict]) -> tuple:
         """
-        Choisit automatiquement le profil de production gate selon les signaux détectés.
+        Choisit automatiquement le profil de production gate via scoring déterministe.
         
-        Heuristique (ordre important):
-        1) Si "stage" détecté => profile="stage"
-        2) Sinon si >=2 sections parmi tests/vocation/profil_emploi/ressources_professionnelles => profile="bilan_complet"
-        3) Sinon si "LAI 15" ou "LAI 18" détecté => profile="placement_suivi"
-        4) Sinon => profile="placement_suivi" (défaut tolérant)
+        Approche durcie:
+        - Signaux calculés UNIQUEMENT depuis titres/sections normalisés (headings), pas texte libre
+        - Scoring par profil basé sur présence de sections attendues + signaux forts
+        - Retourne profile avec meilleur score + reasons + signals + scores + confidence
         
         Args:
-            segments: Liste des segments
-            found_sections: Sections trouvées avec leurs titres
+            segments: Liste des segments (titres détectés)
+            found_sections: Sections mappées avec leurs section_id
             
         Returns:
-            (profile_id, signals_dict)
+            (profile_id, enriched_signals_dict) avec scores et confidence
         """
         # Récupérer le profil par défaut depuis le ruleset
         gate_config = self.ruleset.raw_data.get('production_gate', {})
         default_profile = gate_config.get('default_profile', 'placement_suivi')
         
-        # Collecter tous les titres normalisés (en minuscules pour comparaison)
-        all_titles = []
+        # Collecter UNIQUEMENT les titres normalisés (headings détectés)
+        # PAS le contenu des paragraphes pour éviter faux positifs
+        heading_titles = []
         for segment in segments:
             if segment.normalized_title:
-                all_titles.append(segment.normalized_title.lower())
-        for section in found_sections:
-            if section.get('title'):
-                all_titles.append(section['title'].lower())
+                heading_titles.append(segment.normalized_title.lower())
         
-        # Collecter les section_ids trouvés
+        # Collecter les section_ids mappés (source fiable)
         found_section_ids = [s.get('section_id', '') for s in found_sections if s.get('section_id')]
         
-        # Dédupliquer
-        all_titles = list(set(all_titles))
+        # Dédupliquer les titres
+        heading_titles = list(set(heading_titles))
         
-        # Initialiser les signaux
+        # === CALCUL DES SIGNAUX (depuis headings/section_ids UNIQUEMENT) ===
         signals = {
             'has_stage': False,
             'has_tests': False,
@@ -533,28 +530,26 @@ class Normalizer:
             'bilan_complet_sections_count': 0
         }
         
-        # Signal 1: Détection de "stage"
+        # Signal 1: Détection "stage" dans TITRES ou section_ids
         stage_keywords = ['stage', 'bilan de stage', 'orientation formation stage']
-        for title in all_titles:
+        for title in heading_titles:
             for keyword in stage_keywords:
                 if keyword in title:
                     signals['has_stage'] = True
-                    signals['matched_titles'].append(f"stage:{title[:50]}")
+                    # Tronquer à 40 chars pour lisibilité
+                    signals['matched_titles'].append(f"stage:{title[:40]}")
                     break
         
-        # Vérifier aussi les section_ids
+        # Vérifier section_ids pour stage
         for section_id in found_section_ids:
             if 'stage' in section_id.lower():
                 signals['has_stage'] = True
                 break
         
-        if signals['has_stage']:
-            return ('stage', signals)
-        
-        # Signal 2: Détection sections bilan complet (tests, vocation, profil_emploi, ressources_professionnelles)
+        # Signal 2: Sections bilan complet
         for section_id in found_section_ids:
             section_id_lower = section_id.lower()
-            if section_id.startswith('tests') or 'tests' in section_id_lower:
+            if section_id.startswith('tests') or 'tests' == section_id_lower:
                 signals['has_tests'] = True
                 signals['bilan_complet_sections_count'] += 1
             if 'vocation' in section_id_lower:
@@ -567,26 +562,68 @@ class Normalizer:
                 signals['has_ressources_professionnelles'] = True
                 signals['bilan_complet_sections_count'] += 1
         
-        if signals['bilan_complet_sections_count'] >= 2:
-            return ('bilan_complet', signals)
-        
-        # Signal 3: Détection LAI 15 ou LAI 18
+        # Signal 3: Détection LAI dans TITRES
         lai_keywords = ['lai 15', 'lai15', 'lai 18', 'lai18', 'lai-15', 'lai-18']
-        for title in all_titles:
+        for title in heading_titles:
             for keyword in lai_keywords:
                 if keyword in title:
                     if '15' in keyword:
                         signals['has_lai15'] = True
                     else:
                         signals['has_lai18'] = True
-                    signals['matched_titles'].append(f"lai:{title[:50]}")
+                    signals['matched_titles'].append(f"lai:{title[:40]}")
                     break
         
-        if signals['has_lai15'] or signals['has_lai18']:
-            return ('placement_suivi', signals)
+        # === SCORING DÉTERMINISTE PAR PROFIL ===
+        scores = {
+            'stage': 0,
+            'bilan_complet': 0,
+            'placement_suivi': 0
+        }
         
-        # Défaut: placement_suivi (tolérant)
-        return (default_profile, signals)
+        # Profil STAGE: signaux forts = stage détecté
+        if signals['has_stage']:
+            scores['stage'] += 100  # Signal fort exclusif
+        # Sections orientation_formation
+        if 'orientation_formation' in found_section_ids or any('orientation' in sid.lower() for sid in found_section_ids):
+            scores['stage'] += 20
+        
+        # Profil BILAN_COMPLET: sections spécifiques (tests, vocation, profil_emploi)
+        scores['bilan_complet'] += signals['bilan_complet_sections_count'] * 30
+        if signals['has_lai15'] or signals['has_lai18']:
+            scores['bilan_complet'] += 25  # LAI = souvent bilan complet
+        # Pénalité si pas assez de sections
+        if signals['bilan_complet_sections_count'] < 2:
+            scores['bilan_complet'] -= 20
+        
+        # Profil PLACEMENT_SUIVI: profil tolérant par défaut
+        scores['placement_suivi'] += 10  # Score de base (défaut)
+        if signals['has_lai15'] or signals['has_lai18']:
+            scores['placement_suivi'] += 15
+        # Bonus si peu de sections spécifiques (document léger)
+        if signals['bilan_complet_sections_count'] == 0:
+            scores['placement_suivi'] += 20
+        
+        # Sélectionner le profil avec le meilleur score
+        sorted_profiles = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        selected_profile = sorted_profiles[0][0]
+        top_score = sorted_profiles[0][1]
+        second_score = sorted_profiles[1][1] if len(sorted_profiles) > 1 else 0
+        
+        # Calculer confidence (delta entre top1 et top2)
+        selection_confidence = top_score - second_score
+        
+        # Fallback sur défaut si tous scores nuls ou négatifs
+        if top_score <= 0:
+            selected_profile = default_profile
+            selection_confidence = 0
+        
+        # Enrichir signals avec scoring info
+        signals['scores'] = scores
+        signals['selection_confidence'] = selection_confidence
+        signals['profile_ranking'] = [p[0] for p in sorted_profiles]
+        
+        return (selected_profile, signals)
     
     def _evaluate_production_gate(self, missing_required: List[str], 
                                    required_coverage: float,

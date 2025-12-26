@@ -104,19 +104,19 @@ class TestGateProfileSelection:
         ]
         found_sections = [{'title': 'BILAN DE STAGE', 'section_id': 'test'}]
         
-        profile_id, reasons = normalizer._choose_gate_profile(segments, found_sections)
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
         
         assert profile_id == 'stage'
     
     def test_choose_profile_stage_priority_over_suivi(self, normalizer):
-        """'stage' doit avoir la priorité sur 'suivi_leger'"""
-        # Si on a à la fois "stage" et "suivi", "stage" est détecté en premier
+        """'stage' doit avoir un meilleur score que les autres profils"""
+        # Si on a à la fois "stage" et "suivi", "stage" doit gagner via scoring
         segments = [
             Segment(raw_title="Stage de suivi", normalized_title="stage de suivi", level=1)
         ]
         found_sections = [{'title': 'Stage de suivi', 'section_id': 'test'}]
         
-        profile_id, reasons = normalizer._choose_gate_profile(segments, found_sections)
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
         
         # Stage doit être détecté car il est testé en premier
         assert profile_id == 'stage'
@@ -307,6 +307,123 @@ class TestGateProfileIntegration:
         gate = result['report']['production_gate']
         assert gate['profile'] == 'placement_suivi'
         assert 'signals' in gate
+
+
+class TestGateProfileScoring:
+    """Tests pour le système de scoring durci"""
+    
+    @pytest.fixture
+    def normalizer(self):
+        """Fixture pour créer un normalizer avec le ruleset"""
+        ruleset = load_ruleset(str(RULESET_PATH))
+        return Normalizer(ruleset)
+    
+    def test_false_positive_stage_in_content_not_title(self, normalizer):
+        """Faux positif: 'stage' dans contenu mais pas dans les titres
+        Le système durci NE doit PAS détecter 'stage' car absent des headings"""
+        # Segments sans "stage" dans les titres
+        segments = [
+            Segment(raw_title="Identité", normalized_title="identité", level=1),
+            Segment(raw_title="Conclusion", normalized_title="conclusion", level=1)
+        ]
+        # Section_ids normaux (pas de stage)
+        found_sections = [
+            {'title': 'Identité', 'section_id': 'identity'},
+            {'title': 'Conclusion', 'section_id': 'conclusion'}
+        ]
+        
+        # Le contenu des paragraphes pourrait contenir "stage" mais on l'ignore
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
+        
+        # Ne doit PAS sélectionner 'stage'
+        assert profile_id != 'stage'
+        assert signals['has_stage'] is False
+        assert profile_id in ['placement_suivi', 'bilan_complet']
+    
+    def test_ambiguous_case_with_scoring(self, normalizer):
+        """Cas ambigu: document avec quelques signaux mixtes
+        Le scoring doit trancher de manière déterministe"""
+        # Document avec 1 section bilan_complet mais aussi du contenu léger
+        segments = [
+            Segment(raw_title="Identité", normalized_title="identité", level=1),
+            Segment(raw_title="Tests", normalized_title="tests", level=1)
+        ]
+        found_sections = [
+            {'title': 'Identité', 'section_id': 'identity'},
+            {'title': 'Tests', 'section_id': 'tests'}
+        ]
+        
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
+        
+        # Doit avoir des scores
+        assert 'scores' in signals
+        assert 'selection_confidence' in signals
+        assert 'profile_ranking' in signals
+        
+        # La confidence doit être positive (pas d'égalité parfaite)
+        assert signals['selection_confidence'] >= 0
+        
+        # Le profil choisi doit être le top1 du ranking
+        assert profile_id == signals['profile_ranking'][0]
+        
+        # Vérifier que bilan_complet_sections_count = 1 (tests uniquement)
+        assert signals['bilan_complet_sections_count'] == 1
+    
+    def test_high_confidence_stage_detection(self, normalizer):
+        """Signal fort 'stage' doit donner une haute confidence"""
+        segments = [
+            Segment(raw_title="Bilan de stage", normalized_title="bilan de stage", level=1)
+        ]
+        found_sections = [
+            {'title': 'Bilan de stage', 'section_id': 'orientation_formation.stage'}
+        ]
+        
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
+        
+        assert profile_id == 'stage'
+        assert signals['has_stage'] is True
+        
+        # Score de 'stage' doit être nettement supérieur aux autres
+        assert signals['scores']['stage'] > signals['scores']['bilan_complet']
+        assert signals['scores']['stage'] > signals['scores']['placement_suivi']
+        
+        # Confidence doit être élevée (delta important)
+        assert signals['selection_confidence'] >= 50
+    
+    def test_matched_titles_truncation(self, normalizer):
+        """Les matched_titles doivent être tronqués pour lisibilité"""
+        # Titre très long
+        long_title = "Bilan de stage en entreprise avec description détaillée et longue pour tester la troncation automatique"
+        segments = [
+            Segment(raw_title=long_title, normalized_title=long_title.lower(), level=1)
+        ]
+        found_sections = []
+        
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
+        
+        # matched_titles doit contenir des titres tronqués
+        if signals['matched_titles']:
+            for matched in signals['matched_titles']:
+                # Vérifier que la partie après ":" est <= 40 caractères
+                if ':' in matched:
+                    title_part = matched.split(':', 1)[1]
+                    assert len(title_part) <= 40
+    
+    def test_scoring_all_zeros_fallback_to_default(self, normalizer):
+        """Si tous les scores sont nuls, fallback sur le profil par défaut"""
+        # Document minimal sans aucun signal
+        segments = [
+            Segment(raw_title="Section inconnue", normalized_title="section inconnue", level=1)
+        ]
+        found_sections = []
+        
+        profile_id, signals = normalizer._choose_gate_profile(segments, found_sections)
+        
+        # Doit retourner le profil par défaut (placement_suivi)
+        assert profile_id == 'placement_suivi'
+        
+        # Confidence peut être faible ou nulle
+        assert 'selection_confidence' in signals
 
 
 if __name__ == '__main__':

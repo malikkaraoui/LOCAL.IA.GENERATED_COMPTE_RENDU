@@ -362,3 +362,58 @@ ACCEPTANCE CRITERIA
 - report JSON contient status + profile_id + signals + criteria + reasons.
 
 
+## SUITE 
+
+Objectif : remplacer le Production Gate “seuil unique” par 3 profils (bilan_complet / suivi_leger / stage)
+et sélectionner automatiquement le bon profil selon quelques signaux déterministes.
+
+Contraintes :
+- Parser déterministe (pas de LLM)
+- Ne pas bloquer l’extraction : le Gate ne fait que décider GO/NO-GO + raisons
+- Backward compatible : si aucun profil détecté => profil par défaut (bilan_complet) + raisons
+- Output explicable : toujours afficher le profil choisi + les signaux ayant mené au choix
+- Pas de commandes terminal dans ta réponse : je veux uniquement les diffs / fichiers modifiés.
+
+1) Config YAML (config/rulesets/rhpro_v1.yaml)
+Ajouter une section production_gate_profiles :
+- bilan_complet : thresholds stricts + required_sections larges
+- suivi_leger : thresholds plus tolérants + required_sections réduites (ex: identity, conclusion)
+- stage : thresholds intermédiaires + required_sections (ex: identity, orientation_formation, conclusion)
+Chaque profil contient :
+- min_required_coverage_ratio
+- max_unknown_titles
+- max_placeholders
+- required_sections (liste de section_id)
+
+2) Auto-sélection du profil (src/rhpro/normalizer.py ou module dédié)
+Créer choose_gate_profile(...) -> {profile_id, reasons[], confidence(optional)}
+Signaux à utiliser (2–3 max, simples et robustes) :
+- titres normalisés (ex: contient “stage” => stage)
+- présence de “LAI 15/18” (ex: “conclusion_lai_15/18” détecté)
+- nombre/type de sections détectées : si beaucoup de sections “tests/vocation/profil_emploi” => bilan_complet,
+  sinon => suivi_leger
+Toujours retourner reasons (ex: ["keyword:stage", "found_sections:conclusion_lai_15", "few_sections=>suivi_leger"]).
+
+3) Gate par profil
+Modifier evaluate_production_gate(...) pour accepter un profile_id (ou profile config) :
+- calculer missing_required_sections selon required_sections du profil
+- appliquer thresholds du profil
+- retourner un objet report complet : status GO/NO-GO, profile_id, reasons, criteria(detail),
+  missing_required_sections_for_profile, unknown_titles_count, placeholders_count, required_coverage_ratio
+
+4) Override manuel (CLI)
+Ajouter --gate-profile <bilan_complet|suivi_leger|stage> sur demo_rhpro_parse.py
+Si fourni : bypass auto-detection mais log “forced”.
+
+5) Tests
+Ajouter tests unitaires :
+- test auto-detection (stage vs suivi_leger vs bilan_complet)
+- test gate thresholds par profil (GO/NO-GO attendus)
+- test override CLI (si applicable)
++ garder les tests existants verts.
+
+6) Doc
+Créer/mettre à jour un doc court : docs/PRODUCTION_GATE_PROFILES.md
+- tableau profils / seuils / sections requises
+- règles de détection
+- exemples d’output (profil choisi + raisons)

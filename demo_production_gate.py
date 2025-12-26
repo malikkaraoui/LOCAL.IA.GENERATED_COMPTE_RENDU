@@ -122,6 +122,14 @@ def demo_profile_detection():
         print(f"{i}. {scenario['name']}")
         print(f"   Profil détecté : {profile_emoji.get(profile_id, '❓')} {profile_id}")
         print(f"   Signaux        : {', '.join(active_signals)}")
+        
+        # Afficher les scores si disponibles
+        if 'scores' in signals:
+            scores_str = ', '.join([f"{p}:{s}" for p, s in signals['scores'].items()])
+            print(f"   Scores         : {scores_str}")
+            if 'selection_confidence' in signals:
+                print(f"   Confidence     : {signals['selection_confidence']} (delta top1-top2)")
+        
         print(f"   Sections       : {len(scenario['normalized'])} présentes")
         print()
     

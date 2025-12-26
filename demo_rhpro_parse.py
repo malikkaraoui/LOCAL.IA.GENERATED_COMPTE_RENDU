@@ -177,6 +177,36 @@ Exemples:
                         print(f"      • {lai_type} detected")
                     if signals.get('matched_titles'):
                         print(f"      • matched titles: {', '.join(signals['matched_titles'][:3])}")
+        # Afficher les signaux de détection
+        if gate.get('signals'):
+            signals = gate['signals']
+            print(f"\n   Signaux de détection:")
+            print(f"      - has_stage: {signals.get('has_stage', False)}")
+            print(f"      - has_tests: {signals.get('has_tests', False)}")
+            print(f"      - has_vocation: {signals.get('has_vocation', False)}")
+            print(f"      - has_profil_emploi: {signals.get('has_profil_emploi', False)}")
+            print(f"      - has_lai15: {signals.get('has_lai15', False)}")
+            print(f"      - has_lai18: {signals.get('has_lai18', False)}")
+            print(f"      - bilan_complet_sections: {signals.get('bilan_complet_sections_count', 0)}")
+            
+            # Afficher les titres matchés (troncation)
+            if signals.get('matched_titles'):
+                print(f"      - matched_titles: {signals['matched_titles'][:3]}")
+            
+            # Afficher le scoring (nouveau)
+            if 'scores' in signals:
+                print(f"\n   Scores par profil:")
+                for profile, score in signals['scores'].items():
+                    print(f"      - {profile}: {score}")
+                
+                # Afficher la confidence
+                if 'selection_confidence' in signals:
+                    confidence = signals['selection_confidence']
+                    print(f"\n   Confidence de sélection: {confidence} (delta entre top1 et top2)")
+                
+                # Afficher le ranking
+                if 'profile_ranking' in signals:
+                    print(f"   Ranking: {' > '.join(signals['profile_ranking'])}")
             
             # Afficher les critères
             if gate.get('criteria'):
