@@ -1,0 +1,59 @@
+{
+  "identity": {
+    "name": "",
+    "surname": "",
+    "avs": ""
+  },
+  "participation_programme": "",
+  "profession_formation": {
+    "profession": "",
+    "formation": ""
+  },
+  "tests": {
+    "evolution": "",
+    "ressources_professionnelles": {
+      "ressources_comportementales": {
+        "points_appui": [],
+        "points_vigilance": []
+      },
+      "ressources_motivationnelles": "",
+      "relation_marche_emploi": "",
+      "relation_carriere": ""
+    },
+    "profil_emploi": {
+      "contexte": "",
+      "activites": "",
+      "activites_privilegiees": "",
+      "secteurs_privilegies": "",
+      "fonctions_privilegiees": "",
+      "metiers_privilegies": ""
+    },
+    "vocation": {
+      "domaines_professionnels": "",
+      "riasec": "",
+      "roles_professionnels": "",
+      "professions": "",
+      "formation_initiale": "",
+      "formations_superieures": "",
+      "formations_hautes_ecoles": "",
+      "autres_formations": ""
+    }
+  },
+  "discussion_assure": "",
+  "competences": {
+    "sociales": "",
+    "professionnelles": ""
+  },
+  "incertitudes_obstacles": "",
+  "orientation_formation": {
+    "orientation": "",
+    "stage": ""
+  },
+  "dossier_presentation": {
+    "lettre_motivation": "",
+    "cv": "",
+    "presentation": "",
+    "entretien": ""
+  },
+  "conclusion": ""
+}

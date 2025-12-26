@@ -136,6 +136,11 @@ def main():
             if len(report['placeholders']) > 3:
                 print(f"  ... et {len(report['placeholders']) - 3} autres")
         
+        # Provenance (debug info)
+        if 'provenance' in result:
+            provenance_count = len(result['provenance'])
+            print(f"\n📊 Provenance: {provenance_count} sections trackées (audit/debug)")
+        
         # Option: sauvegarder le résultat
         output_path = docx_path.parent / f"{docx_path.stem}_normalized.json"
         with open(output_path, 'w', encoding='utf-8') as f:

@@ -19,17 +19,19 @@ class Normalizer:
         self.never_invent = self.content_rules.get('never_invent_for', [])
         self.inline_extractor = InlineExtractor()
         self.inline_warnings: List[str] = []
+        self.provenance: Dict[str, Dict[str, Any]] = {}  # Track provenance
     
     def normalize(self, segments: List[Segment]) -> Dict[str, Any]:
         """
         Construit le dict normalisé
-        Retourne: {'normalized': dict, 'report': dict}
+        Retourne: {'normalized': dict, 'report': dict, 'provenance': dict}
         """
         # Charger le template de sortie
         normalized = self._load_template()
         
-        # Réinitialiser warnings
+        # Réinitialiser warnings et provenance
         self.inline_warnings = []
+        self.provenance = {}
         
         # Optimisation 4: Déduplication des segments
         deduplicated = self._deduplicate_segments(segments)
@@ -47,7 +49,8 @@ class Normalizer:
         
         return {
             'normalized': normalized,
-            'report': report
+            'report': report,
+            'provenance': self.provenance
         }
     
     def _load_template(self) -> Dict[str, Any]:
@@ -80,6 +83,9 @@ class Normalizer:
         
         if not section_config:
             return
+        
+        # Enregistrer la provenance
+        self._record_provenance(segment)
         
         # Extraire le contenu
         content = self._extract_content(segment, section_config)
@@ -159,6 +165,41 @@ class Normalizer:
                 result['surname'] = name_parts[0]
         
         return result
+    
+    def _record_provenance(self, segment: Segment):
+        """
+        Enregistre la provenance d'un segment pour audit/debug
+        
+        Inclut:
+        - source_title: titre du segment source
+        - confidence: confiance du mapping
+        - paragraph_range: [start, end] indices des paragraphes
+        - paragraph_count: nombre de paragraphes
+        - snippet: extrait court du contenu (100-200 chars)
+        """
+        section_id = segment.mapped_section_id
+        if not section_id:
+            return
+        
+        # Générer snippet
+        snippet = ""
+        if segment.paragraphs:
+            full_text = " ".join(p.text for p in segment.paragraphs[:3])  # 3 premiers paras
+            snippet = full_text[:200].replace('\n', ' ').strip()
+            if len(full_text) > 200:
+                snippet += "..."
+        elif segment.raw_title:
+            snippet = segment.raw_title[:200]
+        
+        # Enregistrer
+        self.provenance[section_id] = {
+            'source_title': segment.raw_title,
+            'normalized_title': segment.normalized_title,
+            'confidence': round(segment.confidence, 2),
+            'paragraph_count': len(segment.paragraphs),
+            'snippet': snippet,
+            'level': segment.level
+        }
     
     def _deduplicate_segments(self, segments: List[Segment]) -> List[Segment]:
         """

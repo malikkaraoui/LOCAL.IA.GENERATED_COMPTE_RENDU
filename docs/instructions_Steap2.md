@@ -173,4 +173,87 @@ Depuis le front:
 
 
 
- 
+ 26 DECEMBRE 2025 - FIX STEP2   
+
+ # Copilot Instructions — RH-Pro ruleset v1 (DOCX -> normalized JSON)
+
+## ✅ IMPLEMENTATION COMPLETE — 26 DEC 2025
+
+### Status: Pipeline v1 opérationnel
+- ✅ Tous les modules créés et testés
+- ✅ 7/7 tests unitaires passent
+- ✅ Document sample parsé avec succès (19% coverage)
+- ✅ Documentation complète disponible
+
+### Fichiers créés
+Voir: `docs/RHPRO_IMPLEMENTATION_SUMMARY.md` pour la liste complète.
+
+### Usage rapide
+```bash
+# CLI
+python demo_rhpro_parse.py path/to/bilan.docx
+
+# Python
+from src.rhpro.parse_bilan import parse_bilan_from_paths
+result = parse_bilan_from_paths('bilan.docx')
+
+# Tests
+pytest tests/test_rhpro_parse.py -v
+```
+
+### Prochaines étapes (v2)
+1. Fix sections imbriquées dans normalizer
+2. Extraction identité depuis header/tableau Word
+3. Parser bullets (Points d'appui → arrays)
+4. Endpoint FastAPI (déjà créé: backend/api/routes/rhpro_parser.py)
+
+---
+
+## Goal
+Implement a deterministic pipeline to parse messy RH-Pro DOCX reports and map them to a canonical schema using a YAML ruleset.
+
+Inputs:
+- config/rulesets/rhpro_v1.yaml
+- a DOCX file (Word)
+Output:
+- normalized dict matching schemas/normalized.rhpro_v1.json
+- report dict with coverage + unknown titles + warnings
+
+## Non-goals (IMPORTANT)
+- Do NOT generate or invent missing content.
+- For fields with fill_strategy=source_only: if not found, keep empty string.
+- Summarization is NOT mandatory in v1. Prefer storing raw text and mark sections "to_summarize".
+
+## Required modules (Python)
+Create:
+- src/rhpro/ruleset_loader.py  (load + validate YAML)
+- src/rhpro/docx_structure.py  (extract paragraphs with metadata via python-docx)
+- src/rhpro/segmenter.py       (heading detection + segment building)
+- src/rhpro/mapper.py          (map headings to canonical section ids using anchors exact/contains/regex/fuzzy)
+- src/rhpro/normalizer.py      (build normalized output dict)
+- src/rhpro/parse_bilan.py     (public function parse_bilan_docx_to_normalized)
+
+## Data model (suggested)
+Paragraph:
+- text, style_name, is_bold, font_size, is_all_caps, numbering_prefix
+
+Segment:
+- raw_title, normalized_title, level, paragraphs[], mapped_section_id(optional), confidence
+
+Report:
+- found_sections[], missing_required_sections[], unknown_titles[], coverage_ratio, warnings[]
+
+## Heading detection order
+1) by_style (from ruleset.heading_detection.by_style.styles)
+2) by_regex (numbered, uppercase patterns)
+3) heuristics (short + bold)
+
+## Mapping order
+ruleset.title_matching.method_order:
+- exact -> contains -> regex -> fuzzy (threshold)
+
+## Tests
+Add a minimal test in tests/test_rhpro_parse.py:
+- loads sample DOCX if available
+- checks output keys exist and report contains arrays
+- checks no invented content for source_only fields
