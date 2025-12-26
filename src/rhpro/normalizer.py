@@ -338,9 +338,20 @@ class Normalizer:
         # Weighted coverage (parents clés comptent plus)
         weighted_coverage = self._calculate_weighted_coverage(normalized)
         
+        # Détection des placeholders (textes à compléter)
+        placeholders = self._detect_placeholders(normalized)
+        
         # Warnings (inclure les inline warnings)
         warnings = self._generate_warnings(missing_required, missing_weighted)
         warnings.extend(self.inline_warnings)
+        
+        # Gating production: GO / NO-GO
+        production_gate = self._evaluate_production_gate(
+            missing_required, 
+            required_coverage_ratio, 
+            len(unknown_titles),
+            len(placeholders)
+        )
         
         return {
             'found_sections': found_sections,
@@ -349,7 +360,9 @@ class Normalizer:
             'coverage_ratio': round(coverage_ratio, 2),
             'required_coverage_ratio': round(required_coverage_ratio, 2),
             'weighted_coverage': round(weighted_coverage, 2),
-            'warnings': warnings
+            'warnings': warnings,
+            'placeholders': placeholders,
+            'production_gate': production_gate
         }
     
     def _generate_warnings(self, missing_required: List[str], missing_weighted: List[str] = None) -> List[str]:
@@ -363,6 +376,97 @@ class Normalizer:
                 warnings.append(f"Weighted section missing (not blocking): {section_id}")
         
         return warnings
+    
+    def _detect_placeholders(self, normalized: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Détecte les placeholders / textes à compléter dans le contenu
+        Retourne une liste de {'path': str, 'text': str, 'pattern': str}
+        """
+        import re
+        
+        placeholders = []
+        
+        # Patterns de placeholders courants
+        patterns = [
+            (r'\bMETTRE\b', 'METTRE'),
+            (r'\bÀ COMPLÉTER\b', 'À COMPLÉTER'),
+            (r'\bTODO\b', 'TODO'),
+            (r'\bXXXX+\b', 'XXXX'),
+            (r'\.{3,}', '...'),  # Points de suspension multiples
+            (r'\[\s*\]', '[ ]'),  # Crochets vides
+            (r'\b__+\b', '___'),  # Underscores multiples
+        ]
+        
+        def scan_recursive(data, path=''):
+            if isinstance(data, str) and data.strip():
+                for pattern, label in patterns:
+                    matches = re.finditer(pattern, data, re.IGNORECASE)
+                    for match in matches:
+                        # Extraire le contexte (50 chars avant/après)
+                        start = max(0, match.start() - 50)
+                        end = min(len(data), match.end() + 50)
+                        context = data[start:end].replace('\n', ' ')
+                        
+                        placeholders.append({
+                            'path': path,
+                            'pattern': label,
+                            'context': context.strip()
+                        })
+            elif isinstance(data, dict):
+                for key, value in data.items():
+                    new_path = f"{path}.{key}" if path else key
+                    scan_recursive(value, new_path)
+            elif isinstance(data, list):
+                for i, item in enumerate(data):
+                    new_path = f"{path}[{i}]"
+                    scan_recursive(item, new_path)
+        
+        scan_recursive(normalized)
+        return placeholders
+    
+    def _evaluate_production_gate(self, missing_required: List[str], 
+                                   required_coverage: float,
+                                   unknown_titles_count: int,
+                                   placeholders_count: int) -> Dict[str, Any]:
+        """
+        Évalue si le document est prêt pour la production (GO / NO-GO)
+        
+        Critères GO:
+        - missing_required == 0
+        - required_coverage >= 0.9
+        - unknown_titles <= 5
+        - placeholders <= 3 (tolérance)
+        """
+        reasons = []
+        
+        # Critère 1: Sections requises
+        if missing_required:
+            reasons.append(f"Missing {len(missing_required)} required section(s): {', '.join(missing_required[:3])}")
+        
+        # Critère 2: Coverage requis
+        if required_coverage < 0.9:
+            reasons.append(f"Required coverage too low: {required_coverage:.1%} < 90%")
+        
+        # Critère 3: Titres inconnus
+        if unknown_titles_count > 5:
+            reasons.append(f"Too many unknown titles: {unknown_titles_count} > 5")
+        
+        # Critère 4: Placeholders (warning, pas bloquant strict)
+        if placeholders_count > 3:
+            reasons.append(f"Many placeholders found: {placeholders_count} (review recommended)")
+        
+        status = 'GO' if not reasons else 'NO-GO'
+        
+        return {
+            'status': status,
+            'reasons': reasons,
+            'criteria': {
+                'required_sections_ok': len(missing_required) == 0,
+                'required_coverage_ok': required_coverage >= 0.9,
+                'unknown_titles_ok': unknown_titles_count <= 5,
+                'placeholders_ok': placeholders_count <= 3
+            }
+        }
     
     def _is_section_filled(self, normalized: Dict[str, Any], section_id: str) -> bool:
         """Vérifie si une section est effectivement remplie dans le dict normalisé"""
