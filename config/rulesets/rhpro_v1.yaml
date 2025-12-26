@@ -18,6 +18,8 @@ heading_detection:
     styles:
       - name: "Heading 1"
         level: 1
+      - name: "Heading 2"
+        level: 2
       - name: "TITRE 2"
         level: 2
       - name: "TITRE 2.2 A"
@@ -91,7 +93,11 @@ sections:
     anchors:
       any:
         - exact: "Profession & Formation"
-        - contains: "Profession & Formation"
+        - exact: "Profession et formation"
+        - exact: "Profession et Formation"
+        - regex: "(?i)^profession\\s*(?:&|et)\\s*formation$"
+        - regex: "(?i)^parcours\\s+professionnel"
+        - regex: "(?i)^expérience\\s+professionnelle"
     children:
       - id: "profession_formation.profession"
         label: "Profession"
