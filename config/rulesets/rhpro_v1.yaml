@@ -90,6 +90,7 @@ sections:
   - id: "profession_formation"
     label: "Profession & Formation"
     required: true
+    fill_strategy: "copy"
     anchors:
       any:
         - exact: "Profession & Formation"
@@ -101,7 +102,8 @@ sections:
     children:
       - id: "profession_formation.profession"
         label: "Profession"
-        required: true
+        required: false
+        weighted: true
         fill_strategy: "summarize_3_4_lines"
         anchors:
           any:
@@ -109,7 +111,8 @@ sections:
             - regex: "^Profession\\s*:?"
       - id: "profession_formation.formation"
         label: "Formation"
-        required: true
+        required: false
+        weighted: true
         fill_strategy: "summarize_3_4_lines"
         anchors:
           any:

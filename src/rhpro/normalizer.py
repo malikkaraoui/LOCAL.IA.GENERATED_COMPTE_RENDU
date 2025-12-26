@@ -31,8 +31,11 @@ class Normalizer:
         # Réinitialiser warnings
         self.inline_warnings = []
         
+        # Optimisation 4: Déduplication des segments
+        deduplicated = self._deduplicate_segments(segments)
+        
         # Remplir avec les segments mappés
-        for segment in segments:
+        for segment in deduplicated:
             if segment.mapped_section_id:
                 self._fill_section(normalized, segment)
         
@@ -40,7 +43,7 @@ class Normalizer:
         self._extract_inline_subsections(normalized, segments)
         
         # Générer le rapport
-        report = self._generate_report(segments, normalized)
+        report = self._generate_report(deduplicated, normalized)
         
         return {
             'normalized': normalized,
@@ -81,6 +84,20 @@ class Normalizer:
         # Extraire le contenu
         content = self._extract_content(segment, section_config)
         
+        # Cas spécial : identity -> extraire les champs automatiquement
+        if section_id == 'identity':
+            # Essayer d'extraire depuis le contenu ou depuis le titre lui-même
+            text_to_analyze = content if content else segment.raw_title
+            if text_to_analyze:
+                identity_data = self._extract_identity_fields(text_to_analyze)
+                # Merger avec le contenu existant
+                if 'identity' not in normalized:
+                    normalized['identity'] = {}
+                for key, value in identity_data.items():
+                    if value and not normalized['identity'].get(key):  # Ne remplacer que si vide
+                        normalized['identity'][key] = value
+            return
+        
         # Placer dans la structure
         self._set_nested_value(normalized, section_id, content)
     
@@ -113,6 +130,81 @@ class Normalizer:
         lines = [p.text for p in segment.paragraphs]
         return "\n".join(lines)
     
+    def _extract_identity_fields(self, text: str) -> Dict[str, str]:
+        """Extrait AVS, nom, prénom depuis le texte identity"""
+        import re
+        
+        result = {"avs": "", "name": "", "surname": "", "full_name": ""}
+        
+        # Extraction AVS (tolérant: espaces, points, tirets)
+        avs_pattern = r'756[\s\.\-]?\d{4}[\s\.\-]?\d{4}[\s\.\-]?\d{2}'
+        avs_match = re.search(avs_pattern, text)
+        if avs_match:
+            result['avs'] = avs_match.group().replace(' ', '.').replace('-', '.')
+        
+        # Extraction nom complet (pattern Monsieur/Madame Prénom NOM)
+        # Pattern simplifié et robuste
+        name_pattern = r'(?:Monsieur|Madame|M\.|Mme)\s+(.+?)\s*[\u2013\u2014\-]\s*756'
+        name_match = re.search(name_pattern, text, re.IGNORECASE)
+        if name_match:
+            full_name = name_match.group(1).strip()
+            result['full_name'] = full_name
+            
+            # Tenter de séparer prénom/nom (dernier mot = nom)
+            name_parts = full_name.split()
+            if len(name_parts) >= 2:
+                result['surname'] = name_parts[-1]
+                result['name'] = ' '.join(name_parts[:-1])
+            elif len(name_parts) == 1:
+                result['surname'] = name_parts[0]
+        
+        return result
+    
+    def _deduplicate_segments(self, segments: List[Segment]) -> List[Segment]:
+        """
+        Déduplique les segments mappés au même section_id
+        Garde le segment avec la meilleure confidence ou le plus long contenu
+        """
+        from collections import defaultdict
+        import re
+        
+        grouped = defaultdict(list)
+        
+        # Grouper par section_id
+        for segment in segments:
+            if segment.mapped_section_id:
+                grouped[segment.mapped_section_id].append(segment)
+        
+        deduplicated = []
+        
+        for section_id, segs in grouped.items():
+            if len(segs) == 1:
+                deduplicated.append(segs[0])
+            else:
+                # Plusieurs segments pour la même section
+                # Cas spécial pour identity : préférer celui avec AVS dans le titre
+                if section_id == 'identity':
+                    avs_pattern = r'756[\s\.\-]?\d{4}'
+                    for seg in segs:
+                        if re.search(avs_pattern, seg.raw_title):
+                            deduplicated.append(seg)
+                            break
+                    else:
+                        # Aucun avec AVS, prendre le meilleur
+                        best = max(segs, key=lambda s: (s.confidence, len(s.paragraphs)))
+                        deduplicated.append(best)
+                else:
+                    # Garder celui avec la meilleure confidence
+                    best = max(segs, key=lambda s: (s.confidence, len(s.paragraphs)))
+                    deduplicated.append(best)
+        
+        # Ajouter les segments non mappés
+        for segment in segments:
+            if not segment.mapped_section_id:
+                deduplicated.append(segment)
+        
+        return deduplicated
+    
     def _set_nested_value(self, data: Dict, path: str, value: Any):
         """Définit une valeur dans une structure imbriquée via chemin pointé"""
         keys = path.split('.')
@@ -124,11 +216,30 @@ class Normalizer:
             # Si current[key] est une string, on doit la convertir en dict
             # Cela arrive quand on a d'abord rempli la section parent, puis on essaie d'ajouter des enfants
             elif isinstance(current[key], str):
-                current[key] = {}
+                old_value = current[key]
+                current[key] = {"_raw": old_value} if old_value else {}
             current = current[key]
         
         # Cas spécial pour les listes (ex: points_appui)
         last_key = keys[-1]
+        
+        # Gestion des collisions propre
+        if last_key in current:
+            existing = current[last_key]
+            # String sur string : merger intelligemment
+            if isinstance(existing, str) and isinstance(value, str):
+                if value and value != existing:
+                    # Garder le plus long ou concat si très différent
+                    if len(value) > len(existing) * 1.5:
+                        current[last_key] = value
+                    elif value not in existing and existing not in value:
+                        current[last_key] = existing + "\n\n" + value
+                return
+            # Dict sur dict : ne rien faire (déjà géré)
+            elif isinstance(existing, dict) and isinstance(value, dict):
+                return
+        
+        # Assignation normale
         if isinstance(value, str) and value:
             current[last_key] = value
         elif isinstance(value, list):
@@ -196,14 +307,23 @@ class Normalizer:
         
         # Sections requises manquantes
         all_required = []
+        all_weighted = []
         for section in self._iterate_all_sections():
             if section.get('required'):
                 all_required.append(section['id'])
+            if section.get('weighted'):
+                all_weighted.append(section['id'])
         
         # Vérifier quelles sections sont effectivement présentes et remplies
         for section_id in all_required:
             if not self._is_section_filled(normalized, section_id):
                 missing_required.append(section_id)
+        
+        # Warnings pour sections weighted manquantes (pas bloquant mais informatif)
+        missing_weighted = []
+        for section_id in all_weighted:
+            if not self._is_section_filled(normalized, section_id):
+                missing_weighted.append(section_id)
         
         # Calcul de couvertures
         total_sections = len(list(self._iterate_all_sections()))
@@ -219,7 +339,7 @@ class Normalizer:
         weighted_coverage = self._calculate_weighted_coverage(normalized)
         
         # Warnings (inclure les inline warnings)
-        warnings = self._generate_warnings(missing_required)
+        warnings = self._generate_warnings(missing_required, missing_weighted)
         warnings.extend(self.inline_warnings)
         
         return {
@@ -232,11 +352,16 @@ class Normalizer:
             'warnings': warnings
         }
     
-    def _generate_warnings(self, missing_required: List[str]) -> List[str]:
+    def _generate_warnings(self, missing_required: List[str], missing_weighted: List[str] = None) -> List[str]:
         """Génère des warnings pour les sections manquantes"""
         warnings = []
         for section_id in missing_required:
             warnings.append(f"Required section missing: {section_id}")
+        
+        if missing_weighted:
+            for section_id in missing_weighted:
+                warnings.append(f"Weighted section missing (not blocking): {section_id}")
+        
         return warnings
     
     def _is_section_filled(self, normalized: Dict[str, Any], section_id: str) -> bool:
@@ -248,6 +373,10 @@ class Normalizer:
             if key not in current:
                 return False
             current = current[key]
+        
+        # Cas spécial pour identity : OK si AVS ou full_name est rempli
+        if section_id == 'identity' and isinstance(current, dict):
+            return bool(current.get('avs') or current.get('full_name') or current.get('name'))
         
         # Vérifier si la valeur est non vide
         if isinstance(current, str):
