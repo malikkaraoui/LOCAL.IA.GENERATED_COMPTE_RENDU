@@ -257,3 +257,108 @@ Add a minimal test in tests/test_rhpro_parse.py:
 - loads sample DOCX if available
 - checks output keys exist and report contains arrays
 - checks no invented content for source_only fields
+
+
+
+## SUITE du 26 DECEMBRE 2025
+
+OBJECTIF
+On a déjà un Production Gate GO/NO-GO (missing_required_sections, required_coverage_ratio, unknown_titles, placeholders).
+Sur 20 dossiers hétérogènes, je veux 2–3 PROFILS de gate avec des seuils/attendus différents, et une sélection automatique du profil via 2–3 signaux.
+
+CONTRAINTES
+- Ne pas “inventer” de contenu : on reste déterministe.
+- Ne pas modifier le parsing/anchors pour ce besoin.
+- Backward compatible : si aucun profil n’est trouvé/configuré => on retombe sur le gate actuel (profil “default”).
+- Le choix du profil + les raisons doivent être tracées dans la sortie (report).
+
+PROPOSITION TECHNIQUE (simple, robuste)
+1) Ajouter une config "production_gate.profiles" dans le YAML ruleset (config/rulesets/rhpro_v1.yaml)
+   - Chaque profil définit :
+     - max_missing_required
+     - min_required_coverage_ratio
+     - max_unknown_titles
+     - max_placeholders
+     - ignore_required_prefixes (liste de préfixes de sections requises à ignorer pour ce profil)
+       Exemple: ["tests", "dossier_presentation"] etc.
+   - Conserver les "required" actuels du ruleset comme superset (bilan complet).
+   - Pour les profils “placement/stage”, on ne change pas le ruleset : on filtre juste les required au moment du gate via ignore_required_prefixes.
+
+2) Implémenter une sélection automatique du profil à partir de signaux (2–3 signaux)
+   - Signaux à extraire depuis report.found_sections + leurs titres, et éventuellement report.unknown_titles
+   - Utiliser la normalisation de titre robuste déjà en place (mapper._normalize_title_robust)
+   - Heuristique proposée (ordre important) :
+     a) Si “stage” détecté (titre contient stage / ou found_sections contient orientation_formation.stage) => profile="stage"
+     b) Sinon si présence de sections “tests / vocation / profil_emploi / ressources_professionnelles” (>=2) => profile="bilan_complet"
+     c) Sinon si “lai 15” ou “lai 18” détecté (titre) => profile="placement_suivi"
+     d) Sinon => profile="placement_suivi" (profil tolérant par défaut)
+   - Retourner aussi un petit objet "signals" (ex: {has_stage:true, has_tests:true, has_lai18:false, matched_titles:[...]})
+
+3) Adapter evaluate_production_gate() pour prendre un profile_id (ou le sélectionner automatiquement)
+   - Entrées: report + ruleset + (optionnel) profile_id
+   - Étapes:
+     - choisir profile_id si absent
+     - calculer missing_required_effective:
+       -> partir de report.missing_required_sections
+       -> filtrer tout ce qui commence par un des ignore_required_prefixes du profil
+     - recalculer required_coverage_ratio_effective:
+       -> on a besoin du “required_total” après filtrage
+       -> ajoute une méthode utilitaire dans ruleset_loader (ou ruleset object) pour retourner la liste complète des required_paths
+       -> appliquer le même filtrage (ignore_required_prefixes) sur required_paths
+       -> ratio_effective = 1 - len(missing_effective)/len(required_paths_effective) (si len>0)
+     - unknown_titles_count = len(report.unknown_titles)
+     - placeholders_count = len(report.placeholders_detected) (ou ce que vous avez déjà)
+     - critères booléens par profil + status GO/NO-GO + reasons
+
+4) Sortie / traçabilité
+   - Ajouter dans report un bloc :
+     report.production_gate = {
+       "status": "GO|NO-GO",
+       "profile_id": "...",
+       "signals": {...},
+       "criteria": { ... valeurs + seuils ... },
+       "reasons": [ ... ],
+       "missing_required_effective": [...]
+     }
+   - Dans demo_rhpro_parse.py (ou batch), afficher :
+     - profil choisi
+     - signaux
+     - critères (valeur vs seuil)
+     - reasons
+
+5) Profils recommandés (valeurs initiales, ajustables après client_03–05)
+   - bilan_complet:
+     max_missing_required=0
+     min_required_coverage_ratio=0.90
+     max_unknown_titles=5
+     max_placeholders=0..1 (selon exigence)
+     ignore_required_prefixes=[]
+   - placement_suivi:
+     max_missing_required=1 (ou 2)
+     min_required_coverage_ratio=0.60
+     max_unknown_titles=10
+     max_placeholders=5
+     ignore_required_prefixes=["tests", "vocation", "profil_emploi", "dossier_presentation"]
+   - stage:
+     max_missing_required=0..1
+     min_required_coverage_ratio=0.70
+     max_unknown_titles=10
+     max_placeholders=5
+     ignore_required_prefixes=["tests", "vocation", "profil_emploi", "dossier_presentation"]
+     (option: exiger orientation_formation + stage si dispo)
+
+6) FICHIERS / EMPLACEMENTS
+- config/rulesets/rhpro_v1.yaml : ajouter production_gate.profiles (+ éventuellement profile_selection keywords)
+- src/rhpro/normalizer.py : garder evaluate_production_gate mais le rendre profile-aware
+  OU créer src/rhpro/production_gate.py et appeler depuis normalizer (plus propre)
+- src/rhpro/ruleset_loader.py : exposer required_paths (liste de tous les champs/sections marqués required=true)
+- demo_rhpro_parse.py : print du profile + détails
+
+ACCEPTANCE CRITERIA
+- Sur client_02 : gate reste GO (comme aujourd’hui), profil choisi de manière cohérente (probablement “bilan_complet” si tests détectés).
+- Sur un doc sans sections “tests” mais avec “LAI 15/18” : profil “placement_suivi”.
+- Sur un doc avec “stage” : profil “stage”.
+- Backward compatible : si profiles absents => comportement actuel inchangé.
+- report JSON contient status + profile_id + signals + criteria + reasons.
+
+

@@ -20,12 +20,21 @@ class Normalizer:
         self.inline_extractor = InlineExtractor()
         self.inline_warnings: List[str] = []
         self.provenance: Dict[str, Dict[str, Any]] = {}  # Track provenance
+        self.gate_profile_override: Optional[str] = None  # Override manuel du profil
     
-    def normalize(self, segments: List[Segment]) -> Dict[str, Any]:
+    def normalize(self, segments: List[Segment], gate_profile_override: Optional[str] = None) -> Dict[str, Any]:
         """
         Construit le dict normalisé
+        
+        Args:
+            segments: Segments à normaliser
+            gate_profile_override: Si fourni, force ce profil au lieu de l'auto-détection
+            
         Retourne: {'normalized': dict, 'report': dict, 'provenance': dict}
         """
+        # Stocker l'override pour l'utiliser dans _generate_report
+        self.gate_profile_override = gate_profile_override
+        
         # Charger le template de sortie
         normalized = self._load_template()
         
@@ -386,13 +395,23 @@ class Normalizer:
         warnings = self._generate_warnings(missing_required, missing_weighted)
         warnings.extend(self.inline_warnings)
         
+        # Sélection du profil (auto ou override)
+        if self.gate_profile_override:
+            gate_profile_id = self.gate_profile_override
+            signals = {'forced': True, 'profile': gate_profile_id}
+        else:
+            # Sélection automatique du profil
+            gate_profile_id, signals = self._choose_gate_profile(segments, found_sections)
+        
         # Gating production: GO / NO-GO
         production_gate = self._evaluate_production_gate(
             missing_required, 
             required_coverage_ratio, 
             len(unknown_titles),
-            len(placeholders)
+            len(placeholders),
+            profile_id=gate_profile_id
         )
+        production_gate['signals'] = signals
         
         return {
             'found_sections': found_sections,
@@ -465,48 +484,218 @@ class Normalizer:
         scan_recursive(normalized)
         return placeholders
     
+    def _choose_gate_profile(self, segments: List[Segment], found_sections: List[Dict]) -> tuple:
+        """
+        Choisit automatiquement le profil de production gate selon les signaux détectés.
+        
+        Heuristique (ordre important):
+        1) Si "stage" détecté => profile="stage"
+        2) Sinon si >=2 sections parmi tests/vocation/profil_emploi/ressources_professionnelles => profile="bilan_complet"
+        3) Sinon si "LAI 15" ou "LAI 18" détecté => profile="placement_suivi"
+        4) Sinon => profile="placement_suivi" (défaut tolérant)
+        
+        Args:
+            segments: Liste des segments
+            found_sections: Sections trouvées avec leurs titres
+            
+        Returns:
+            (profile_id, signals_dict)
+        """
+        # Récupérer le profil par défaut depuis le ruleset
+        gate_config = self.ruleset.raw_data.get('production_gate', {})
+        default_profile = gate_config.get('default_profile', 'placement_suivi')
+        
+        # Collecter tous les titres normalisés (en minuscules pour comparaison)
+        all_titles = []
+        for segment in segments:
+            if segment.normalized_title:
+                all_titles.append(segment.normalized_title.lower())
+        for section in found_sections:
+            if section.get('title'):
+                all_titles.append(section['title'].lower())
+        
+        # Collecter les section_ids trouvés
+        found_section_ids = [s.get('section_id', '') for s in found_sections if s.get('section_id')]
+        
+        # Dédupliquer
+        all_titles = list(set(all_titles))
+        
+        # Initialiser les signaux
+        signals = {
+            'has_stage': False,
+            'has_tests': False,
+            'has_vocation': False,
+            'has_profil_emploi': False,
+            'has_ressources_professionnelles': False,
+            'has_lai15': False,
+            'has_lai18': False,
+            'matched_titles': [],
+            'bilan_complet_sections_count': 0
+        }
+        
+        # Signal 1: Détection de "stage"
+        stage_keywords = ['stage', 'bilan de stage', 'orientation formation stage']
+        for title in all_titles:
+            for keyword in stage_keywords:
+                if keyword in title:
+                    signals['has_stage'] = True
+                    signals['matched_titles'].append(f"stage:{title[:50]}")
+                    break
+        
+        # Vérifier aussi les section_ids
+        for section_id in found_section_ids:
+            if 'stage' in section_id.lower():
+                signals['has_stage'] = True
+                break
+        
+        if signals['has_stage']:
+            return ('stage', signals)
+        
+        # Signal 2: Détection sections bilan complet (tests, vocation, profil_emploi, ressources_professionnelles)
+        for section_id in found_section_ids:
+            section_id_lower = section_id.lower()
+            if section_id.startswith('tests') or 'tests' in section_id_lower:
+                signals['has_tests'] = True
+                signals['bilan_complet_sections_count'] += 1
+            if 'vocation' in section_id_lower:
+                signals['has_vocation'] = True
+                signals['bilan_complet_sections_count'] += 1
+            if 'profil_emploi' in section_id_lower:
+                signals['has_profil_emploi'] = True
+                signals['bilan_complet_sections_count'] += 1
+            if 'ressources_professionnelles' in section_id_lower:
+                signals['has_ressources_professionnelles'] = True
+                signals['bilan_complet_sections_count'] += 1
+        
+        if signals['bilan_complet_sections_count'] >= 2:
+            return ('bilan_complet', signals)
+        
+        # Signal 3: Détection LAI 15 ou LAI 18
+        lai_keywords = ['lai 15', 'lai15', 'lai 18', 'lai18', 'lai-15', 'lai-18']
+        for title in all_titles:
+            for keyword in lai_keywords:
+                if keyword in title:
+                    if '15' in keyword:
+                        signals['has_lai15'] = True
+                    else:
+                        signals['has_lai18'] = True
+                    signals['matched_titles'].append(f"lai:{title[:50]}")
+                    break
+        
+        if signals['has_lai15'] or signals['has_lai18']:
+            return ('placement_suivi', signals)
+        
+        # Défaut: placement_suivi (tolérant)
+        return (default_profile, signals)
+    
     def _evaluate_production_gate(self, missing_required: List[str], 
                                    required_coverage: float,
                                    unknown_titles_count: int,
-                                   placeholders_count: int) -> Dict[str, Any]:
+                                   placeholders_count: int,
+                                   profile_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Évalue si le document est prêt pour la production (GO / NO-GO)
+        Utilise les seuils du profil spécifié et applique le filtrage via ignore_required_prefixes.
         
-        Critères GO:
-        - missing_required == 0
-        - required_coverage >= 0.9
-        - unknown_titles <= 5
-        - placeholders <= 3 (tolérance)
+        Args:
+            missing_required: Sections requises manquantes (du ruleset global)
+            required_coverage: Ratio de couverture des sections requises (global)
+            unknown_titles_count: Nombre de titres non mappés
+            placeholders_count: Nombre de placeholders détectés
+            profile_id: ID du profil à utiliser (défaut selon config)
+            
+        Returns:
+            Dict avec status GO/NO-GO, profil, signaux, critères, métriques et raisons
         """
+        # Charger la configuration du profil
+        gate_config = self.ruleset.raw_data.get('production_gate', {})
+        if not profile_id:
+            profile_id = gate_config.get('default_profile', 'placement_suivi')
+        
+        profiles = gate_config.get('profiles', {})
+        profile = profiles.get(profile_id, profiles.get('placement_suivi', {}))
+        
+        # Récupérer les seuils du profil
+        thresholds = profile.get('thresholds', {})
+        max_missing_required = thresholds.get('max_missing_required', 0)
+        min_coverage = thresholds.get('min_required_coverage_ratio', 0.9)
+        max_unknown = thresholds.get('max_unknown_titles', 5)
+        max_placeholders = thresholds.get('max_placeholders', 3)
+        
+        # Récupérer les préfixes à ignorer pour ce profil
+        ignore_prefixes = profile.get('ignore_required_prefixes', [])
+        
+        # Obtenir tous les chemins required du ruleset
+        all_required_paths = self.ruleset.get_required_paths()
+        
+        # Filtrer les required_paths selon les ignore_prefixes
+        required_paths_effective = []
+        for path in all_required_paths:
+            should_ignore = False
+            for prefix in ignore_prefixes:
+                if path.startswith(prefix):
+                    should_ignore = True
+                    break
+            if not should_ignore:
+                required_paths_effective.append(path)
+        
+        # Filtrer missing_required selon les ignore_prefixes
+        missing_required_effective = []
+        for path in missing_required:
+            should_ignore = False
+            for prefix in ignore_prefixes:
+                if path.startswith(prefix):
+                    should_ignore = True
+                    break
+            if not should_ignore:
+                missing_required_effective.append(path)
+        
+        # Recalculer le required_coverage_ratio_effective
+        if required_paths_effective:
+            required_filled = len(required_paths_effective) - len(missing_required_effective)
+            required_coverage_effective = required_filled / len(required_paths_effective)
+        else:
+            required_coverage_effective = 1.0
+        
         reasons = []
         
-        # Critère 1: Sections requises
-        if missing_required:
-            reasons.append(f"Missing {len(missing_required)} required section(s): {', '.join(missing_required[:3])}")
+        # Critère 1: Sections requises (effective)
+        if len(missing_required_effective) > max_missing_required:
+            reasons.append(f"Missing {len(missing_required_effective)} required section(s) for profile '{profile_id}' (max: {max_missing_required}): {', '.join(missing_required_effective[:3])}")
         
-        # Critère 2: Coverage requis
-        if required_coverage < 0.9:
-            reasons.append(f"Required coverage too low: {required_coverage:.1%} < 90%")
+        # Critère 2: Coverage requis (effective)
+        if required_coverage_effective < min_coverage:
+            reasons.append(f"Required coverage too low: {required_coverage_effective:.1%} < {min_coverage:.0%} (profile: {profile_id})")
         
         # Critère 3: Titres inconnus
-        if unknown_titles_count > 5:
-            reasons.append(f"Too many unknown titles: {unknown_titles_count} > 5")
+        if unknown_titles_count > max_unknown:
+            reasons.append(f"Too many unknown titles: {unknown_titles_count} > {max_unknown} (profile: {profile_id})")
         
-        # Critère 4: Placeholders (warning, pas bloquant strict)
-        if placeholders_count > 3:
-            reasons.append(f"Many placeholders found: {placeholders_count} (review recommended)")
+        # Critère 4: Placeholders
+        if placeholders_count > max_placeholders:
+            reasons.append(f"Many placeholders found: {placeholders_count} > {max_placeholders} (profile: {profile_id})")
         
         status = 'GO' if not reasons else 'NO-GO'
         
         return {
             'status': status,
+            'profile': profile_id,
             'reasons': reasons,
             'criteria': {
-                'required_sections_ok': len(missing_required) == 0,
-                'required_coverage_ok': required_coverage >= 0.9,
-                'unknown_titles_ok': unknown_titles_count <= 5,
-                'placeholders_ok': placeholders_count <= 3
-            }
+                'required_sections_ok': len(missing_required_effective) <= max_missing_required,
+                'required_coverage_ok': required_coverage_effective >= min_coverage,
+                'unknown_titles_ok': unknown_titles_count <= max_unknown,
+                'placeholders_ok': placeholders_count <= max_placeholders
+            },
+            'metrics': {
+                'required_coverage_ratio': round(required_coverage, 2),
+                'required_coverage_ratio_effective': round(required_coverage_effective, 2),
+                'unknown_titles_count': unknown_titles_count,
+                'placeholders_count': placeholders_count,
+                'missing_required_sections_count': len(missing_required),
+                'missing_required_sections_count_effective': len(missing_required_effective)
+            },
+            'missing_required_effective': missing_required_effective
         }
     
     def _is_section_filled(self, normalized: Dict[str, Any], section_id: str) -> bool:
@@ -583,7 +772,15 @@ class Normalizer:
         return iterate_recursive(self.ruleset.sections)
 
 
-def normalize_segments(segments: List[Segment], ruleset: RulesetLoader) -> Dict[str, Any]:
-    """Helper function pour normaliser les segments"""
+def normalize_segments(segments: List[Segment], ruleset: RulesetLoader, 
+                      gate_profile_override: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Helper function pour normaliser les segments
+    
+    Args:
+        segments: Segments à normaliser
+        ruleset: Ruleset chargé
+        gate_profile_override: Si fourni, force ce profil pour le production gate
+    """
     normalizer = Normalizer(ruleset)
-    return normalizer.normalize(segments)
+    return normalizer.normalize(segments, gate_profile_override=gate_profile_override)

@@ -65,6 +65,11 @@ class RulesetLoader:
         """Règles de contenu (anti-hallucination)"""
         return self._data.get('content_rules', {})
     
+    @property
+    def raw_data(self) -> Dict[str, Any]:
+        """Données brutes du ruleset (pour accès direct)"""
+        return self._data
+    
     def get_section_by_id(self, section_id: str) -> Optional[Dict[str, Any]]:
         """Récupère une section par son ID (supporte la notation pointée pour children)"""
         
@@ -94,8 +99,30 @@ class RulesetLoader:
                     collect_ids(children)
         
         collect_ids(self.sections)
-        return [i for i in ids if i]
-
+        return [i for i in ids if i]    
+    def get_required_paths(self) -> List[str]:
+        """
+        Retourne tous les chemins (IDs) des sections/champs marqués required=true
+        
+        Returns:
+            Liste des IDs de sections requises (ex: ['identity', 'profession_formation', ...])
+        """
+        required = []
+        
+        def collect_required(sections: List[Dict]):
+            for section in sections:
+                if section.get('required', False):
+                    section_id = section.get('id', '')
+                    if section_id:
+                        required.append(section_id)
+                
+                # Parcourir récursivement les children
+                children = section.get('children', [])
+                if children:
+                    collect_required(children)
+        
+        collect_required(self.sections)
+        return required
 
 def load_ruleset(ruleset_path: str) -> RulesetLoader:
     """Fonction helper pour charger un ruleset"""

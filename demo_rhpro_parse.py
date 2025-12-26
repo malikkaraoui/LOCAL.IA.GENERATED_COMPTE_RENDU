@@ -4,6 +4,7 @@ Script de démonstration du parsing RH-Pro
 """
 import sys
 import json
+import argparse
 from pathlib import Path
 from typing import Optional
 
@@ -39,6 +40,32 @@ def find_first_source_docx() -> Optional[Path]:
 def main():
     """Démonstration du parsing"""
     
+    # Parser les arguments CLI
+    parser = argparse.ArgumentParser(
+        description='Parser un document RH-Pro DOCX et générer un rapport',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Exemples:
+  python demo_rhpro_parse.py
+  python demo_rhpro_parse.py data/samples/client_01/source.docx
+  python demo_rhpro_parse.py data/samples/client_01/source.docx --gate-profile stage
+  python demo_rhpro_parse.py data/samples/client_01/source.docx --gate-profile placement_suivi
+        '''
+    )
+    parser.add_argument(
+        'docx_path',
+        nargs='?',
+        help='Chemin vers le fichier DOCX (optionnel, auto-découverte si non fourni)'
+    )
+    parser.add_argument(
+        '--gate-profile',
+        choices=['bilan_complet', 'placement_suivi', 'stage'],
+        default=None,
+        help='Force un profil de production gate spécifique (défaut: auto-détection)'
+    )
+    
+    args = parser.parse_args()
+    
     print("=" * 60)
     print("RH-Pro DOCX Parser - Démo")
     print("=" * 60)
@@ -47,8 +74,8 @@ def main():
     ruleset_path = PROJECT_ROOT / 'config' / 'rulesets' / 'rhpro_v1.yaml'
     
     # Vérifier si un DOCX est fourni en argument
-    if len(sys.argv) > 1:
-        docx_path = Path(sys.argv[1])
+    if args.docx_path:
+        docx_path = Path(args.docx_path)
     else:
         # Auto-découverte : chercher data/samples/**/source.docx
         docx_path = find_first_source_docx()
@@ -73,13 +100,21 @@ def main():
     
     print(f"\n📄 Document: {docx_path.name}")
     print(f"📋 Ruleset: {ruleset_path.name}")
+    
+    # Afficher le profil (auto ou forcé)
+    if args.gate_profile:
+        print(f"🎯 Gate profile: {args.gate_profile} (forced)")
+    else:
+        print(f"🎯 Gate profile: auto-detection")
+    
     print("\n⏳ Parsing en cours...\n")
     
     try:
         # Parsing
         result = parse_bilan_from_paths(
             str(docx_path),
-            str(ruleset_path)
+            str(ruleset_path),
+            gate_profile_override=args.gate_profile
         )
         
         # Afficher le rapport
@@ -124,9 +159,54 @@ def main():
             gate = report['production_gate']
             status_icon = "✅" if gate['status'] == 'GO' else "🚫"
             print(f"\n{status_icon} Production Gate: {gate['status']}")
+            print(f"   Profile: {gate.get('profile', 'N/A')}")
+            
+            # Afficher les signaux
+            if gate.get('signals'):
+                signals = gate['signals']
+                if signals.get('forced'):
+                    print(f"   Selection: forced via CLI override")
+                else:
+                    print(f"   Signals detected:")
+                    if signals.get('has_stage'):
+                        print(f"      • stage detected")
+                    if signals.get('bilan_complet_sections_count', 0) >= 2:
+                        print(f"      • bilan complet sections: {signals['bilan_complet_sections_count']} (tests/vocation/profil_emploi/ressources)")
+                    if signals.get('has_lai15') or signals.get('has_lai18'):
+                        lai_type = "LAI 15" if signals.get('has_lai15') else "LAI 18"
+                        print(f"      • {lai_type} detected")
+                    if signals.get('matched_titles'):
+                        print(f"      • matched titles: {', '.join(signals['matched_titles'][:3])}")
+            
+            # Afficher les critères
+            if gate.get('criteria'):
+                print(f"   Criteria:")
+                for criterion, passed in gate['criteria'].items():
+                    icon = "✓" if passed else "✗"
+                    print(f"      {icon} {criterion}")
+            
+            # Afficher les métriques
+            if gate.get('metrics'):
+                print(f"   Metrics:")
+                metrics = gate['metrics']
+                print(f"      - required_coverage (global): {metrics.get('required_coverage_ratio', 0):.0%}")
+                if 'required_coverage_ratio_effective' in metrics:
+                    print(f"      - required_coverage (effective): {metrics['required_coverage_ratio_effective']:.0%}")
+                print(f"      - unknown_titles: {metrics.get('unknown_titles_count', 0)}")
+                print(f"      - placeholders: {metrics.get('placeholders_count', 0)}")
+                print(f"      - missing_required (global): {metrics.get('missing_required_sections_count', 0)}")
+                if 'missing_required_sections_count_effective' in metrics:
+                    print(f"      - missing_required (effective): {metrics['missing_required_sections_count_effective']}")
+            
+            # Afficher les sections manquantes effectives
+            if gate.get('missing_required_effective'):
+                print(f"   Missing required (after profile filter): {', '.join(gate['missing_required_effective'][:5])}")
+            
+            # Afficher les raisons de NO-GO
             if gate.get('reasons'):
+                print(f"   Reasons:")
                 for reason in gate['reasons']:
-                    print(f"  - {reason}")
+                    print(f"      - {reason}")
         
         # Placeholders
         if 'placeholders' in report and report['placeholders']:

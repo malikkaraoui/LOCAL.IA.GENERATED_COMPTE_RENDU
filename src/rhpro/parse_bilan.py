@@ -11,13 +11,15 @@ from .mapper import map_segments_to_sections
 from .normalizer import normalize_segments
 
 
-def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str) -> Dict[str, Any]:
+def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str, 
+                                   gate_profile_override: str = None) -> Dict[str, Any]:
     """
     Parse un document DOCX RH-Pro et retourne un dictionnaire normalisé
     
     Args:
         docx_path: Chemin vers le fichier DOCX
         ruleset_path: Chemin vers le ruleset YAML
+        gate_profile_override: Si fourni, force ce profil pour le production gate
     
     Returns:
         dict avec clés:
@@ -69,14 +71,15 @@ def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str) -> Dict[st
     segments = map_segments_to_sections(segments, ruleset)
     
     # 5. Normaliser (construire le dict final)
-    result = normalize_segments(segments, ruleset)
+    result = normalize_segments(segments, ruleset, gate_profile_override=gate_profile_override)
     
     return result
 
 
 def parse_bilan_from_paths(
     docx_path: str,
-    ruleset_path: str = None
+    ruleset_path: str = None,
+    gate_profile_override: str = None
 ) -> Dict[str, Any]:
     """
     Variante avec ruleset par défaut
@@ -84,6 +87,7 @@ def parse_bilan_from_paths(
     Args:
         docx_path: Chemin vers le fichier DOCX
         ruleset_path: Chemin vers le ruleset (optionnel, utilise rhpro_v1.yaml par défaut)
+        gate_profile_override: Si fourni, force ce profil pour le production gate
     
     Returns:
         dict avec 'normalized' et 'report'
@@ -93,4 +97,4 @@ def parse_bilan_from_paths(
         project_root = Path(__file__).parent.parent.parent
         ruleset_path = str(project_root / 'config' / 'rulesets' / 'rhpro_v1.yaml')
     
-    return parse_bilan_docx_to_normalized(docx_path, ruleset_path)
+    return parse_bilan_docx_to_normalized(docx_path, ruleset_path, gate_profile_override=gate_profile_override)

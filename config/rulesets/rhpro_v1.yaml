@@ -377,3 +377,55 @@ content_rules:
   summarize_default:
     lines: 4
     max_chars_per_line: 140
+
+# --- Production Gate (Validation GO/NO-GO) ---
+production_gate:
+  default_profile: placement_suivi  # Profil tolérant par défaut
+  
+  profiles:
+    bilan_complet:
+      description: "Profil strict pour bilans d'orientation complets"
+      required_sections:
+        - identity
+        - profession_formation
+        - orientation_formation
+        - conclusion
+      thresholds:
+        max_missing_required: 0
+        min_required_coverage_ratio: 0.90
+        max_unknown_titles: 5
+        max_placeholders: 1
+      ignore_required_prefixes: []
+    
+    placement_suivi:
+      description: "Profil tolérant pour suivi léger, placement et LAI 15/18"
+      required_sections:
+        - identity
+        - conclusion
+      thresholds:
+        max_missing_required: 2
+        min_required_coverage_ratio: 0.60
+        max_unknown_titles: 10
+        max_placeholders: 5
+      ignore_required_prefixes:
+        - tests
+        - vocation
+        - profil_emploi
+        - dossier_presentation
+    
+    stage:
+      description: "Profil spécifique pour bilans de stage"
+      required_sections:
+        - identity
+        - orientation_formation
+        - conclusion
+      thresholds:
+        max_missing_required: 1
+        min_required_coverage_ratio: 0.70
+        max_unknown_titles: 10
+        max_placeholders: 5
+      ignore_required_prefixes:
+        - tests
+        - vocation
+        - profil_emploi
+        - dossier_presentation
