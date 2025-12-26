@@ -1,0 +1,370 @@
+version: "rhpro-v1"
+language: "fr"
+doc_type: "bilan_orientation_rhpro"
+
+# --- Normalisation texte (titres) ---
+normalize:
+  trim: true
+  collapse_whitespace: true
+  strip_trailing_colon: true
+  uppercase: false
+  remove_nbsp: true
+
+# --- Détection des titres / sections ---
+heading_detection:
+  # 1) Si on a le style Word (python-docx), c'est la source la plus fiable
+  by_style:
+    enabled: true
+    styles:
+      - name: "Heading 1"
+        level: 1
+      - name: "TITRE 2"
+        level: 2
+      - name: "TITRE 2.2 A"
+        level: 3
+      - name: "TITRE 2.3 A"
+        level: 3
+      - name: "TITRE 2.5 A"
+        level: 4
+      - name: "Titre B"
+        level: 0
+
+  # 2) Fallback regex si styles absents / incohérents
+  by_regex:
+    enabled: true
+    patterns:
+      # numérotation type "2.1.1. TITRE"
+      - id: "numbered"
+        regex: "^\\s*\\d+(\\.\\d+){1,6}\\.?\\s+.+$"
+      # titres en majuscules (on reste prudent)
+      - id: "uppercase"
+        regex: "^[A-ZÀ-ÖØ-Þ0-9\\s''\\-,:]{8,}$"
+
+  # 3) Fallback heuristique (gras + court)
+  by_heuristics:
+    enabled: true
+    max_length: 90
+    prefer_bold: true
+
+# --- Stratégie de matching (titre -> section canonique) ---
+title_matching:
+  method_order: ["exact", "contains", "regex", "fuzzy"]
+  fuzzy_threshold: 0.84
+
+# --- Sections canonisées ---
+sections:
+  - id: "identity"
+    label: "Identité"
+    required: true
+    fill_strategy: "copy"
+    anchors:
+      any:
+        - exact: "Identité"
+        - exact: "Informations personnelles"
+        - regex: "(?i)^(Monsieur|Madame)\\b.*\\b756[\\s\\.]\\d{4}[\\s\\.]\\d{4}[\\s\\.]\\d{2}\\b"
+    fields:
+      - key: "name"
+        extract:
+          type: "from_line"
+          regex: "\\b{NAME}\\b"
+      - key: "surname"
+        extract:
+          type: "from_line"
+          regex: "\\b{surname}\\b"
+      - key: "avs"
+        extract:
+          type: "regex"
+          regex: "\\b756\\.[0-9X]{4}\\.[0-9X]{4}\\.[0-9X]{2}\\b"
+
+  - id: "participation_programme"
+    label: "Participation au programme"
+    required: false
+    fill_strategy: "summarize_3_4_lines"
+    anchors:
+      any:
+        - exact: "Participation au programme"
+        - contains: "programme"
+
+  - id: "profession_formation"
+    label: "Profession & Formation"
+    required: true
+    anchors:
+      any:
+        - exact: "Profession & Formation"
+        - contains: "Profession & Formation"
+    children:
+      - id: "profession_formation.profession"
+        label: "Profession"
+        required: true
+        fill_strategy: "summarize_3_4_lines"
+        anchors:
+          any:
+            - exact: "Profession"
+            - regex: "^Profession\\s*:?"
+      - id: "profession_formation.formation"
+        label: "Formation"
+        required: true
+        fill_strategy: "summarize_3_4_lines"
+        anchors:
+          any:
+            - exact: "Formation"
+            - regex: "^Formation\\s*:?"
+
+  - id: "tests"
+    label: "Tests"
+    required: false
+    anchors:
+      any:
+        - exact: "Tests"
+        - contains: "Tests"
+    children:
+      - id: "tests.evolution"
+        label: "Evolution"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors:
+          any:
+            - exact: "Evolution"
+            - contains: "Evolution"
+
+      - id: "tests.ressources_professionnelles"
+        label: "Ressources professionnelles"
+        required: false
+        anchors:
+          any:
+            - exact: "Ressources professionnelles"
+            - contains: "Ressources professionnelles"
+        children:
+          - id: "tests.ressources_professionnelles.ressources_comportementales"
+            label: "Ressources comportementales"
+            required: false
+            fill_strategy: "copy"
+            anchors:
+              any:
+                - exact: "Ressources comportementales"
+                - contains: "RESSOURCES COMPORTEMENTALES"
+            substructure:
+              # on veut capturer les deux sous-blocs si présents
+              bullets:
+                points_appui:
+                  anchors_any:
+                    - contains: "Points d'appui"
+                    - contains: "Points d'appui"
+                points_vigilance:
+                  anchors_any:
+                    - contains: "Points de vigilance"
+          - id: "tests.ressources_professionnelles.ressources_motivationnelles"
+            label: "Ressources motivationnelles"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors:
+              any:
+                - exact: "Ressources motivationnelles"
+                - contains: "RESSOURCES MOTIVATIONNELLES"
+          - id: "tests.ressources_professionnelles.relation_marche_emploi"
+            label: "Relation au marché de l'emploi"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors:
+              any:
+                - contains: "Relation au marché"
+                - contains: "marché de l'emploi"
+          - id: "tests.ressources_professionnelles.relation_carriere"
+            label: "Relation à la carrière"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors:
+              any:
+                - contains: "Relation à la carrière"
+                - contains: "carrière"
+
+      - id: "tests.profil_emploi"
+        label: "Profil emploi"
+        required: false
+        anchors:
+          any:
+            - contains: "Profil emploi"
+        children:
+          - id: "tests.profil_emploi.contexte"
+            label: "Contexte"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors: { any: [ { exact: "Contexte" } ] }
+          - id: "tests.profil_emploi.activites"
+            label: "Activités"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors: { any: [ { exact: "Activités" }, { contains: "Activités" } ] }
+          - id: "tests.profil_emploi.activites_privilegiees"
+            label: "Activités privilégiées"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors: { any: [ { contains: "Activités privilégiées" } ] }
+          - id: "tests.profil_emploi.secteurs_privilegies"
+            label: "Secteurs privilégiés"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors: { any: [ { contains: "Secteurs privilégiés" } ] }
+          - id: "tests.profil_emploi.fonctions_privilegiees"
+            label: "Fonctions privilégiées"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors: { any: [ { contains: "Fonctions privilégiées" } ] }
+          - id: "tests.profil_emploi.metiers_privilegies"
+            label: "Métiers privilégiés"
+            required: false
+            fill_strategy: "summarize_3_4_lines"
+            anchors:
+              any:
+                - contains: "Quelques métiers privilégiés"
+
+      - id: "tests.vocation"
+        label: "Vocation"
+        required: false
+        anchors:
+          any:
+            - contains: "VocatioN"
+            - contains: "Vocation"
+        children:
+          - id: "tests.vocation.domaines_professionnels"
+            label: "Domaines professionnels"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Domaines professionnels" } ] }
+          - id: "tests.vocation.riasec"
+            label: "RIASEC"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { exact: "RIASEC" } ] }
+          - id: "tests.vocation.roles_professionnels"
+            label: "Rôles professionnels"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Rôles professionnels" } ] }
+          - id: "tests.vocation.professions"
+            label: "Professions"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { exact: "Professions" } ] }
+          - id: "tests.vocation.formation_initiale"
+            label: "Formation initiale"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Formation initiale" } ] }
+          - id: "tests.vocation.formations_superieures"
+            label: "Formations supérieures"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Formations supérieures" } ] }
+          - id: "tests.vocation.formations_hautes_ecoles"
+            label: "Formations hautes écoles"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Formations hautes écoles" } ] }
+          - id: "tests.vocation.autres_formations"
+            label: "Autres formations"
+            required: false
+            fill_strategy: "copy"
+            anchors: { any: [ { contains: "Autres formations" } ] }
+
+  - id: "discussion_assure"
+    label: "Résultats de la discussion avec l'assuré"
+    required: false
+    fill_strategy: "summarize_3_4_lines"
+    anchors:
+      any:
+        - contains: "DISCUSSION AVEC L'ASSURÉ"
+        - contains: "DISCUSSION AVEC L'ASSURÉ"
+
+  - id: "competences"
+    label: "Compétences Professionnelles & Sociales"
+    required: false
+    anchors:
+      any:
+        - contains: "Compétences Professionnelles & Sociales"
+    children:
+      - id: "competences.sociales"
+        label: "Sociales"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { exact: "Sociales" } ] }
+      - id: "competences.professionnelles"
+        label: "Professionnelles"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { exact: "Professionnelles" } ] }
+
+  - id: "incertitudes_obstacles"
+    label: "Incertitudes & Obstacles"
+    required: false
+    fill_strategy: "summarize_3_4_lines"
+    anchors:
+      any:
+        - contains: "Incertitudes & Obstacles"
+        - contains: "Incertitudes"
+
+  - id: "orientation_formation"
+    label: "Orientation & Formation"
+    required: true
+    anchors:
+      any:
+        - exact: "Orientation & Formation"
+        - regex: "(?i)^\\s*orientation\\s*[,/&-]*\\s*formation\\b.*\\bstage\\b"
+        - regex: "(?i)^\\s*orientation\\b.*\\bformation\\b"
+    children:
+      - id: "orientation_formation.orientation"
+        label: "Orientation"
+        required: true
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { exact: "Orientation" } ] }
+      - id: "orientation_formation.stage"
+        label: "Stage"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { exact: "Stage" } ] }
+
+  - id: "dossier_presentation"
+    label: "Dossier & Présentation"
+    required: false
+    anchors:
+      any:
+        - contains: "Dossier & Présentation"
+    children:
+      - id: "dossier_presentation.lettre_motivation"
+        label: "Lettre de motivation"
+        required: false
+        fill_strategy: "source_only"
+        anchors: { any: [ { contains: "Lettre de motivation" } ] }
+      - id: "dossier_presentation.cv"
+        label: "CV"
+        required: false
+        fill_strategy: "source_only"
+        anchors: { any: [ { exact: "CV" }, { contains: "CV" } ] }
+      - id: "dossier_presentation.presentation"
+        label: "Présentation"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { contains: "Présentation" } ] }
+      - id: "dossier_presentation.entretien"
+        label: "Entretien"
+        required: false
+        fill_strategy: "summarize_3_4_lines"
+        anchors: { any: [ { contains: "Entretien" } ] }
+
+  - id: "conclusion"
+    label: "Conclusion"
+    required: false
+    fill_strategy: "summarize_3_4_lines"
+    anchors:
+      any:
+        - exact: "Conclusion"
+        - contains: "Conclusion"
+
+# --- Règles de contenu (anti-hallucination) ---
+content_rules:
+  never_invent_for:
+    - "dossier_presentation.lettre_motivation"
+    - "dossier_presentation.cv"
+  summarize_default:
+    lines: 4
+    max_chars_per_line: 140
