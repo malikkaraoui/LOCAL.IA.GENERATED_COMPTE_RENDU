@@ -168,6 +168,7 @@ Examples:
     print("=" * 60)
     print(f"• Rapport JSON  : {output_path / 'batch_report.json'}")
     print(f"• Rapport MD    : {output_path / 'batch_report.md'}")
+    print(f"• Rapport CSV   : {output_path / 'batch_report.csv'}")
     for result in batch_result["results"]:
         if result["status"] == "success":
             client = result["client_name"]

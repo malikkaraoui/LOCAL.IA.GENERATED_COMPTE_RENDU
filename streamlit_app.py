@@ -22,8 +22,8 @@ with st.sidebar:
     st.title("🧭 Navigation")
     page = st.radio(
         "Choisir une page",
-        options=["Générateur", "Batch Parser RH-Pro"],
-        index=0 if st.session_state.current_page == "Générateur" else 1
+        options=["Générateur", "Batch Parser RH-Pro", "Rapport individuel"],
+        index=0 if st.session_state.current_page == "Générateur" else (1 if st.session_state.current_page == "Batch Parser RH-Pro" else 2)
     )
     st.session_state.current_page = page
 
@@ -31,6 +31,12 @@ with st.sidebar:
 if st.session_state.current_page == "Batch Parser RH-Pro":
     from pages_streamlit.batch_parser import show_batch_parser_page
     show_batch_parser_page()
+    st.stop()
+
+# Si Rapport individuel, afficher la page de recherche client
+if st.session_state.current_page == "Rapport individuel":
+    from pages_streamlit.client_report_generator import show_client_report_generator_page
+    show_client_report_generator_page()
     st.stop()
 
 # Sinon, continuer avec la page principale (Générateur)

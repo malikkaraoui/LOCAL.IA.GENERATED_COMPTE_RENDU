@@ -128,6 +128,7 @@ def run_batch(
             
             # Stats
             coverage = report.get("required_coverage_ratio", 0.0)
+            weighted_coverage = report.get("weighted_coverage", coverage)  # Fallback to required if not available
             unknown_titles = len(report.get("unknown_titles", []))
             placeholders = len(report.get("placeholders_detected", []))
             warnings = report.get("warnings", [])
@@ -137,6 +138,7 @@ def run_batch(
                 "profile": profile_id,
                 "gate_status": status,
                 "required_coverage_ratio": round(coverage, 3),
+                "weighted_coverage": round(weighted_coverage, 3),
                 "missing_required_sections": missing_required,
                 "unknown_titles_count": unknown_titles,
                 "placeholders_count": placeholders,
@@ -215,6 +217,11 @@ def run_batch(
         markdown = generate_batch_report_markdown(batch_result)
         with open(output_path / "batch_report.md", "w", encoding="utf-8") as f:
             f.write(markdown)
+        
+        # Générer un CSV avec métriques clés
+        csv_content = generate_batch_report_csv(batch_result)
+        with open(output_path / "batch_report.csv", "w", encoding="utf-8") as f:
+            f.write(csv_content)
     
     return batch_result
 
@@ -301,3 +308,87 @@ def generate_batch_report_markdown(batch_result: Dict[str, Any]) -> str:
             md_lines.append(f"- **{err['client']}**: {err['error']}\n")
     
     return "".join(md_lines)
+
+
+def generate_batch_report_csv(batch_result: Dict[str, Any]) -> str:
+    """
+    Génère un rapport CSV avec métriques clés
+    
+    Args:
+        batch_result: Résultat de run_batch()
+        
+    Returns:
+        str contenant le CSV formaté
+        
+    Columns:
+        - client_folder: Nom du dossier client
+        - profile_selected: Profil production gate
+        - gate_status: GO/NO-GO
+        - required_coverage: Ratio coverage des sections requises
+        - weighted_coverage: Ratio coverage pondéré
+        - unknown_titles_count: Nombre de titres inconnus
+        - missing_required_sections_count: Nombre de sections requises manquantes
+        - placeholders_count: Nombre de placeholders
+        - status: success/error
+    """
+    import csv
+    from io import StringIO
+    
+    output = StringIO()
+    fieldnames = [
+        'client_folder',
+        'profile_selected',
+        'gate_status',
+        'required_coverage',
+        'weighted_coverage',
+        'unknown_titles_count',
+        'missing_required_sections_count',
+        'placeholders_count',
+        'status'
+    ]
+    
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    
+    for result in batch_result["results"]:
+        client_name = result["client_name"]
+        status = result["status"]
+        
+        if status == "success":
+            # Récupérer le weighted_coverage depuis les critères ou metrics
+            gate = result.get("criteria", {})
+            weighted_cov = result.get("weighted_coverage", 0.0)  # Peut être ajouté plus tard
+            
+            # Si pas dans result direct, chercher dans le report original (pas stocké)
+            # Pour l'instant, on utilise required_coverage comme approximation
+            if weighted_cov == 0.0:
+                weighted_cov = result.get("required_coverage_ratio", 0.0)
+            
+            row = {
+                'client_folder': client_name,
+                'profile_selected': result.get("profile", "unknown"),
+                'gate_status': result.get("gate_status", "UNKNOWN"),
+                'required_coverage': f"{result.get('required_coverage_ratio', 0.0):.3f}",
+                'weighted_coverage': f"{weighted_cov:.3f}",
+                'unknown_titles_count': result.get("unknown_titles_count", 0),
+                'missing_required_sections_count': len(result.get("missing_required_sections", [])),
+                'placeholders_count': result.get("placeholders_count", 0),
+                'status': 'success'
+            }
+        else:
+            row = {
+                'client_folder': client_name,
+                'profile_selected': '-',
+                'gate_status': '-',
+                'required_coverage': '0.000',
+                'weighted_coverage': '0.000',
+                'unknown_titles_count': 0,
+                'missing_required_sections_count': 0,
+                'placeholders_count': 0,
+                'status': 'error'
+            }
+        
+        writer.writerow(row)
+    
+    return output.getvalue()
+
