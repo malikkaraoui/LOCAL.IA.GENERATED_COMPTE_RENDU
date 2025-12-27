@@ -26,6 +26,16 @@ from src.rhpro.client_normalizer import (
     format_normalization_report,
 )
 from src.rhpro.client_finder import find_client_folders
+from src.rhpro.batch_analyzer import (
+    scan_batch_clients,
+    get_client_analysis_detail,
+)
+from src.rhpro.report_generator import (
+    generate_report_from_normalized,
+    RHProReportGenerator,
+)
+from src.rhpro.rag_generator import get_chunks_preview
+import pandas as pd
 
 
 def browse_directory(label: str, help_text: str = "") -> Optional[str]:
@@ -311,111 +321,145 @@ def show_scan_results(scan_result: Dict[str, Any]):
 
 def show_batch_mode():
     """
-    Mode batch (plusieurs clients).
+    Mode batch (plusieurs clients) - Version améliorée avec table et actions.
     """
-    st.subheader("📦 Normalisation Batch")
+    st.subheader("📦 Mode Training - Batch")
     
-    # Browse dataset
-    dataset_root = browse_directory(
-        "Dataset racine",
-        "Dossier contenant les sous-dossiers clients"
+    # Browse BATCH folder
+    batch_root = browse_directory(
+        "Batch racine (BATCH_20, etc.)",
+        "Dossier contenant les dossiers clients"
     )
     
-    if not dataset_root or not Path(dataset_root).exists():
-        st.warning("⚠️ Veuillez sélectionner un dataset valide")
+    if not batch_root or not Path(batch_root).exists():
+        st.warning("⚠️ Veuillez sélectionner un batch valide")
         return
     
-    st.success(f"✅ Dataset : `{dataset_root}`")
+    st.success(f"✅ Batch sélectionné : `{Path(batch_root).name}`")
     
-    # Lister clients disponibles
-    dataset_path = Path(dataset_root)
-    client_folders = [
-        d.name for d in dataset_path.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    ]
+    # Bouton pour scanner le batch
+    if st.button("🔍 Scanner le batch", type="primary"):
+        with st.spinner("Scan en cours..."):
+            try:
+                batch_analysis = scan_batch_clients(
+                    batch_path=batch_root,
+                    limit=None,
+                    min_pipeline_score=0.3,
+                )
+                st.session_state["batch_analysis"] = batch_analysis
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Erreur scan batch : {e}")
+                return
     
-    st.info(f"💡 {len(client_folders)} dossier(s) trouvé(s)")
-    
-    # Sélection clients
-    selected_clients = st.multiselect(
-        "Clients à traiter",
-        options=client_folders,
-        default=client_folders[:5] if len(client_folders) >= 5 else client_folders,
-        help="Sélectionner les clients à normaliser",
-    )
-    
-    if not selected_clients:
-        st.warning("⚠️ Sélectionnez au moins un client")
+    # Afficher les résultats du scan
+    if "batch_analysis" not in st.session_state:
+        st.info("💡 Cliquez sur 'Scanner le batch' pour analyser les clients")
         return
     
-    st.write(f"**{len(selected_clients)} client(s) sélectionné(s)**")
+    batch_analysis = st.session_state["batch_analysis"]
     
-    # Configuration batch
-    col1, col2 = st.columns(2)
+    st.markdown("---")
+    st.markdown("### 📊 Clients Détectés")
+    
+    # Statistiques du batch
+    summary = batch_analysis["summary"]
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        batch_name = st.text_input(
-            "Nom du batch",
-            value=f"BATCH_{len(selected_clients)}",
-            key="batch_name_input",
-        )
-    
+        st.metric("Total clients", summary["total"])
     with col2:
-        sandbox_root = st.text_input(
-            "Sandbox racine",
-            value="./sandbox",
-            key="sandbox_root_input",
-        )
+        st.metric("✅ Pipeline Ready", summary["pipeline_ready"])
+    with col3:
+        st.metric("GOLD détectés", summary["gold_detected"])
+    with col4:
+        st.metric("⚠️ Warnings", summary["warnings_total"])
     
-    continue_on_error = st.checkbox(
-        "Continuer en cas d'erreur",
-        value=True,
-        help="Ne pas arrêter le batch si un client échoue",
+    # Table des clients
+    clients = batch_analysis["clients"]
+    
+    # Créer DataFrame pour affichage
+    df_data = []
+    for idx, client in enumerate(clients):
+        status_emoji = "✅" if client["compatible"] else "⚠️"
+        gold_emoji = "✅" if client["gold_detected"] else "❌"
+        
+        # Compter les sources par type
+        rag_summary = ", ".join([
+            f"{ext}:{count}" 
+            for ext, count in client["rag_sources_by_type"].items()
+        ]) if client["rag_sources_by_type"] else "Aucune"
+        
+        df_data.append({
+            "Sélection": False,
+            "Nom dossier": client["folder_name"],
+            "Compatibilité": f"{status_emoji} {client['compatibility_score']:.2f}",
+            "GOLD": gold_emoji,
+            "Sources RAG": f"{client['rag_sources_count']} ({rag_summary})",
+            "Warnings": client["warnings_count"],
+            "_index": idx,  # Pour retrouver le client
+        })
+    
+    df = pd.DataFrame(df_data)
+    
+    # Afficher la table avec sélection
+    st.markdown("#### Table des clients")
+    
+    # Utiliser data_editor pour permettre la sélection
+    edited_df = st.data_editor(
+        df.drop(columns=["_index"]),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Sélection": st.column_config.CheckboxColumn(
+                "Sélectionner",
+                help="Cocher pour analyser/normaliser/générer",
+                default=False,
+            ),
+        },
+        key="clients_table",
     )
     
-    # Lancer batch
-    if st.button("🚀 Lancer la normalisation batch", type="primary"):
-        with st.spinner(f"Traitement de {len(selected_clients)} client(s)..."):
-            try:
-                batch_result = normalize_batch_to_sandbox(
-                    dataset_root=dataset_root,
-                    client_names=selected_clients,
-                    batch_name=batch_name,
-                    sandbox_root=sandbox_root,
-                    continue_on_error=continue_on_error,
-                )
-                
-                st.success("✅ Batch terminé !")
-                
-                # Stats
-                stats = batch_result["stats"]
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total", stats["total"])
-                with col2:
-                    st.metric("✅ Succès", stats["success"])
-                with col3:
-                    st.metric("⚠️ Non prêts", stats["not_ready"])
-                with col4:
-                    st.metric("❌ Erreurs", stats["errors"])
-                
-                # Rapport détaillé
-                with st.expander("📝 Rapport détaillé"):
-                    report_text = format_normalization_report(batch_result)
-                    st.code(report_text, language="text")
-                
-                # JSON complet
-                with st.expander("📄 Résultat JSON"):
-                    st.json(batch_result)
-                
-                # Stocker résultats
-                st.session_state["last_batch"] = batch_result
-                
-            except Exception as e:
-                st.error(f"❌ Erreur batch : {e}")
-                import traceback
-                st.code(traceback.format_exc())
+    # Récupérer les clients sélectionnés
+    selected_indices = [i for i, row in edited_df.iterrows() if row["Sélection"]]
+    selected_clients = [clients[df_data[i]["_index"]] for i in selected_indices]
+    
+    if selected_clients:
+        st.info(f"💡 {len(selected_clients)} client(s) sélectionné(s)")
+        
+        # Boutons d'action
+        st.markdown("#### Actions")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🔍 Analyser", help="Analyser en détail les clients sélectionnés"):
+                st.session_state["show_analysis"] = True
+                st.session_state["selected_clients"] = selected_clients
+        
+        with col2:
+            if st.button("🔧 Normaliser", help="Normaliser en sandbox"):
+                st.session_state["show_normalize"] = True
+                st.session_state["selected_clients"] = selected_clients
+        
+        with col3:
+            if st.button("🚀 Run (RAG+DOCX)", help="Générer comptes-rendus", type="primary"):
+                st.session_state["show_generate"] = True
+                st.session_state["selected_clients"] = selected_clients
+    
+    # Vue analyse client détaillée
+    if st.session_state.get("show_analysis") and st.session_state.get("selected_clients"):
+        st.markdown("---")
+        show_detailed_analysis(st.session_state["selected_clients"])
+    
+    # Vue normalisation
+    if st.session_state.get("show_normalize") and st.session_state.get("selected_clients"):
+        st.markdown("---")
+        show_normalize_view(st.session_state["selected_clients"], batch_root)
+    
+    # Vue génération
+    if st.session_state.get("show_generate") and st.session_state.get("selected_clients"):
+        st.markdown("---")
+        show_generate_view(st.session_state["selected_clients"], batch_root)
 
 
 def show_advanced_config():
@@ -494,6 +538,369 @@ Normalisation en sandbox :
   │   └── source.docx          ← Alias (optionnel)
   └── meta.json                ← Métadonnées
     """, language="text")
+
+
+def show_detailed_analysis(selected_clients: List[Dict[str, Any]]):
+    """
+    Affiche une analyse détaillée des clients sélectionnés.
+    
+    Args:
+        selected_clients: Liste des clients à analyser
+    """
+    st.markdown("### 🔍 Analyse Détaillée")
+    
+    # Sélecteur de client à analyser
+    client_names = [c["folder_name"] for c in selected_clients]
+    selected_name = st.selectbox(
+        "Client à analyser",
+        options=client_names,
+        key="analysis_client_select",
+    )
+    
+    # Trouver le client
+    client = next(c for c in selected_clients if c["folder_name"] == selected_name)
+    scan_result = client.get("scan_result")
+    
+    if not scan_result:
+        st.error("❌ Données de scan manquantes pour ce client")
+        return
+    
+    # Générer l'analyse détaillée
+    analysis = get_client_analysis_detail(scan_result)
+    
+    # Afficher les sections
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### ✅ Ce que j'ai trouvé")
+        
+        # GOLD
+        if analysis["what_found"]["gold"]:
+            gold = analysis["what_found"]["gold"]
+            st.write(f"**GOLD** : {gold['name']}")
+            st.write(f"  - Score : {gold['score']:.2f}")
+            st.write(f"  - Taille : {gold['size_kb']:.1f} KB")
+            st.write(f"  - Stratégie : {gold['strategy']}")
+        else:
+            st.write("**GOLD** : ❌ Non trouvé")
+        
+        st.write("")
+        st.write(f"**Sources RAG** : {len(analysis['what_found']['rag_sources'])} fichiers")
+        if analysis["what_found"]["rag_sources"]:
+            with st.expander("Détails des sources"):
+                for source in analysis["what_found"]["rag_sources"][:10]:
+                    st.write(f"- {source['name']} ({source['category']}, {source['extension']})")
+        
+        st.write("")
+        st.write(f"**Dossiers** : {sum(1 for f in analysis['what_found']['folders'] if f['found'])}/{len(analysis['what_found']['folders'])}")
+    
+    with col2:
+        st.markdown("#### 🎯 Ce que je peux exploiter")
+        
+        if analysis["what_usable"]["gold_usable"]:
+            st.success("✅ GOLD exploitable")
+        else:
+            st.error("❌ GOLD non exploitable")
+        
+        st.write(f"**Sources RAG exploitables** : {len(analysis['what_usable']['rag_sources_usable'])}")
+        st.write(f"**Dossiers exploitables** : {len(analysis['what_usable']['folders_usable'])}")
+    
+    # Ce qui manque
+    st.markdown("#### ⚠️ Ce qui manque pour être 100% pipeline")
+    for missing in analysis["what_missing"]:
+        if "✅" in missing:
+            st.success(missing)
+        elif "❌" in missing:
+            st.error(missing)
+        else:
+            st.warning(missing)
+    
+    # Choix du GOLD
+    if analysis["gold_choice"]:
+        st.markdown("#### 📄 GOLD choisi")
+        gold_choice = analysis["gold_choice"]
+        st.info(f"**Fichier** : {gold_choice['file']}")
+        st.write(f"**Score** : {gold_choice['score']:.2f}")
+        st.write(f"**Raison** : {gold_choice['reason']}")
+    
+    # Aperçu chunks RAG (optionnel)
+    if st.checkbox("Afficher aperçu chunks RAG (debug)", key="show_chunks"):
+        with st.spinner("Chargement des chunks..."):
+            try:
+                sources_folder = Path(client["folder_path"])
+                chunks = get_chunks_preview(str(sources_folder), max_chunks=10)
+                
+                if chunks:
+                    st.markdown("#### 🔍 Aperçu 10 premiers chunks")
+                    for i, chunk in enumerate(chunks[:10], 1):
+                        with st.expander(f"Chunk {i} - {chunk['source_file']} ({chunk['text_length']} chars)"):
+                            st.text(chunk['text'][:500] + "..." if len(chunk['text']) > 500 else chunk['text'])
+                else:
+                    st.warning("Aucun chunk généré")
+            except Exception as e:
+                st.error(f"Erreur génération chunks : {e}")
+
+
+def show_normalize_view(selected_clients: List[Dict[str, Any]], batch_root: str):
+    """
+    Vue de normalisation des clients sélectionnés.
+    
+    Args:
+        selected_clients: Liste des clients à normaliser
+        batch_root: Chemin du batch racine
+    """
+    st.markdown("### 🔧 Normalisation en Sandbox")
+    
+    # Configuration
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        batch_name = st.text_input(
+            "Nom du batch",
+            value=Path(batch_root).name,
+            key="normalize_batch_name",
+        )
+    
+    with col2:
+        sandbox_root = st.text_input(
+            "Sandbox racine",
+            value="./sandbox",
+            key="normalize_sandbox_root",
+        )
+    
+    create_alias = st.checkbox(
+        "Créer normalized/source.docx (alias)",
+        value=True,
+        help="Utile si le pipeline attend un fichier 'source.docx'",
+    )
+    
+    st.write(f"**{len(selected_clients)} client(s) à normaliser**")
+    
+    if st.button("🚀 Lancer la normalisation", type="primary", key="normalize_btn"):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        results = []
+        
+        for i, client in enumerate(selected_clients):
+            status_text.text(f"Normalisation de {client['folder_name']}...")
+            
+            try:
+                scan_result = client.get("scan_result")
+                if not scan_result:
+                    results.append({
+                        "client": client["folder_name"],
+                        "success": False,
+                        "error": "Données de scan manquantes",
+                    })
+                    continue
+                
+                norm_result = normalize_client_to_sandbox(
+                    scan_result,
+                    batch_name=batch_name,
+                    sandbox_root=sandbox_root,
+                    create_normalized_alias=create_alias,
+                )
+                
+                results.append({
+                    "client": client["folder_name"],
+                    "success": True,
+                    "normalized_path": norm_result["normalized_path"],
+                })
+            
+            except Exception as e:
+                results.append({
+                    "client": client["folder_name"],
+                    "success": False,
+                    "error": str(e),
+                })
+            
+            progress_bar.progress((i + 1) / len(selected_clients))
+        
+        status_text.empty()
+        progress_bar.empty()
+        
+        # Résultats
+        success_count = sum(1 for r in results if r["success"])
+        st.success(f"✅ Normalisation terminée : {success_count}/{len(selected_clients)} réussis")
+        
+        # Tableau des résultats
+        for result in results:
+            if result["success"]:
+                st.success(f"✅ {result['client']} → {result['normalized_path']}")
+            else:
+                st.error(f"❌ {result['client']} : {result['error']}")
+        
+        # Stocker pour génération
+        st.session_state["normalized_clients"] = [
+            r for r in results if r["success"]
+        ]
+
+
+def show_generate_view(selected_clients: List[Dict[str, Any]], batch_root: str):
+    """
+    Vue de génération des comptes-rendus.
+    
+    Args:
+        selected_clients: Liste des clients pour lesquels générer
+        batch_root: Chemin du batch racine
+    """
+    st.markdown("### 🚀 Génération Comptes-Rendus RH-Pro")
+    
+    # Configuration
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        output_dir = st.text_input(
+            "Dossier de sortie",
+            value="./output",
+            key="generate_output_dir",
+        )
+    
+    with col2:
+        template_path = st.text_input(
+            "Template DOCX (optionnel)",
+            value="",
+            key="generate_template_path",
+            help="Laisser vide pour utiliser le template par défaut",
+        )
+    
+    strict_mode = st.checkbox(
+        "Mode strict (interdiction d'inventer)",
+        value=True,
+        help="Si activé, retourne 'Non renseigné' si information non trouvée",
+    )
+    
+    st.write(f"**{len(selected_clients)} client(s) à traiter**")
+    
+    st.info("""
+    💡 **Pipeline de génération** :
+    1. Construire index RAG depuis sources/
+    2. Extraire champs via RAG avec garde-fous
+    3. Remplir template DOCX
+    4. Générer outputs : generated.docx, debug.json, metrics.json
+    """)
+    
+    if st.button("🚀 Lancer la génération", type="primary", key="generate_btn"):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        results = []
+        
+        for i, client in enumerate(selected_clients):
+            status_text.text(f"Génération pour {client['folder_name']}...")
+            
+            try:
+                # Vérifier si client normalisé
+                client_folder = Path(client["folder_path"])
+                
+                # Option 1 : Client déjà normalisé en sandbox
+                normalized_path = Path("sandbox") / Path(batch_root).name / client["folder_name"]
+                
+                if normalized_path.exists():
+                    # Générer depuis normalisé
+                    gen_result = generate_report_from_normalized(
+                        normalized_folder=str(normalized_path),
+                        output_dir=output_dir,
+                        template_path=template_path if template_path else None,
+                        strict_mode=strict_mode,
+                    )
+                else:
+                    # Générer directement (sans normalisation)
+                    scan_result = client.get("scan_result")
+                    if not scan_result or not scan_result.get("rag_sources"):
+                        raise ValueError("Pas de sources RAG disponibles")
+                    
+                    # Créer dossier temporaire avec sources
+                    import tempfile
+                    import shutil
+                    
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        sources_tmp = Path(tmpdir) / "sources"
+                        sources_tmp.mkdir()
+                        
+                        # Copier les sources
+                        for source in scan_result["rag_sources"]:
+                            shutil.copy(source["path"], sources_tmp)
+                        
+                        # Générer
+                        generator = RHProReportGenerator(
+                            template_path=template_path if template_path else None,
+                        )
+                        
+                        gen_result = generator.generate_from_client(
+                            sources_folder=str(sources_tmp),
+                            gold_path=scan_result["gold"]["path"] if scan_result["gold"] else None,
+                            output_dir=output_dir,
+                            client_name=client["folder_name"],
+                            strict_mode=strict_mode,
+                        )
+                
+                results.append({
+                    "client": client["folder_name"],
+                    "success": True,
+                    "outputs": gen_result["outputs"],
+                    "metrics": gen_result["metrics"],
+                })
+            
+            except Exception as e:
+                results.append({
+                    "client": client["folder_name"],
+                    "success": False,
+                    "error": str(e),
+                })
+            
+            progress_bar.progress((i + 1) / len(selected_clients))
+        
+        status_text.empty()
+        progress_bar.empty()
+        
+        # Résultats
+        success_count = sum(1 for r in results if r["success"])
+        st.success(f"✅ Génération terminée : {success_count}/{len(selected_clients)} réussis")
+        
+        # Afficher les résultats
+        for result in results:
+            with st.expander(f"{'✅' if result['success'] else '❌'} {result['client']}", expanded=result["success"]):
+                if result["success"]:
+                    # Outputs
+                    st.markdown("**Outputs générés** :")
+                    outputs = result["outputs"]
+                    st.write(f"- DOCX : `{outputs['generated_docx']}`")
+                    st.write(f"- Debug JSON : `{outputs['debug_json']}`")
+                    st.write(f"- Metrics JSON : `{outputs['metrics_json']}`")
+                    if outputs.get("gold_reference"):
+                        st.write(f"- GOLD référence : `{outputs['gold_reference']}`")
+                    
+                    # Métriques
+                    st.markdown("**Métriques** :")
+                    metrics = result["metrics"]
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Couverture", f"{metrics['coverage_pct']}%")
+                    with col2:
+                        st.metric("Couverture requise", f"{metrics['required_coverage_pct']}%")
+                    with col3:
+                        st.metric("Confiance", f"{metrics['avg_confidence']:.2f}")
+                    with col4:
+                        st.metric("Score qualité", f"{metrics['quality_score']:.2f}")
+                    
+                    # Boutons d'action
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button(f"📄 Ouvrir debug.json", key=f"debug_{result['client']}"):
+                            with open(outputs['debug_json'], 'r', encoding='utf-8') as f:
+                                debug_data = json.load(f)
+                                st.json(debug_data)
+                    
+                    with col2:
+                        if st.button(f"📊 Ouvrir metrics.json", key=f"metrics_{result['client']}"):
+                            with open(outputs['metrics_json'], 'r', encoding='utf-8') as f:
+                                metrics_data = json.load(f)
+                                st.json(metrics_data)
+                else:
+                    st.error(f"Erreur : {result['error']}")
 
 
 if __name__ == "__main__":

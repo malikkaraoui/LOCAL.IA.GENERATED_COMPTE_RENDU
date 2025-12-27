@@ -533,3 +533,52 @@ Contraintes:
 - Garder le scoring/détection déterministes (basés sur titres/headings).
 - Compatible si le dataset est déplacé: root_dir paramétrable + discovery automatique.
 - Garder l’existant (CLI actuelle) fonctionnel.
+
+
+## SUITE : 
+
+OBJECTIF (à respecter strictement)
+1) UI: je sélectionne un dossier d’entraînement (racine contenant des dossiers clients nominatifs, ex “AYNE Michael”, et pas “client_01”).
+2) Le logiciel analyse ce dataset et génère un artefact unique `training_state.json` (versionné) + une vue UI “Voilà ce que je retiens”.
+   - exemples: titres de sections récurrents, mapping titres -> sections RH-Pro canoniques,
+     stats (ex section formation ~10 lignes en moyenne), types de docs, couverture par client.
+3) UI: je sélectionne ensuite un dossier client (un des 580) et je lance “TEST/GENERATE”.
+4) Le logiciel fait: normalise -> index RAG -> génère DOCX RH-Pro -> écrit `debug.json` + `metrics.json` + `validation.json`
+   alignés avec le même modèle de données, même fallback “Non renseigné”, mêmes profils STRICT/STANDARD/DRAFT.
+
+CONTRAINTES
+- Ici “training” != fine-tune ML. C’est apprentissage de patterns + conventions via analyse dataset.
+- Aucune hallucination: no-evidence = no-claim.
+- Ne jamais inventer: si non trouvé => valeur EXACTE “Non renseigné”.
+- JSON contracts STABLES: `training_state.json`, `metrics.json`, `debug.json` doivent suivre un schéma versionné (schema_version=1.0).
+
+À FAIRE (implémentation)
+A) Créer/compléter module `src/rhpro/dataset_training.py`
+   - input: dataset_root
+   - output: `output/training_state.json`
+   - calcule:
+     - total clients, stats extensions,
+     - détection titres de sections (headings) dans docs,
+     - mapping titres -> sections canoniques RH-Pro,
+     - stats longueurs (avg/p50/p90 lignes) par section (formation etc.)
+B) Intégrer dans Streamlit une page “Training & Test”
+   - Tab 1: TRAIN
+     - choisir dossier
+     - lancer analyse
+     - afficher résumé + bouton télécharger training_state.json
+   - Tab 2: TEST
+     - choisir dossier client
+     - charger training_state.json (dernier run ou upload)
+     - run pipeline: normalise -> RAG -> DOCX -> validate
+C) Mettre à jour le validator:
+   - doit sortir PASS / PASS_WITH_WARNINGS / FAIL
+   - ne doit pas “échouer parce que deps manquantes” sans explication; deps optionnelles => warnings.
+
+TESTS DoD (anti-régression)
+- `tests/test_training_state_schema.py`:
+  - génère un training_state sur mini dataset
+  - vérifie presence champs exacts + fallback_value
+- `tests/test_end2end_one_client.py`:
+  - mini dossier client -> normalise -> index (mock) -> generate -> validate
+  - vérifie fichiers: generated.docx + debug.json + metrics.json + validation.json
+  - vérifie cohérence: si status GO => coverage/quality >= seuils profil

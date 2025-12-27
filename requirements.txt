@@ -12,3 +12,10 @@ lxml>=4.9.0
 
 ## Legacy (interface Streamlit) — conservée si besoin
 streamlit==1.38.0
+
+## Training UI - RAG & LLM
+llama-index>=0.10.0
+llama-index-embeddings-openai>=0.1.0
+llama-index-llms-openai>=0.1.0
+pandas>=2.0.0
+sentence-transformers>=2.2.0

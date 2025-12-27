@@ -1,0 +1,234 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "training_state",
+  "created_at": "2025-12-27T20:29:44.619061",
+  "run_id": "train_20251227202944_d65b",
+  "dataset": {
+    "root_path": "/Users/malik/Documents/Espace de travail/SCRIPT.IA/CLIENTS",
+    "mode": "folder_of_clients",
+    "total_clients_scanned": 1,
+    "clients_detected": 1,
+    "naming_convention": "LASTNAME Firstname (freeform)",
+    "allowed_extensions": [
+      ".pdf",
+      ".docx",
+      ".txt",
+      ".doc",
+      ".msg"
+    ],
+    "ignored_paths": [
+      ".DS_Store",
+      "__MACOSX"
+    ],
+    "scan_warnings": []
+  },
+  "conventions": {
+    "fallback_value": "Non renseigné",
+    "strict_mode_default": true,
+    "max_lines_defaults": {
+      "plan_action": 0,
+      "objectifs": 4,
+      "formation": 1,
+      "situation_professionnelle": 1,
+      "competences": 1,
+      "pistes_metiers": 1,
+      "synthese_conclusion": 0,
+      "profession": 4,
+      "ressources_points_appui": 4,
+      "ressources_points_vigilance": 4
+    }
+  },
+  "learned_patterns": {
+    "section_title_map": {
+      "IDENTITE": "identity",
+      "ETAT CIVIL": "identity",
+      "INFORMATIONS PERSONNELLES": "identity",
+      "DONNEES PERSONNELLES": "identity",
+      "SITUATION PROFESSIONNELLE": "situation_professionnelle",
+      "PARCOURS PROFESSIONNEL": "situation_professionnelle",
+      "EXPERIENCE PROFESSIONNELLE": "situation_professionnelle",
+      "EXPERIENCES": "situation_professionnelle",
+      "PARCOURS": "situation_professionnelle",
+      "FORMATION": "formation",
+      "PARCOURS FORMATION": "formation",
+      "DIPLOMES": "formation",
+      "CERTIFICATIONS": "formation",
+      "CURSUS": "formation",
+      "COMPETENCES": "competences",
+      "COMPETENCES TECHNIQUES": "competences",
+      "SAVOIR FAIRE": "competences",
+      "APTITUDES": "competences",
+      "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
+      "POINTS D APPUI": "ressources_points_appui",
+      "FORCES": "ressources_points_appui",
+      "ATOUTS": "ressources_points_appui",
+      "RESSOURCES COMPORTEMENTALES POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "AXES DE VIGILANCE": "ressources_points_vigilance",
+      "VIGILANCES": "ressources_points_vigilance",
+      "MOTIVATIONS": "motivations_valeurs",
+      "VALEURS": "motivations_valeurs",
+      "INTERETS": "motivations_valeurs",
+      "CENTRES D INTERET": "motivations_valeurs",
+      "CONTRAINTES": "contraintes_freins",
+      "FREINS": "contraintes_freins",
+      "LIMITES": "contraintes_freins",
+      "SANTE": "contraintes_freins",
+      "OBJECTIFS": "objectifs",
+      "OBJECTIF": "objectifs",
+      "PROJET": "objectifs",
+      "PROJET PROFESSIONNEL": "objectifs",
+      "PISTES": "pistes_metiers",
+      "PISTES METIERS": "pistes_metiers",
+      "ORIENTATION": "pistes_metiers",
+      "PISTES D ORIENTATION": "pistes_metiers",
+      "PLAN D ACTION": "plan_action",
+      "ACTIONS": "plan_action",
+      "PLANIFICATION": "plan_action",
+      "ETAPES": "plan_action",
+      "SYNTHESE": "synthese_conclusion",
+      "CONCLUSION": "synthese_conclusion",
+      "BILAN": "synthese_conclusion",
+      "RECAPITULATIF": "synthese_conclusion",
+      "HORAIRES SELON PLANNING": "plan_action",
+      "OBJECTIFS DE STAGE": "objectifs",
+      "PROFESSION & FORMATION": "formation",
+      "{{FORMATION}}": "formation",
+      "COMPETENCES PROFESSIONNELLES & SOCIALES": "situation_professionnelle",
+      "{{COMPETENCES_SOCIALES}}": "competences",
+      "{{COMPETENCES_PRO}}": "competences",
+      "ORIENTATION & FORMATION": "formation",
+      "{{ORIENTATION}}": "pistes_metiers",
+      "{{CONCLUSION}}": "synthese_conclusion"
+    },
+    "sections_stats": {
+      "plan_action": {
+        "title_variants_top": [
+          "HORAIRES SELON PLANNING"
+        ],
+        "avg_lines": 0,
+        "p50_lines": 0,
+        "p90_lines": 0,
+        "clients_with_section": 1,
+        "coverage": 1.0
+      },
+      "objectifs": {
+        "title_variants_top": [
+          "OBJECTIFS DE STAGE"
+        ],
+        "avg_lines": 4,
+        "p50_lines": 4,
+        "p90_lines": 4,
+        "clients_with_section": 1,
+        "coverage": 1.0
+      },
+      "formation": {
+        "title_variants_top": [
+          "PROFESSION & FORMATION",
+          "{{FORMATION}}",
+          "ORIENTATION & FORMATION"
+        ],
+        "avg_lines": 0.7,
+        "p50_lines": 1,
+        "p90_lines": 1,
+        "clients_with_section": 3,
+        "coverage": 3.0
+      },
+      "situation_professionnelle": {
+        "title_variants_top": [
+          "COMPETENCES PROFESSIONNELLES & SOCIALES"
+        ],
+        "avg_lines": 1,
+        "p50_lines": 1,
+        "p90_lines": 1,
+        "clients_with_section": 1,
+        "coverage": 1.0
+      },
+      "competences": {
+        "title_variants_top": [
+          "{{COMPETENCES_SOCIALES}}",
+          "{{COMPETENCES_PRO}}"
+        ],
+        "avg_lines": 0.5,
+        "p50_lines": 0.5,
+        "p90_lines": 1,
+        "clients_with_section": 2,
+        "coverage": 2.0
+      },
+      "pistes_metiers": {
+        "title_variants_top": [
+          "{{ORIENTATION}}"
+        ],
+        "avg_lines": 1,
+        "p50_lines": 1,
+        "p90_lines": 1,
+        "clients_with_section": 1,
+        "coverage": 1.0
+      },
+      "synthese_conclusion": {
+        "title_variants_top": [
+          "CONCLUSION",
+          "{{CONCLUSION}}"
+        ],
+        "avg_lines": 0,
+        "p50_lines": 0.0,
+        "p90_lines": 0,
+        "clients_with_section": 2,
+        "coverage": 2.0
+      }
+    },
+    "doc_types_stats": {
+      ".msg": {
+        "count": 2,
+        "clients_coverage": 1.0
+      },
+      ".pdf": {
+        "count": 5,
+        "clients_coverage": 1.0
+      },
+      ".docx": {
+        "count": 5,
+        "clients_coverage": 1.0
+      },
+      ".txt": {
+        "count": 2,
+        "clients_coverage": 1.0
+      }
+    }
+  },
+  "validation_profiles": {
+    "STRICT": {
+      "required_coverage_min": 85.0,
+      "weighted_coverage_min": 70.0,
+      "quality_score_min": 0.75,
+      "avg_confidence_min": 0.7,
+      "sources_count_min": 1,
+      "critical_fields": [
+        "nom",
+        "prenom"
+      ],
+      "profession_or_formation_required": true
+    },
+    "STANDARD": {
+      "required_coverage_min": 75.0,
+      "weighted_coverage_min": 60.0,
+      "quality_score_min": 0.65,
+      "avg_confidence_min": 0.6,
+      "sources_count_min": 1,
+      "critical_fields": [
+        "nom",
+        "prenom"
+      ],
+      "profession_or_formation_required": true
+    },
+    "DRAFT": {
+      "required_coverage_min": 0.0,
+      "weighted_coverage_min": 0.0,
+      "quality_score_min": 0.0,
+      "avg_confidence_min": 0.0,
+      "sources_count_min": 0,
+      "critical_fields": [],
+      "profession_or_formation_required": false
+    }
+  }
+}

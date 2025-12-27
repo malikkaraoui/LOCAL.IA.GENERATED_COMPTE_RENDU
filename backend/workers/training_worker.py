@@ -41,7 +41,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -51,7 +51,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -61,7 +61,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -71,7 +71,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -81,7 +81,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -91,7 +91,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines": 1,
                     "allowed_source": ["docs", "forms"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             # Champs moyens (3-4 lignes)
@@ -103,7 +103,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines_max": 4,
                     "allowed_source": ["docs", "analysis"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -114,7 +114,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines_max": 4,
                     "allowed_source": ["docs", "analysis"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             # Champs longs (documents)
@@ -127,7 +127,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines_max": 30,
                     "allowed_source": ["documents"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             },
             {
@@ -139,7 +139,7 @@ def _generate_minimal_ruleset(batch_name: str) -> Dict[str, Any]:
                     "lines_max": 30,
                     "allowed_source": ["documents"],
                     "forbidden": ["invent_if_missing"],
-                    "fallback": "NOT_FOUND"
+                    "fallback": "Non renseigné"
                 }
             }
         ]

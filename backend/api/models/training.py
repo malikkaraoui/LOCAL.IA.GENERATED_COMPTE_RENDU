@@ -36,5 +36,4 @@ class TrainingStatusResponse(BaseModel):
     status: str
     message: Optional[str] = None
     progress: Optional[int] = None
-    artifact_path: Optional[str] = None  # Step3: Chemin relatif vers ruleset.json
     artifact_path: Optional[str] = None  # Chemin relatif vers ruleset.json (si done)

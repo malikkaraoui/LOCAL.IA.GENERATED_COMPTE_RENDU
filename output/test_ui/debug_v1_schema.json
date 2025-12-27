@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "debug",
+  "run_id": "run_2025-12-27T21:26:03Z_test1234",
+  "created_at": "2025-12-27T21:26:03Z",
+  "conventions": {
+    "language": "fr",
+    "fallback_value": "Non renseigné",
+    "strict_mode_default": true
+  },
+  "inputs": {
+    "dataset_root": null,
+    "client_root": "/path/to/AYNE Michael",
+    "template_docx": "/path/to/template.docx"
+  },
+  "index": {
+    "sources_count": 12,
+    "documents_loaded": 12,
+    "chunks_created": 220,
+    "sources": [
+      {
+        "source_id": "CV.pdf",
+        "path": "/path/to/sources/CV.pdf",
+        "type": ".pdf",
+        "loaded": true,
+        "error": null
+      },
+      {
+        "source_id": "Rapport_final.docx",
+        "path": "/path/to/sources/Rapport_final.docx",
+        "type": ".docx",
+        "loaded": true,
+        "error": null
+      }
+    ]
+  },
+  "fields": {
+    "nom": {
+      "value": "AYNE",
+      "confidence": 0.92,
+      "citations": [
+        {
+          "source_id": "CV.pdf",
+          "snippet": "...AYNE Michael, né le 15/03/1985...",
+          "score": 0.81
+        }
+      ],
+      "warnings": []
+    },
+    "prenom": {
+      "value": "Michael",
+      "confidence": 0.91,
+      "citations": [
+        {
+          "source_id": "CV.pdf",
+          "snippet": "...AYNE Michael, né le...",
+          "score": 0.8
+        }
+      ],
+      "warnings": []
+    },
+    "formation": {
+      "value": "Non renseigné",
+      "confidence": 0.2,
+      "citations": [],
+      "warnings": [
+        "no_evidence"
+      ]
+    },
+    "situation_professionnelle": {
+      "value": "Au chômage depuis janvier 2024",
+      "confidence": 0.45,
+      "citations": [
+        {
+          "source_id": "Rapport_final.docx",
+          "snippet": "...M. AYNE est actuellement sans emploi...",
+          "score": 0.55
+        }
+      ],
+      "warnings": [
+        "low_confidence"
+      ]
+    }
+  }
+}

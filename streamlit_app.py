@@ -22,10 +22,21 @@ with st.sidebar:
     st.title("🧭 Navigation")
     page = st.radio(
         "Choisir une page",
-        options=["Générateur", "Batch Parser RH-Pro", "Rapport individuel", "🎓 Entraînement"],
+        options=[
+            "Générateur",
+            "Batch Parser RH-Pro",
+            "📊 Validation Batch",
+            "Rapport individuel",
+            "🎓 Entraînement",
+            "🎓 Training & Test"
+        ],
         index=0 if st.session_state.current_page == "Générateur" else (
             1 if st.session_state.current_page == "Batch Parser RH-Pro" else (
-                2 if st.session_state.current_page == "Rapport individuel" else 3
+                2 if st.session_state.current_page == "📊 Validation Batch" else (
+                    3 if st.session_state.current_page == "Rapport individuel" else (
+                        4 if st.session_state.current_page == "🎓 Entraînement" else 5
+                    )
+                )
             )
         )
     )
@@ -35,6 +46,12 @@ with st.sidebar:
 if st.session_state.current_page == "Batch Parser RH-Pro":
     from pages_streamlit.batch_parser import show_batch_parser_page
     show_batch_parser_page()
+    st.stop()
+
+# Si Validation Batch, afficher la page de validation
+if st.session_state.current_page == "📊 Validation Batch":
+    from pages_streamlit.batch_validation import show_batch_validation_page
+    show_batch_validation_page()
     st.stop()
 
 # Si Rapport individuel, afficher la page de recherche client
@@ -47,6 +64,12 @@ if st.session_state.current_page == "Rapport individuel":
 if st.session_state.current_page == "🎓 Entraînement":
     from pages_streamlit.training import show_training_page
     show_training_page()
+    st.stop()
+
+# Si Training & Test, afficher la nouvelle page
+if st.session_state.current_page == "🎓 Training & Test":
+    from pages_streamlit.training_and_test import show_training_and_test_page
+    show_training_and_test_page()
     st.stop()
 
 # Sinon, continuer avec la page principale (Générateur)

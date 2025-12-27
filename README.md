@@ -6,7 +6,31 @@
 ![Version](https://img.shields.io/badge/Version-2.0.1-0A0A0A)
 ![Status](https://img.shields.io/badge/LLM-Ollama-brightgreen)
 
-Système complet de génération automatique de rapports pour clients, utilisant l'IA locale (Ollama) pour créer des documents professionnels au format DOCX.
+Système complet de génération automatique de rapports pour clients, utilisant l'IA locale (Ollama) ou OpenAI pour créer des documents professionnels au format DOCX.
+
+## ✨ Nouveauté : UI Training RH-Pro
+
+**Interface d'entraînement pipeline avec RAG** pour générer des comptes-rendus RH-Pro automatiquement.
+
+### Fonctionnalités
+
+- 📦 **Scan Batch** : Analyse automatique de multiples clients
+- 📊 **Table Interactive** : Sélection multiple avec scoring de compatibilité
+- 🔍 **Analyse Détaillée** : 4 sections (trouvé/exploitable/manquant/GOLD)
+- 🤖 **RAG + LLM** : Extraction avec garde-fous (interdiction d'inventer)
+- 📝 **DOCX + Outputs** : generated.docx + debug.json + metrics.json
+
+### Démarrage rapide
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Puis : **🎓 Entraînement Pipeline RH-Pro** → **📦 Batch**
+
+[➡️ Voir TRAINING_QUICKSTART.md](TRAINING_QUICKSTART.md) pour guide complet
+
+---
 
 ## 🎯 Démarrage Rapide - UN CLIC
 
