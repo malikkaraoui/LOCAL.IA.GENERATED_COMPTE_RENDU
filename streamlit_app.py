@@ -13,6 +13,28 @@ from rapport_orchestrator import PipelineConfig, RapportOrchestrator
 
 st.set_page_config(page_title="Rapports assistés", layout="wide")
 
+# Navigation entre pages
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "Générateur"
+
+# Sidebar pour navigation
+with st.sidebar:
+    st.title("🧭 Navigation")
+    page = st.radio(
+        "Choisir une page",
+        options=["Générateur", "Batch Parser RH-Pro"],
+        index=0 if st.session_state.current_page == "Générateur" else 1
+    )
+    st.session_state.current_page = page
+
+# Si Batch Parser, afficher la page dédiée
+if st.session_state.current_page == "Batch Parser RH-Pro":
+    from pages_streamlit.batch_parser import show_batch_parser_page
+    show_batch_parser_page()
+    st.stop()
+
+# Sinon, continuer avec la page principale (Générateur)
+
 if "history" not in st.session_state:
     st.session_state.history = []
 if "last_logs" not in st.session_state:

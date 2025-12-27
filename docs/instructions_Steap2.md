@@ -417,3 +417,119 @@ Créer/mettre à jour un doc court : docs/PRODUCTION_GATE_PROFILES.md
 - tableau profils / seuils / sections requises
 - règles de détection
 - exemples d’output (profil choisi + raisons)
+
+## SAMEDI 27 DECEMBRE 2025 - ✅ TERMINÉ
+
+Objectif: ajouter un mode "Batch samples" + une sélection par UI (browse) pour parser/valider plusieurs dossiers clients.
+
+### ✅ Implémentation complète
+
+**A) Batch runner** ✅
+- `src/rhpro/batch_runner.py` créé avec :
+  - `discover_sources(root_dir)` : scan récursif → trouve tous dossiers avec `source.docx`
+  - `run_batch()` : exécute pipeline sur N dossiers + agrège résultats
+  - `generate_batch_report_markdown()` : génère rapport lisible
+- Outputs dans `output_dir/` : `batch_report.json`, `batch_report.md`, `client_XX/normalized.json`
+- Option `write_normalized_in_source` pour écrire dans dossiers sources
+
+**B) Tests automatisés** ✅
+- `tests/test_batch_samples.py` : 11 tests d'intégration
+  - Découverte, parsing batch, rapports JSON/MD
+  - Validation golden samples (client_01, client_02)
+  - Override profil, write_in_source
+  - **Tous les tests passent** : `11 passed`
+
+**C) Browse/UI** ✅
+- `pages_streamlit/batch_parser.py` : page Streamlit dédiée
+  - Browse dialog (tkinter.filedialog)
+  - Fallback : saisie manuelle + dropdown
+  - Multiselect dossiers découverts
+  - Bouton "Lancer batch"
+  - Tableau résultats interactif (pandas DataFrame)
+  - Téléchargement `batch_report.json` / `batch_report.md`
+- Navigation ajoutée dans `streamlit_app.py` (sidebar radio)
+
+**CLI** ✅
+- `demo_batch.py` créé avec options :
+  - `--list-only` : liste dossiers découverts
+  - `--output` : dossier de sortie
+  - `--profile` : force profil (stage/bilan_complet/placement_suivi)
+  - `--write-in-source` : écrit `source_normalized.json` dans dossiers clients
+  - Affichage résumé formaté avec emojis (✅/⚠️/❌)
+
+**Documentation** ✅
+- `docs/BATCH_PARSER_GUIDE.md` : guide complet (architecture, API, troubleshooting)
+- `BATCH_QUICKSTART.md` : démarrage rapide CLI + UI
+
+**Validation** ✅
+- CLI testé : découverte, parsing, override profil → OK
+- Tests pytest : 11/11 passed
+- Existant préservé : `demo_rhpro_parse.py` fonctionne toujours
+- Backward compatible : API `parse_bilan_docx_to_normalized()` inchangée
+
+### Exemple d'utilisation
+
+```bash
+# CLI
+python demo_batch.py data/samples --output out/batch --profile stage
+
+# Tests
+pytest tests/test_batch_samples.py -v
+
+# UI
+streamlit run streamlit_app.py  # → Sidebar "Batch Parser RH-Pro"
+```
+
+### Résultats
+
+```
+Total traité       : 2
+Succès             : 2
+Production Gate GO : 2
+Coverage moyen     : 87.5%
+
+✅ client_01  | stage  | GO   | 75.0%
+✅ client_02  | stage  | GO   | 100.0%
+```
+
+---
+## SAMEDI 27 DECEMBRE 2025 - 
+
+Objectif: ajouter un mode “Batch samples” + une sélection par UI (browse) pour parser/valider plusieurs dossiers clients.
+
+Contexte:
+- Les docs de test sont rangés comme: data/samples/client_01..client_05/
+- Chaque dossier contient au minimum un source.docx (et parfois source_normalized.json pour les golden samples client_01 et client_02).
+- On veut exécuter le pipeline complet (parse -> normalize -> signals -> choix profil -> production gate) sur N dossiers et produire un rapport agrégé.
+
+Tâches demandées:
+
+A) Batch runner (sans saisie clavier de chemin)
+- Implémenter une fonction “discover_sources(root_dir)” qui scanne récursivement root_dir et retourne tous les dossiers contenant “source.docx”.
+- Ajouter un runner batch (script ou fonction réutilisable) qui:
+  - boucle sur chaque dossier découvert
+  - exécute la pipeline existante
+  - écrit les outputs dans le dossier (ex: source_normalized.json si absent) ou dans out/batch/
+  - agrège un report global: [{client_dir, profile, gate_status, required_coverage_ratio, missing_required_sections, unknown_titles_count, placeholders_count, reasons, warnings}]
+  - exporte aussi un résumé lisible (markdown) + un JSON machine-readable.
+
+B) Tests automatisés sur les 5 dossiers existants
+- Ajouter un test pytest d’intégration qui lance le batch sur data/samples/ et vérifie:
+  - pas d’exception sur client_01..client_05
+  - pour client_01 et client_02 (golden): production gate = GO et missing_required_sections=0 (ou thresholds attendus)
+  - pour client_03..05: au minimum “report généré” + profil choisi non vide + status ∈ {GO, NO_GO}
+- Le test ne doit pas dépendre d’un chemin absolu; utiliser Path(__file__) / racine repo.
+
+C) “Browse”/sélection dossiers via UI
+- Dans streamlit_app.py (ou UI existante), ajouter une page “Batch parser”:
+  - un bouton “Choisir un dossier racine” (browse) si possible en local (tkinter.filedialog.askdirectory)
+  - sinon fallback: dropdown des racines connues + bouton “Rafraîchir”
+  - une liste/multiselect des dossiers clients découverts
+  - un bouton “Lancer batch”
+  - afficher le tableau des résultats + possibilité de télécharger report.json / report.md
+
+Contraintes:
+- Ne pas ajouter de dépendances lourdes.
+- Garder le scoring/détection déterministes (basés sur titres/headings).
+- Compatible si le dataset est déplacé: root_dir paramétrable + discovery automatique.
+- Garder l’existant (CLI actuelle) fonctionnel.
