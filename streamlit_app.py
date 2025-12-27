@@ -22,8 +22,12 @@ with st.sidebar:
     st.title("🧭 Navigation")
     page = st.radio(
         "Choisir une page",
-        options=["Générateur", "Batch Parser RH-Pro", "Rapport individuel"],
-        index=0 if st.session_state.current_page == "Générateur" else (1 if st.session_state.current_page == "Batch Parser RH-Pro" else 2)
+        options=["Générateur", "Batch Parser RH-Pro", "Rapport individuel", "🎓 Entraînement"],
+        index=0 if st.session_state.current_page == "Générateur" else (
+            1 if st.session_state.current_page == "Batch Parser RH-Pro" else (
+                2 if st.session_state.current_page == "Rapport individuel" else 3
+            )
+        )
     )
     st.session_state.current_page = page
 
@@ -37,6 +41,12 @@ if st.session_state.current_page == "Batch Parser RH-Pro":
 if st.session_state.current_page == "Rapport individuel":
     from pages_streamlit.client_report_generator import show_client_report_generator_page
     show_client_report_generator_page()
+    st.stop()
+
+# Si Entraînement, afficher la page training
+if st.session_state.current_page == "🎓 Entraînement":
+    from pages_streamlit.training import show_training_page
+    show_training_page()
     st.stop()
 
 # Sinon, continuer avec la page principale (Générateur)

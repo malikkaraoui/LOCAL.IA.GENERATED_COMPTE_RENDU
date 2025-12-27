@@ -2,7 +2,10 @@
 
 import json
 from uuid import uuid4
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Body
+from pydantic import BaseModel
 from redis import Redis
 from rq import Queue
 
@@ -88,3 +91,162 @@ def training_status(job_id: str):
         progress=job.get("progress"),
         artifact_path=job.get("artifact_path"),
     )
+
+
+# ============================================================================
+# NOUVEAUX ENDPOINTS : Analyse et normalisation de clients
+# ============================================================================
+
+class ClientAnalyzeRequest(BaseModel):
+    """Requête d'analyse d'un dossier client."""
+    client_folder_path: str
+
+
+class ClientNormalizeRequest(BaseModel):
+    """Requête de normalisation d'un client."""
+    client_folder_path: str
+    batch_name: str
+    sandbox_root: str = "./sandbox"
+    create_normalized_alias: bool = True
+
+
+class BatchNormalizeRequest(BaseModel):
+    """Requête de normalisation batch."""
+    dataset_root: str
+    client_names: list[str]
+    batch_name: str
+    sandbox_root: str = "./sandbox"
+    continue_on_error: bool = True
+
+
+@router.post("/analyze-client")
+async def analyze_client(req: ClientAnalyzeRequest):
+    """
+    Analyse un dossier client pour détecter GOLD et sources RAG.
+    
+    Args:
+        req: Requête avec client_folder_path
+        
+    Returns:
+        Résultat du scan (gold, rag_sources, warnings, pipeline_ready)
+        
+    Raises:
+        HTTPException 400 si le dossier n'existe pas ou est invalide
+    """
+    try:
+        # Import local pour éviter dépendances circulaires
+        from src.rhpro.client_scanner import scan_client_folder
+        
+        client_path = Path(req.client_folder_path)
+        
+        if not client_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dossier client introuvable : {req.client_folder_path}"
+            )
+        
+        if not client_path.is_dir():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Pas un dossier : {req.client_folder_path}"
+            )
+        
+        # Scanner le dossier
+        scan_result = scan_client_folder(str(client_path))
+        
+        return {
+            "success": True,
+            "scan_result": scan_result,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors du scan : {str(e)}"
+        )
+
+
+@router.post("/normalize-client")
+async def normalize_client(req: ClientNormalizeRequest):
+    """
+    Normalise un client scanné en sandbox.
+    
+    Args:
+        req: Requête avec client_folder_path, batch_name, sandbox_root
+        
+    Returns:
+        Résultat de la normalisation (paths créés, meta)
+        
+    Raises:
+        HTTPException 400 si le client n'est pas pipeline-ready
+    """
+    try:
+        from src.rhpro.client_scanner import scan_client_folder
+        from src.rhpro.client_normalizer import normalize_client_to_sandbox
+        
+        # Scanner d'abord
+        scan_result = scan_client_folder(req.client_folder_path)
+        
+        if not scan_result["pipeline_ready"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Client non pipeline-ready : {', '.join(scan_result['warnings'])}"
+            )
+        
+        # Normaliser
+        norm_result = normalize_client_to_sandbox(
+            scan_result,
+            batch_name=req.batch_name,
+            sandbox_root=req.sandbox_root,
+            create_normalized_alias=req.create_normalized_alias,
+        )
+        
+        return {
+            "success": True,
+            "normalization_result": norm_result,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors de la normalisation : {str(e)}"
+        )
+
+
+@router.post("/normalize-batch")
+async def normalize_batch(req: BatchNormalizeRequest):
+    """
+    Normalise plusieurs clients en batch.
+    
+    Args:
+        req: Requête avec dataset_root, client_names, batch_name
+        
+    Returns:
+        Résultat batch (success count, errors, stats)
+    """
+    try:
+        from src.rhpro.client_normalizer import normalize_batch_to_sandbox
+        
+        batch_result = normalize_batch_to_sandbox(
+            dataset_root=req.dataset_root,
+            client_names=req.client_names,
+            batch_name=req.batch_name,
+            sandbox_root=req.sandbox_root,
+            continue_on_error=req.continue_on_error,
+        )
+        
+        return {
+            "success": True,
+            "batch_result": batch_result,
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur lors du batch : {str(e)}"
+        )
+

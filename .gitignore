@@ -44,3 +44,6 @@ CLIENTS/__pycache__/
 
 # Logs & misc
 *.log
+
+# Sandbox generated data
+sandbox/
