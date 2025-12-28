@@ -136,7 +136,7 @@ SEED_SECTION_TITLE_MAP = {
 
 def is_noise_title(text: str) -> bool:
     """
-    Détecte les titres parasites à ignorer.
+    Détecte les titres parasites à ignorer, incluant PII et libellés de formulaires.
     
     Returns:
         True si le titre est du bruit (à ignorer)
@@ -144,18 +144,47 @@ def is_noise_title(text: str) -> bool:
     if not text or len(text) < 2:
         return True
     
-    # Liste noire explicite
+    # Liste noire explicite (chiffres romains, lettres seules)
     noise_tokens = {'X', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
                     'TS', 'PS', 'S', 'N', 'P', 'R', 'T', 'A', 'B', 'C', 'D', 'E', 'F', 'G'}
     if text in noise_tokens:
         return True
     
-    # Trop court (< 4 caractères)
+    # ✅ Libellés de champs formulaires (V4)
+    form_labels = {
+        'NOM', 'PRENOM', 'PRENOM NOM', 'NOM PRENOM',
+        'AVS', 'N AVS', 'NUMERO AVS', 'NO AVS',
+        'DATE', 'DATES', 'DATE DE NAISSANCE', 'DATE NAISSANCE',
+        'DATES DE LA MESURE', 'PERIODE',
+        'CONSEILLER', 'CONSEILLERE', 'RESPONSABLE',
+        'TELEPHONE', 'TEL', 'MAIL', 'EMAIL', 'ADRESSE',
+        'STAGE', 'STAGE EN QUALITE DE', 'LIEU DE STAGE',
+        'EVALUATION', 'EVALUATION DE STAGE',
+        'ENTREPRISE', 'L ENTREPRISE', 'EMPLOYEUR',
+        'STAGIAIRE', 'LE STAGIAIRE', 'LA STAGIAIRE',
+        'SIGNATURE', 'SIGNATURES',
+        'PARTIES CONCERNEES', 'CONTACT', 'COORDONNEES'
+    }
+    if text in form_labels:
+        return True
+    
+    # ✅ Patterns PII (V4)
+    # AVS suisse : 756.xxxx.xxxx.xx
+    if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
+        return True
+    
+    # Trop de chiffres (>= 6 digits) = probablement données perso
+    digit_count = sum(c.isdigit() for c in text)
+    if digit_count >= 6:
+        return True
+    
+    # Dates : dd/mm/yyyy, dd.mm.yyyy, dd mm yyyy
+    if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
+        return True
+    
+    # Trop court (< 4 caractères) - mais exclusion des vrais mots courts
     if len(text) < 4:
-        # Sauf si c'est un vrai mot court utile
-        useful_short = {'NOM', 'AVS', 'AGE', 'TEL', 'RUE', 'CP', 'LIEU', 'DATE'}
-        if text not in useful_short:
-            return True
+        return True
     
     # Uniquement chiffres
     if text.isdigit():
@@ -368,47 +397,192 @@ def detect_identity_presence(doc) -> bool:
     return matches >= 2
 
 
-def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> Optional[Path]:
+def score_docx_for_training(docx_path: Path, gold_path: Optional[Path] = None) -> tuple[int, List[str]]:
     """
-    Sélectionne le meilleur DOCX pour extraire les sections canoniques.
-    Stratégie: GOLD > heuristique "rapport/bilan" > plus gros fichier.
+    Score un DOCX pour déterminer s'il est adapté à l'extraction de sections (rapport/bilan).
+    
+    Args:
+        docx_path: Path du DOCX à scorer
+        gold_path: Path du GOLD (si existe et est DOCX)
+        
+    Returns:
+        (score, reasons) où score est un int et reasons une liste de justifications
+    """
+    score = 0
+    reasons = []
+    
+    filename = docx_path.stem.lower()
+    
+    # ✅ BONUS FORTS
+    # +100 si c'est le GOLD
+    if gold_path and docx_path == gold_path:
+        score += 100
+        reasons.append("+100 (GOLD)")
+    
+    # +40 si nom contient keywords positifs
+    positive_keywords = ['rapport', 'bilan', 'synthese', 'conclusion', 'orientation', 'final', 'compte_rendu']
+    for kw in positive_keywords:
+        if kw in filename:
+            score += 40
+            reasons.append(f"+40 (keyword: {kw})")
+            break
+    
+    # ❌ MALUS FORTS (formulaires/annexes)
+    negative_keywords = ['stage', 'evaluation', 'lai', 'fiche', 'formulaire', 'annexe', 
+                         'convention', 'engage', 'entreprise', 'contrat', 'demande']
+    for kw in negative_keywords:
+        if kw in filename:
+            score -= 60
+            reasons.append(f"-60 (annexe/formulaire: {kw})")
+            break
+    
+    # Analyser le contenu
+    try:
+        from docx import Document
+        doc = Document(docx_path)
+        
+        # Compter sections canoniques uniques détectées
+        sections_found = set()
+        headings_from_tables = 0
+        total_headings = 0
+        form_headings = 0
+        
+        # Analyser paragraphes uniquement (V4: pas les tables)
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                continue
+            
+            if is_probable_heading(text, para):
+                total_headings += 1
+                canonical = match_title_to_canonical(text)
+                if canonical:
+                    sections_found.add(canonical)
+                
+                # Détecter headings formulaires
+                norm = normalize_title(text)
+                if norm in {'NOM', 'PRENOM', 'N AVS', 'AVS', 'DATE'}:
+                    form_headings += 1
+        
+        # Bonus sections canoniques
+        nb_sections = len(sections_found)
+        if nb_sections > 0:
+            bonus_sections = nb_sections * 10
+            score += bonus_sections
+            reasons.append(f"+{bonus_sections} ({nb_sections} sections canon.)")
+        
+        # Malus si < 2 sections canoniques
+        if nb_sections < 2:
+            score -= 20
+            reasons.append(f"-20 (< 2 sections canon.)")
+        
+        # Malus si headings formulaires
+        if form_headings > 0:
+            malus = min(30, form_headings * 10)
+            score -= malus
+            reasons.append(f"-{malus} ({form_headings} form headings)")
+        
+        # Bonus taille fichier (petit, pas dominant)
+        filesize_mb = docx_path.stat().st_size / (1024 * 1024)
+        bonus_size = min(20, int(filesize_mb * 2))
+        score += bonus_size
+        reasons.append(f"+{bonus_size} (size: {filesize_mb:.1f}MB)")
+        
+    except Exception as e:
+        score -= 50
+        reasons.append(f"-50 (error: {str(e)[:30]})")
+    
+    return score, reasons
+
+
+def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> tuple[Optional[Path], Dict]:
+    """
+    Sélectionne le meilleur DOCX pour extraire les sections canoniques avec scoring V4.
     
     Args:
         client_folder: Dossier client
         scan_result: Résultat du scan
         
     Returns:
-        Path du DOCX à analyser, ou None
+        (best_docx_path, debug_info) où debug_info contient score/reasons/candidates
     """
-    # 1. Si GOLD existe et c'est un DOCX → utiliser
+    debug_info = {
+        "selected_path": None,
+        "selected_score": 0,
+        "selected_reasons": [],
+        "candidates": []
+    }
+    
+    # Identifier le GOLD s'il existe et est un DOCX
+    gold_path = None
     if scan_result.get("gold"):
-        gold_path = Path(scan_result["gold"]["path"])
-        if gold_path.suffix.lower() == ".docx":
-            return gold_path
+        gold_candidate = Path(scan_result["gold"]["path"])
+        if gold_candidate.suffix.lower() == ".docx":
+            gold_path = gold_candidate
     
-    # 2. Fallback: chercher tous les DOCX
-    docx_files = []
-    for ext in [".docx", ".DOCX"]:
-        docx_files.extend(client_folder.rglob(f"*{ext}"))
+    # Collecter tous les DOCX candidats
+    candidates = []
+    for source in scan_result.get("rag_sources", []):
+        path = Path(source["path"])
+        if path.suffix.lower() == ".docx":
+            candidates.append(path)
     
-    if not docx_files:
-        return None
+    if not candidates:
+        return None, debug_info
     
-    # 3. Heuristique: prioriser rapport/bilan/final/synthese
-    priority_keywords = ['rapport', 'bilan', 'final', 'synthese', 'compte_rendu']
-    for docx in docx_files:
-        name_lower = docx.stem.lower()
-        if any(kw in name_lower for kw in priority_keywords):
-            return docx
+    # Scorer chaque candidat
+    scored_candidates = []
+    for docx_path in candidates:
+        score, reasons = score_docx_for_training(docx_path, gold_path)
+        scored_candidates.append({
+            "path": str(docx_path),
+            "name": docx_path.name,
+            "score": score,
+            "reasons": reasons
+        })
     
-    # 4. Sinon: prendre le plus gros
-    return max(docx_files, key=lambda p: p.stat().st_size)
+    # Trier par score décroissant
+    scored_candidates.sort(key=lambda x: x["score"], reverse=True)
+    debug_info["candidates"] = scored_candidates
+    
+    # Sélectionner le meilleur
+    if scored_candidates:
+        best = scored_candidates[0]
+        if best["score"] >= 30:  # Seuil minimum
+            debug_info["selected_path"] = best["path"]
+            debug_info["selected_score"] = best["score"]
+            debug_info["selected_reasons"] = best["reasons"]
+            return Path(best["path"]), debug_info
+        else:
+            # Score trop bas: fallback sur analyse de contenu des 2 meilleurs
+            top2 = scored_candidates[:2]
+            best_by_sections = None
+            max_sections = 0
+            
+            for cand in top2:
+                try:
+                    sections = extract_sections_from_docx(Path(cand["path"]))
+                    canonical_count = len(set(s["canonical"] for s in sections if s["canonical"]))
+                    if canonical_count > max_sections:
+                        max_sections = canonical_count
+                        best_by_sections = cand
+                except:
+                    pass
+            
+            if best_by_sections:
+                debug_info["selected_path"] = best_by_sections["path"]
+                debug_info["selected_score"] = best_by_sections["score"]
+                debug_info["selected_reasons"] = best_by_sections["reasons"] + [f"(fallback: {max_sections} sections)"]
+                return Path(best_by_sections["path"]), debug_info
+    
+    return None, debug_info
 
 
 def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     """
     Extrait les sections d'un fichier DOCX (titres + contenu).
-    Robuste : lit paragraphes + tables, détecte styles FR/EN, filtre anti-bruit.
+    V4: Lit UNIQUEMENT les paragraphes (pas les tables comme titres).
+    Tables utilisées uniquement pour detect_identity_presence.
     
     Returns:
         Liste de {title: str, canonical: str|None, lines: int, content_preview: str}
@@ -419,41 +593,29 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     except Exception:
         return []
     
-    # Collecter tous les paragraphes (body + tables)
-    all_paras = []
-    
-    # 1. Paragraphes du body
-    all_paras.extend([(p, p) for p in doc.paragraphs])  # (para_obj, para_obj) pour compatibilité
-    
-    # 2. Paragraphes dans les tables (pour identité, etc.)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    all_paras.append((p, p))
-    
+    # ✅ V4: Lire UNIQUEMENT les paragraphes du body (pas les tables)
     sections = []
     current_section = None
     current_lines = 0
     
-    # ✅ Auto-détection IDENTITY
+    # ✅ Auto-détection IDENTITY (utilise tables pour keywords)
     has_identity = detect_identity_presence(doc)
     if has_identity:
-        # Injecter une section pseudo-identité
         sections.append({
             "title": "IDENTITE (AUTO)",
             "canonical": "identity",
-            "lines": 1,  # Estimation minimale
+            "lines": 1,
             "content_preview": ""
         })
     
-    for para_obj, _ in all_paras:
+    # Analyser uniquement les paragraphes du body
+    for para_obj in doc.paragraphs:
         text = para_obj.text.strip()
         
         if not text:
             continue
         
-        # ✅ Utiliser la nouvelle fonction is_probable_heading avec filtres anti-bruit
+        # ✅ Utiliser is_probable_heading avec filtres anti-bruit V4
         is_heading = is_probable_heading(text, para_obj)
         
         if is_heading:
@@ -684,14 +846,30 @@ def analyze_dataset(
                 }
                 gold_strategies[scan_result["gold"]["strategy"]] += 1
             
-            # ✅ Extraire sections depuis le MEILLEUR DOCX (GOLD ou fallback)
+            # ✅ V4: Extraire sections depuis le MEILLEUR DOCX avec scoring
             client_sections = []
-            best_docx = select_best_docx_for_sections(client_folder, scan_result)
+            docx_selection_debug = {}
+            best_docx, docx_debug = select_best_docx_for_sections(client_folder, scan_result)
+            docx_selection_debug = {
+                "client": client_folder.name,
+                "selected_docx": docx_debug.get("selected_path"),
+                "score": docx_debug.get("selected_score", 0),
+                "reasons": docx_debug.get("selected_reasons", []),
+                "candidates": docx_debug.get("candidates", [])
+            }
+            
             if best_docx and best_docx.exists():
                 try:
                     client_sections = extract_sections_from_docx(best_docx)
-                except Exception:
-                    pass
+                    docx_selection_debug["sections_found"] = len(client_sections)
+                    docx_selection_debug["canonical_sections"] = len(set(s["canonical"] for s in client_sections if s["canonical"]))
+                except Exception as e:
+                    docx_selection_debug["error"] = str(e)
+            
+            # Sauvegarder debug dans les résultats
+            if "docx_selections" not in locals():
+                docx_selections = []
+            docx_selections.append(docx_selection_debug)
             
             # Collecter titres et sections PAR CLIENT
             client_sections_found = set()
