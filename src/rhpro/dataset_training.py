@@ -1713,11 +1713,18 @@ def export_training_artifacts(
         json.dump(training_state, f, indent=2, ensure_ascii=False)
     paths["training_state"] = str(state_path)
     
+    # 5. artifacts/unknown_titles.csv (nouveau - scalabilité ruleset)
+    csv_path = _export_unknown_titles_csv(result, out_path.parent.parent / "artifacts")
+    if csv_path:
+        paths["unknown_titles_csv"] = csv_path
+    
     print(f"\n✅ Artefacts exportés vers : {out_path}")
     print(f"   📄 Manifest : {manifest_path.name}")
     print(f"   📊 Stats : {stats_path.name}")
     print(f"   📝 Rapport : {report_path.name}")
     print(f"   🎯 Training state : {state_path.name}")
+    if csv_path:
+        print(f"   📊 Unknown titles CSV : {Path(csv_path).relative_to(out_path.parent.parent)}")
     
     return paths
 
@@ -1759,6 +1766,166 @@ def _percentile(data: List[float], p: int) -> float:
     sorted_data = sorted(data)
     index = int(len(sorted_data) * p / 100)
     return sorted_data[min(index, len(sorted_data) - 1)]
+
+
+def _detect_common_structures(clients: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Détecte les structures de dossiers communes."""
+    folder_patterns = Counter()
+    
+    for client in clients:
+        if "folder_path" in client:
+            # Pattern basé sur le nom de dossier
+            folder_name = Path(client["folder_path"]).name
+            folder_patterns[folder_name] += 1
+    
+    return {
+        "top_patterns": dict(folder_patterns.most_common(5)),
+        "total_patterns": len(folder_patterns),
+    }
+
+
+def _export_unknown_titles_csv(
+    result: DatasetTrainingResult,
+    artifacts_dir: Path
+) -> Optional[str]:
+    """
+    Exporte unknown_titles vers CSV pour scalabilité ruleset.
+    
+    Format CSV :
+    - title_raw : Titre original (non normalisé, pour lisibilité)
+    - title_norm : Titre normalisé (clé unique)
+    - count : Nombre d'occurrences
+    - suggested_action : MAP_TO_SECTION | MAP_TO_TESTS | SUBHEADING_POLICY | IGNORE
+    - suggested_target : Section cible suggérée (ou vide)
+    - notes : Commentaires/contexte
+    
+    Args:
+        result: Résultat training
+        artifacts_dir: Dossier artifacts/
+        
+    Returns:
+        Chemin du CSV ou None si pas d'unknown_titles
+    """
+    import csv
+    
+    # Récupérer unknown_titles depuis patterns
+    unknown_top = result.patterns.get("unknown_titles_top", {})
+    if not unknown_top:
+        return None
+    
+    # Créer dossier artifacts si nécessaire
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Timestamp pour versioning
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = artifacts_dir / f"unknown_titles_{timestamp}.csv"
+    
+    # Préparer rows triés par count décroissant
+    rows = []
+    for title_norm, count in sorted(unknown_top.items(), key=lambda x: x[1], reverse=True):
+        # Heuristiques de suggestion
+        suggested_action, suggested_target, notes = _suggest_title_action(title_norm, count)
+        
+        # Title raw = title_norm (on n'a pas l'original, mais on pourrait le tracker)
+        # Pour l'instant, utiliser title_norm
+        title_raw = title_norm  # TODO: stocker original dans unknown_titles si besoin
+        
+        rows.append({
+            "title_raw": title_raw,
+            "title_norm": title_norm,
+            "count": count,
+            "suggested_action": suggested_action,
+            "suggested_target": suggested_target,
+            "notes": notes,
+        })
+    
+    # Écrire CSV
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        fieldnames = ["title_raw", "title_norm", "count", "suggested_action", "suggested_target", "notes"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    
+    return str(csv_path)
+
+
+def _suggest_title_action(title_norm: str, count: int) -> tuple[str, str, str]:
+    """
+    Suggère une action pour un unknown_title.
+    
+    Returns:
+        (action, target, notes)
+        action ∈ {MAP_TO_SECTION, MAP_TO_TESTS, SUBHEADING_POLICY, IGNORE}
+    """
+    # Règle 1 : count = 1 → IGNORE (sauf si looks like section canonique)
+    if count == 1:
+        # Vérifier si ressemble à une section canonique (heuristique simple)
+        canonical_keywords = {
+            "FORMATION", "COMPETENCES", "PARCOURS", "PROJET", "PISTES", 
+            "BILAN", "SYNTHESE", "RECOMMANDATIONS", "FREINS", "ATOUTS"
+        }
+        if any(kw in title_norm for kw in canonical_keywords):
+            return ("MAP_TO_SECTION", "À déterminer", "One-shot mais keywords canoniques détectés")
+        return ("IGNORE", "", "One-shot, pas prioritaire")
+    
+    # Règle 2 : Déjà subheading pattern ? → SUBHEADING_POLICY
+    # (Vérifier si correspondrait à is_subheading si on l'appelait)
+    if _looks_like_subheading(title_norm):
+        return ("SUBHEADING_POLICY", "", f"Pattern subheading détecté, améliorer règles (count={count})")
+    
+    # Règle 3 : Keywords tests/évaluations → MAP_TO_TESTS
+    test_keywords = {
+        "TEST", "EVALUATION", "FRANCAIS", "WORD", "EXCEL", "POWERPOINT", 
+        "OUTLOOK", "POSITIONNEMENT", "NIVEAU"
+    }
+    if any(kw in title_norm for kw in test_keywords):
+        return ("MAP_TO_TESTS", "tests", f"Keywords tests détectés (count={count})")
+    
+    # Règle 4 : Keywords sections canoniques → MAP_TO_SECTION
+    section_hints = {
+        "FORMATION": "formation",
+        "COMPETENCES": "competences",
+        "PARCOURS": "parcours_professionnel",
+        "PROJET": "projet_professionnel",
+        "PISTES": "pistes_metiers",
+        "BILAN": "bilan",
+        "SYNTHESE": "synthese",
+        "RECOMMANDATIONS": "recommandations",
+        "FREINS": "freins",
+        "ATOUTS": "atouts",
+    }
+    for kw, target in section_hints.items():
+        if kw in title_norm:
+            return ("MAP_TO_SECTION", target, f"Keyword '{kw}' détecté (count={count})")
+    
+    # Règle 5 : Fréquence élevée (≥3) → MAP_TO_SECTION
+    if count >= 3:
+        return ("MAP_TO_SECTION", "À déterminer", f"Fréquence élevée (count={count}), analyser manuellement")
+    
+    # Fallback : count = 2, pas de pattern évident
+    return ("MAP_TO_SECTION", "À déterminer", f"Fréquence moyenne (count={count}), évaluer au cas par cas")
+
+
+def _looks_like_subheading(title_norm: str) -> bool:
+    """Heuristique rapide pour détecter subheading patterns."""
+    import re
+    
+    # Liste numérotée
+    if re.match(r'^\d+\.', title_norm):
+        return True
+    
+    # Phrase longue (> 8 mots)
+    if len(title_norm.split()) > 8:
+        return True
+    
+    # Étiquette simple (approximation : ≤ 2 mots avant premier espace, reste > 2 mots)
+    # Note: title_norm n'a plus de ':', mais on peut détecter pattern "MOT VALEUR VALEUR..."
+    tokens = title_norm.split()
+    if len(tokens) > 3 and len(tokens[0]) < 15:
+        # Heuristique faible, mais mieux que rien
+        return False  # Pas assez fiable sans ':'
+    
+    return False
 
 
 def _detect_common_structures(clients: List[Dict[str, Any]]) -> Dict[str, Any]:
