@@ -1,7 +1,7 @@
 {
   "schema_version": "training_state_v1.0",
-  "run_id": "BATCH 20_2025-12-28T10:29:28Z_92b63f",
-  "created_at": "2025-12-28T10:29:28Z",
+  "run_id": "BATCH 20_2025-12-28T11:31:04Z_92b63f",
+  "created_at": "2025-12-28T11:31:04Z",
   "dataset": {
     "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
     "dataset_id": "92b63fb9c0c5",
@@ -66,44 +66,44 @@
   "patterns": {
     "section_stats": {
       "IDENTITY": {
-        "coverage_pct": 0,
-        "clients": 0,
+        "coverage_pct": 80,
+        "clients": 4,
         "lines": {
-          "avg": 0,
-          "median": 0,
-          "p90": 0
+          "avg": 1,
+          "median": 1,
+          "p90": 1
         }
       },
       "SITUATION_PROFESSIONNELLE": {
         "coverage_pct": 80,
         "clients": 4,
         "lines": {
-          "avg": 12,
-          "median": 10,
-          "p90": 26
+          "avg": 2.5,
+          "median": 2,
+          "p90": 6
         }
       },
       "FORMATION": {
-        "coverage_pct": 80,
-        "clients": 4,
+        "coverage_pct": 40,
+        "clients": 2,
         "lines": {
-          "avg": 6.5,
-          "median": 3,
+          "avg": 10.5,
+          "median": 10,
           "p90": 20
         }
       },
       "COMPETENCES": {
-        "coverage_pct": 80,
-        "clients": 4,
+        "coverage_pct": 60,
+        "clients": 3,
         "lines": {
-          "avg": 10,
-          "median": 9,
-          "p90": 15
+          "avg": 1,
+          "median": 1,
+          "p90": 2
         }
       },
       "RESSOURCES_POINTS_APPUI": {
-        "coverage_pct": 0,
-        "clients": 0,
+        "coverage_pct": 20,
+        "clients": 1,
         "lines": {
           "avg": 0,
           "median": 0,
@@ -111,8 +111,8 @@
         }
       },
       "RESSOURCES_POINTS_VIGILANCE": {
-        "coverage_pct": 0,
-        "clients": 0,
+        "coverage_pct": 20,
+        "clients": 1,
         "lines": {
           "avg": 0,
           "median": 0,
@@ -123,26 +123,26 @@
         "coverage_pct": 60,
         "clients": 3,
         "lines": {
-          "avg": 1.7,
-          "median": 2,
+          "avg": 1.3,
+          "median": 1,
           "p90": 2
         }
       },
       "CONTRAINTES_FREINS": {
-        "coverage_pct": 0,
-        "clients": 0,
+        "coverage_pct": 20,
+        "clients": 1,
         "lines": {
-          "avg": 0,
-          "median": 0,
-          "p90": 0
+          "avg": 3,
+          "median": 3,
+          "p90": 3
         }
       },
       "OBJECTIFS": {
-        "coverage_pct": 100,
-        "clients": 5,
+        "coverage_pct": 40,
+        "clients": 2,
         "lines": {
-          "avg": 4.4,
-          "median": 4,
+          "avg": 3,
+          "median": 3,
           "p90": 5
         }
       },
@@ -150,27 +150,27 @@
         "coverage_pct": 40,
         "clients": 2,
         "lines": {
-          "avg": 3.5,
-          "median": 3,
-          "p90": 7
+          "avg": 1,
+          "median": 1,
+          "p90": 1
         }
       },
       "PLAN_ACTION": {
-        "coverage_pct": 100,
-        "clients": 5,
-        "lines": {
-          "avg": 1.8,
-          "median": 1,
-          "p90": 4
-        }
-      },
-      "SYNTHESE_CONCLUSION": {
         "coverage_pct": 60,
         "clients": 3,
         "lines": {
-          "avg": 4.3,
-          "median": 4,
-          "p90": 6
+          "avg": 1,
+          "median": 1,
+          "p90": 1
+        }
+      },
+      "SYNTHESE_CONCLUSION": {
+        "coverage_pct": 40,
+        "clients": 2,
+        "lines": {
+          "avg": 0.5,
+          "median": 0,
+          "p90": 1
         }
       }
     },
@@ -182,18 +182,137 @@
       "FORMATION": 20,
       "Ressources_comportementales_Points_d'appui": 4,
       "Ressources_comportementales_Points_de_vigilance": 4,
-      "IDENTITY": 0,
-      "SITUATION_PROFESSIONNELLE": 26,
-      "COMPETENCES": 15,
+      "IDENTITY": 1,
+      "SITUATION_PROFESSIONNELLE": 6,
+      "COMPETENCES": 2,
       "RESSOURCES_POINTS_APPUI": 0,
       "RESSOURCES_POINTS_VIGILANCE": 0,
       "MOTIVATIONS_VALEURS": 2,
-      "CONTRAINTES_FREINS": 0,
+      "CONTRAINTES_FREINS": 3,
       "OBJECTIFS": 5,
-      "PISTES_METIERS": 7,
-      "PLAN_ACTION": 4,
-      "SYNTHESE_CONCLUSION": 6
-    }
+      "PISTES_METIERS": 1,
+      "PLAN_ACTION": 1,
+      "SYNTHESE_CONCLUSION": 1
+    },
+    "section_title_map": {
+      "IDENTITE": "identity",
+      "ETAT CIVIL": "identity",
+      "INFORMATIONS PERSONNELLES": "identity",
+      "DONNEES PERSONNELLES": "identity",
+      "SITUATION PROFESSIONNELLE": "situation_professionnelle",
+      "PARCOURS PROFESSIONNEL": "situation_professionnelle",
+      "EXPERIENCE PROFESSIONNELLE": "situation_professionnelle",
+      "EXPERIENCES": "situation_professionnelle",
+      "PARCOURS": "situation_professionnelle",
+      "FORMATION": "formation",
+      "PARCOURS FORMATION": "formation",
+      "DIPLOMES": "formation",
+      "CERTIFICATIONS": "formation",
+      "CURSUS": "formation",
+      "COMPETENCES": "competences",
+      "COMPETENCES TECHNIQUES": "competences",
+      "SAVOIR FAIRE": "competences",
+      "APTITUDES": "competences",
+      "DISCIPLINE AU TRAVAIL": "competences",
+      "INTEGRATION AUPRES DES COLLABORATEURS": "competences",
+      "RYTHME ET QUANTITE DE TRAVAIL": "competences",
+      "QUALITE DU TRAVAIL FOURNI": "competences",
+      "QUALITE DU TRAVAIL": "competences",
+      "ORGANISATION PRISES D INITIATIVES AUTONOMIE": "competences",
+      "ORGANISATION": "competences",
+      "PRISES D INITIATIVES": "competences",
+      "AUTONOMIE": "competences",
+      "PRESENTATION": "competences",
+      "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
+      "POINTS D APPUI": "ressources_points_appui",
+      "FORCES": "ressources_points_appui",
+      "ATOUTS": "ressources_points_appui",
+      "RESSOURCES COMPORTEMENTALES POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "AXES DE VIGILANCE": "ressources_points_vigilance",
+      "VIGILANCES": "ressources_points_vigilance",
+      "MOTIVATIONS": "motivations_valeurs",
+      "VALEURS": "motivations_valeurs",
+      "INTERETS": "motivations_valeurs",
+      "CENTRES D INTERET": "motivations_valeurs",
+      "ENGAGEMENT ET PERSEVERANCE": "motivations_valeurs",
+      "CONTRAINTES": "contraintes_freins",
+      "FREINS": "contraintes_freins",
+      "LIMITES": "contraintes_freins",
+      "LIMITATIONS": "contraintes_freins",
+      "SANTE": "contraintes_freins",
+      "OBJECTIFS": "objectifs",
+      "OBJECTIF": "objectifs",
+      "PROJET": "objectifs",
+      "PROJET PROFESSIONNEL": "objectifs",
+      "PISTES": "pistes_metiers",
+      "PISTES METIERS": "pistes_metiers",
+      "ORIENTATION": "pistes_metiers",
+      "PISTES D ORIENTATION": "pistes_metiers",
+      "PLAN D ACTION": "plan_action",
+      "ACTIONS": "plan_action",
+      "PLANIFICATION": "plan_action",
+      "ETAPES": "plan_action",
+      "SYNTHESE": "synthese_conclusion",
+      "CONCLUSION": "synthese_conclusion",
+      "BILAN": "synthese_conclusion",
+      "RECAPITULATIF": "synthese_conclusion",
+      "QUALITE GENERALE": "synthese_conclusion"
+    },
+    "unknown_titles_top": {
+      "STRATEGIES COMPORTEMENTALES": 2,
+      "JOURNAL MOHAMMED ALI": 1,
+      "18 NOVEMBRE": 1,
+      "ARRET DE STAGE AVEC SAID": 1,
+      "EVALUTATION VALUATION DE STAGE LAI": 1,
+      "PONCTUALITE ET ASSIDUITE": 1,
+      "TACHES EFFECTUEES": 1,
+      "PERFORMANCE AU TRAVAIL": 1,
+      "VOUS AVEZ DIT": 1,
+      "CHATGPT A DIT": 1,
+      "CONTEXTE ET DEROULEMENT DU STAGE": 1,
+      "DIFFICULTES RENCONTREES": 1,
+      "LA PONCTUALITE ET L’ORGANISATION DU RYTHME DE VIE": 1,
+      "LA GESTION DE LA CONCENTRATION ET DE LA COMPREHENSION ECRITE": 1,
+      "QUELLES TACHES ONT ETE REALISEES ? MADAME DA COSTA RODRIGUEZ A EFFECTUE LES ACTIVITES SUIVANTES": 1,
+      "ETES VOUS EN MESURE D’OFFRIR UN EMPLOI AU STAGIAIRE ? NON": 1,
+      "AUTRES REMARQUES": 1,
+      "EMPLOYE POLYVALENT": 1,
+      "SUISSEMEDICA SA SALES AND MARKETING EXECUTIVE (STAGE DUREE DETERMINEE)": 1,
+      "AVRIL 2024 A CE JOUR": 1,
+      "BILLIGHT SA ORDONNANCEUR (STAGE DUREE DETERMINEE)": 1,
+      "NOVEMBRE 23 MARS 24": 1,
+      "HELVETIA ENVIRONNEMENT SA MONITEUR QHSE (STAGE DUREE DETERMINEE)": 1,
+      "EUROVISION SA CHARGE DES DEVIS ET FACTURATION (STAGE DUREE DETERMINEE)": 1,
+      "DEUTSCHE BANK MIDDLE OFFICE": 1,
+      "HOTTINGER S A CHEF CAISSIER": 1,
+      "RESPONSABLE DES COFFRES EMISSIONS DE CHEQUES DIVERSES TACHES ADMINISTRATIVES AIDE POUR L’EQUIPE DES GERANTS EXTERNES": 1,
+      "CREDIT SUISSE CHEF CAISSIER": 1,
+      "SENIOR CASH SERVICE POUR LA SUCCURSALE PRIVATE BANKING": 1,
+      "CLARIDEN LEU CHEF CAISSIER AVP": 1,
+      "CREDIT SUISSE RESPONSABLE CASH SERVICE": 1,
+      "AMERICAN EXPRESS TEAM LEADER": 1,
+      "MAITRISE EN BUSINESS INTERNATIONNAL AND MANGEMENT COPENHAGEN BUSINESS SCHOOL": 1,
+      "COURS DE PERFECTIONNEMENT ABC ENGLISH SCHOOL CAMBRIDGE": 1,
+      "LICENCE EN LITTERATURE ANGLAISE UNIVERSITE D’ORAN": 1,
+      "FRANCAIS / ARABE BILINGUE (C2) ANGLAIS C1": 1,
+      "PARTICIPATION AU PROGRAMME": 1,
+      "PROFESSION": 1,
+      "TESTS": 1,
+      "EVOLUTION": 1,
+      "RESSOURCES COMPORTEMENTALES": 1,
+      "LES MOTIVATEURS PRINCIPAUX DE XX SONT": 1,
+      "RELATION AU MARCHE DE L’EMPLOI": 1,
+      "RELATION A LA CARRIERE": 1,
+      "CONDITIONS DE SUCCES": 1,
+      "LES COMPORTEMENTS DE XX SERONT ADAPTES SI": 1,
+      "AU CONTRAIRE DES RISQUES DE COMPORTEMENTS DYSFONCTIONNELS EXISTENT SI": 1,
+      "PROFIL EMPLOI": 1,
+      "CONTEXTE": 1,
+      "ORGANISATION PRIVILEGIEE": 1
+    },
+    "unknown_titles_count": 102,
+    "unknown_titles_total_occurrences": 103
   },
   "warnings": [
     {

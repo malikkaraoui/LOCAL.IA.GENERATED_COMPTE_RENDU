@@ -92,6 +92,26 @@ def show_training_tab():
     ⚠️ **Aucune donnée nominative** n'est stockée dans training_state.json (uniquement stats agrégées).
     """)
     
+    # ✅ V4.1: Presets (Mode test / Mode batch)
+    st.markdown("#### ⚡ Presets rapides")
+    col_preset1, col_preset2 = st.columns(2)
+    
+    with col_preset1:
+        if st.button("🧪 Mode Test (5 clients)", use_container_width=True):
+            st.session_state["preset_limit"] = 5
+            st.session_state["preset_depth"] = 3
+            st.session_state["preset_merge"] = False
+            st.success("✅ Mode Test activé : limit=5, depth=3, merge=OFF")
+    
+    with col_preset2:
+        if st.button("🚀 Mode Batch (tous)", use_container_width=True):
+            st.session_state["preset_limit"] = 0
+            st.session_state["preset_depth"] = 4
+            st.session_state["preset_merge"] = False
+            st.success("✅ Mode Batch activé : limit=0, depth=4, merge=OFF")
+    
+    st.markdown("---")
+    
     # Browse dataset
     dataset_root = browse_directory(
         "📁 Dataset racine",
@@ -106,7 +126,15 @@ def show_training_tab():
     else:
         st.success(f"✅ Dataset : `{dataset_root}`")
     
-    # Configuration
+    # Configuration avec aide détaillée
+    st.markdown("#### ⚙️ Configuration")
+    st.markdown("""
+    **📖 Aide** :
+    - **scan_depth** : Profondeur max pour détecter les dossiers clients (augmenter si dataset non structuré)
+    - **limit** : 0 = tous, sinon limite aux N premiers clients (utile pour tests rapides)
+    - **merge** : Fusionne patterns avec training_state.json existant (⚠️ N'ajoute PAS de données nominatives)
+    """)
+    
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -114,7 +142,7 @@ def show_training_tab():
             "Profondeur scan",
             min_value=1,
             max_value=5,
-            value=3,
+            value=st.session_state.get("preset_depth", 3),
             help="Profondeur de recherche récursive pour dossiers hétérogènes"
         )
     
@@ -123,14 +151,14 @@ def show_training_tab():
             "Limite clients",
             min_value=0,
             max_value=1000,
-            value=0,
+            value=st.session_state.get("preset_limit", 0),
             help="0 = analyser tous les clients détectés"
         )
     
     with col3:
         merge_existing = st.checkbox(
             "Merge avec existant",
-            value=False,
+            value=st.session_state.get("preset_merge", False),
             help="Fusionner avec training_state existant (mode incrémental)"
         )
     

@@ -1224,12 +1224,14 @@ def export_training_artifacts(
     # Merge si demandé
     state_path = out_path / "training_state.json"
     if merge_existing and state_path.exists():
-        # ⚠️ Merge non implémenté pour v1.0 - bloquer pour éviter crash
-        raise NotImplementedError(
-            "merge_existing=True non supporté pour training_state v1.0. "
-            "Le schéma a changé et le merge doit être réimplémenté. "
-            "Utilisez merge_existing=False pour écraser le fichier existant."
-        )
+        # V4.1 : Merge compatible training_state_v1.0
+        try:
+            existing_state = load_training_state(str(state_path))
+            training_state = _merge_training_states(existing_state, training_state)
+            print(f"   ♻️ Fusion avec training_state existant")
+        except Exception as e:
+            print(f"   ⚠️ Échec du merge, écrasement : {e}")
+            # Continue sans merge
     
     with open(state_path, "w", encoding="utf-8") as f:
         json.dump(training_state, f, indent=2, ensure_ascii=False)
@@ -1434,40 +1436,62 @@ def _merge_training_states(
     existing: Dict[str, Any],
     new: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Fusionne deux training_states (incrémental)."""
+    """
+    Fusionne deux training_states (compatible training_state_v1.0).
+    
+    V4.1: Ne fusionne QUE les patterns non-nominatifs.
+    Base = new (on garde metadata/schema à jour).
+    """
     merged = new.copy()
     
-    # Fusionner historique
-    merged["history"] = existing.get("history", []) + new["history"]
-    
-    # Fusionner patterns (comptages pondérés)
+    # ✅ 1. Fusionner unknown_titles (compteurs)
     if "patterns" in existing and "patterns" in new:
-        merged["patterns"]["title_mappings"] = _merge_counters(
-            existing["patterns"].get("title_mappings", {}),
-            new["patterns"].get("title_mappings", {})
-        )
+        old_unknown = existing["patterns"].get("unknown_titles_top", {})
+        new_unknown = new["patterns"].get("unknown_titles_top", {})
+        merged["patterns"]["unknown_titles_top"] = _merge_counters(old_unknown, new_unknown)
+        
+        # Recalculer unknown_titles_top10 depuis merged
+        all_unknown = merged["patterns"]["unknown_titles_top"]
+        top10 = dict(sorted(all_unknown.items(), key=lambda x: -x[1])[:10])
+        merged["patterns"]["unknown_titles_top10"] = top10
+        merged["patterns"]["unknown_titles_count"] = len(all_unknown)
+        merged["patterns"]["unknown_titles_total_occurrences"] = sum(all_unknown.values())
     
-    # Moyennes pondérées pour stats globales
-    old_count = existing.get("clients_analyzed", 0)
-    new_count = new.get("clients_analyzed", 0)
-    total_count = old_count + new_count
+    # ✅ 2. Fusionner sections_stats (max de p90, coverage pondéré)
+    if "patterns" in existing and "patterns" in new:
+        old_sections = existing["patterns"].get("sections_stats", {})
+        new_sections = new["patterns"].get("sections_stats", {})
+        
+        for sec in set(old_sections.keys()) | set(new_sections.keys()):
+            old_st = old_sections.get(sec, {})
+            new_st = new_sections.get(sec, {})
+            
+            # Prendre max de p90_lines (le meilleur exemple)
+            merged["patterns"]["sections_stats"][sec]["p90_lines"] = max(
+                old_st.get("p90_lines", 0),
+                new_st.get("p90_lines", 0)
+            )
+            
+            # Coverage pondéré simple (moyenne)
+            old_cov = old_st.get("coverage", 0)
+            new_cov = new_st.get("coverage", 0)
+            merged["patterns"]["sections_stats"][sec]["coverage"] = (old_cov + new_cov) / 2
     
-    if total_count > 0:
-        merged["clients_analyzed"] = total_count
-        
-        # Moyennes pondérées
-        old_stats = existing.get("global_stats", {})
-        new_stats = new.get("global_stats", {})
-        
-        merged["global_stats"]["gold_detection_rate"] = (
-            old_stats.get("gold_detection_rate", 0) * old_count +
-            new_stats.get("gold_detection_rate", 0) * new_count
-        ) / total_count
-        
-        merged["global_stats"]["pipeline_ready_rate"] = (
-            old_stats.get("pipeline_ready_rate", 0) * old_count +
-            new_stats.get("pipeline_ready_rate", 0) * new_count
-        ) / total_count
+    # ✅ 3. Fusionner learned_title_map (union)
+    if "patterns" in existing and "patterns" in new:
+        old_map = existing["patterns"].get("learned_title_map", {})
+        new_map = new["patterns"].get("learned_title_map", {})
+        merged["patterns"]["learned_title_map"] = {**old_map, **new_map}
+    
+    # ✅ 4. Historique (optionnel, si supporté par schéma)
+    history_entry = {
+        "run_id": new.get("training_state_id"),
+        "timestamp": new.get("generated_at"),
+        "clients": new.get("dataset", {}).get("clients_used", 0)
+    }
+    if "history" not in merged:
+        merged["history"] = []
+    merged["history"].append(history_entry)
     
     return merged
 

@@ -1,6 +1,6 @@
 # Training Report - 92b63fb9c0c5
 
-**Date** : 2025-12-28T10:29:27.890723
+**Date** : 2025-12-28T11:31:03.343245
 **Clients analysés** : 5
 **Scans réussis** : 5
 **Clients utilisés** : 5
@@ -30,34 +30,34 @@ Coverage basée sur **5 clients utilisés**.
 
 | Section | Coverage % | Clients | Avg Lines | P90 Lines |
 |---------|------------|---------|-----------|-----------|
-| COMPETENCES | 80% | 4 | 10.0 | 15.0 |
-| CONTRAINTES_FREINS | 0% | 0 | 0.0 | 0.0 |
-| FORMATION | 80% | 4 | 6.5 | 20.0 |
-| IDENTITY | 0% | 0 | 0.0 | 0.0 |
-| MOTIVATIONS_VALEURS | 60% | 3 | 1.7 | 2.0 |
-| OBJECTIFS | 100% | 5 | 4.4 | 5.0 |
-| PISTES_METIERS | 40% | 2 | 3.5 | 7.0 |
-| PLAN_ACTION | 100% | 5 | 1.8 | 4.0 |
-| RESSOURCES_POINTS_APPUI | 0% | 0 | 0.0 | 0.0 |
-| RESSOURCES_POINTS_VIGILANCE | 0% | 0 | 0.0 | 0.0 |
-| SITUATION_PROFESSIONNELLE | 80% | 4 | 12.0 | 26.0 |
-| SYNTHESE_CONCLUSION | 60% | 3 | 4.3 | 6.0 |
+| COMPETENCES | 60% | 3 | 1.0 | 2.0 |
+| CONTRAINTES_FREINS | 20% | 1 | 3.0 | 3.0 |
+| FORMATION | 40% | 2 | 10.5 | 20.0 |
+| IDENTITY | 80% | 4 | 1.0 | 1.0 |
+| MOTIVATIONS_VALEURS | 60% | 3 | 1.3 | 2.0 |
+| OBJECTIFS | 40% | 2 | 3.0 | 5.0 |
+| PISTES_METIERS | 40% | 2 | 1.0 | 1.0 |
+| PLAN_ACTION | 60% | 3 | 1.0 | 1.0 |
+| RESSOURCES_POINTS_APPUI | 20% | 1 | 0.0 | 0.0 |
+| RESSOURCES_POINTS_VIGILANCE | 20% | 1 | 0.0 | 0.0 |
+| SITUATION_PROFESSIONNELLE | 80% | 4 | 2.5 | 6.0 |
+| SYNTHESE_CONCLUSION | 40% | 2 | 0.5 | 1.0 |
 
 ## 🎯 Patterns Détectés
 
 ### Titres Inconnus (Top 10)
 
-- `DISCIPLINE AU TRAVAIL` : 13 occurrences
-- `INTEGRATION AUPRES DES COLLABORATEURS` : 13 occurrences
-- `RYTHME ET QUANTITE DE TRAVAIL` : 13 occurrences
-- `QUALITE DU TRAVAIL FOURNI` : 13 occurrences
-- `LIMITATIONS` : 12 occurrences
-- `QUALITE GENERALE` : 12 occurrences
-- `PRESENTATION` : 11 occurrences
-- `AUTRES REMARQUES` : 11 occurrences
-- `ENGAGEMENT ET PERSEVERANCE` : 10 occurrences
-- `ORGANISATION/ PRISES D’INITIATIVES/ AUTONOMIE` : 8 occurrences
+- `STRATEGIES COMPORTEMENTALES` : 2 occurrences
+- `JOURNAL MOHAMMED ALI` : 1 occurrences
+- `18 NOVEMBRE` : 1 occurrences
+- `ARRET DE STAGE AVEC SAID` : 1 occurrences
+- `EVALUTATION VALUATION DE STAGE LAI` : 1 occurrences
+- `PONCTUALITE ET ASSIDUITE` : 1 occurrences
+- `TACHES EFFECTUEES` : 1 occurrences
+- `PERFORMANCE AU TRAVAIL` : 1 occurrences
+- `VOUS AVEZ DIT` : 1 occurrences
+- `CHATGPT A DIT` : 1 occurrences
 
 ## 💡 Recommandations
 
-- 📝 Titres inconnus fréquents : DISCIPLINE AU TRAVAIL, INTEGRATION AUPRES DES COLLABORATEURS, RYTHME ET QUANTITE DE TRAVAIL, QUALITE DU TRAVAIL FOURNI, LIMITATIONS → Ajouter mappings dans field_specs.py
+- 📝 Titres inconnus fréquents : STRATEGIES COMPORTEMENTALES, JOURNAL MOHAMMED ALI, 18 NOVEMBRE, ARRET DE STAGE AVEC SAID, EVALUTATION VALUATION DE STAGE LAI → Ajouter mappings dans field_specs.py
