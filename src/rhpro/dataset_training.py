@@ -66,6 +66,16 @@ SEED_SECTION_TITLE_MAP = {
     "COMPETENCES TECHNIQUES": "competences",
     "SAVOIR FAIRE": "competences",
     "APTITUDES": "competences",
+    "DISCIPLINE AU TRAVAIL": "competences",
+    "INTEGRATION AUPRES DES COLLABORATEURS": "competences",
+    "RYTHME ET QUANTITE DE TRAVAIL": "competences",
+    "QUALITE DU TRAVAIL FOURNI": "competences",
+    "QUALITE DU TRAVAIL": "competences",
+    "ORGANISATION PRISES D INITIATIVES AUTONOMIE": "competences",
+    "ORGANISATION": "competences",
+    "PRISES D INITIATIVES": "competences",
+    "AUTONOMIE": "competences",
+    "PRESENTATION": "competences",
     
     # Ressources points d'appui
     "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
@@ -84,11 +94,13 @@ SEED_SECTION_TITLE_MAP = {
     "VALEURS": "motivations_valeurs",
     "INTERETS": "motivations_valeurs",
     "CENTRES D INTERET": "motivations_valeurs",
+    "ENGAGEMENT ET PERSEVERANCE": "motivations_valeurs",
     
     # Contraintes/freins
     "CONTRAINTES": "contraintes_freins",
     "FREINS": "contraintes_freins",
     "LIMITES": "contraintes_freins",
+    "LIMITATIONS": "contraintes_freins",
     "SANTE": "contraintes_freins",
     
     # Objectifs
@@ -113,7 +125,8 @@ SEED_SECTION_TITLE_MAP = {
     "SYNTHESE": "synthese_conclusion",
     "CONCLUSION": "synthese_conclusion",
     "BILAN": "synthese_conclusion",
-    "RECAPITULATIF": "synthese_conclusion"
+    "RECAPITULATIF": "synthese_conclusion",
+    "QUALITE GENERALE": "synthese_conclusion"
 }
 
 
@@ -148,8 +161,8 @@ def normalize_title(title: str) -> str:
     text = unicodedata.normalize('NFD', text)
     text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
     
-    # Remplacer apostrophes courbes par droites
-    text = text.replace(''', "'").replace(''', "'")
+    # Remplacer apostrophes courbes et droites par espace
+    text = text.replace(''', ' ').replace(''', ' ').replace("'", ' ')
     
     # Remplacer tirets multiples/puces par espace
     text = re.sub(r'[-–—•]', ' ', text)
@@ -229,6 +242,7 @@ def match_title_to_canonical(title: str, learned_map: Optional[Dict[str, str]] =
 def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     """
     Extrait les sections d'un fichier DOCX (titres + contenu).
+    Robuste : lit paragraphes + tables, détecte styles FR/EN.
     
     Returns:
         Liste de {title: str, canonical: str|None, lines: int, content_preview: str}
@@ -239,21 +253,42 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     except Exception:
         return []
     
+    # Collecter tous les paragraphes (body + tables)
+    all_paras = []
+    
+    # 1. Paragraphes du body
+    all_paras.extend(doc.paragraphs)
+    
+    # 2. Paragraphes dans les tables (pour identité, etc.)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                all_paras.extend(cell.paragraphs)
+    
     sections = []
     current_section = None
     current_lines = 0
     
-    for para in doc.paragraphs:
+    for para in all_paras:
         text = para.text.strip()
         
         if not text:
             continue
         
-        # Détecter titre (heuristique: style Heading ou court+gras ou tout majuscules)
+        # ✅ Détecter titre (robuste : FR + EN + numérotés)
+        style_name = para.style.name.lower()
         is_heading = (
-            para.style.name.startswith('Heading') or
-            (len(text) < 80 and para.runs and para.runs[0].bold) or
-            (len(text) < 100 and text.isupper())
+            # Styles EN
+            'heading' in style_name or
+            # Styles FR
+            'titre' in style_name or
+            'title' in style_name or
+            # Court + gras
+            (len(text) < 80 and para.runs and any(run.bold for run in para.runs)) or
+            # Tout majuscules (court)
+            (len(text) < 100 and text.isupper()) or
+            # Numérotés: "1. Titre", "2.1 Titre", etc.
+            (len(text) < 100 and re.match(r'^\s*\d+(\.\d+)?[)\.-]\s+\S+', text))
         )
         
         if is_heading:
@@ -466,7 +501,10 @@ def analyze_dataset(
             # Extraire inventaire sources
             sources_by_type = {}
             for source in scan_result["rag_sources"]:
-                ext = source.get("extension", Path(source["path"]).suffix)
+                # ✅ Normaliser extension (lowercase, avec point)
+                ext = (source.get("extension") or Path(source["path"]).suffix or "").lower().strip()
+                if ext and not ext.startswith("."):
+                    ext = f".{ext}"
                 sources_by_type[ext] = sources_by_type.get(ext, 0) + 1
                 rag_extensions[ext] += 1
             
@@ -484,7 +522,12 @@ def analyze_dataset(
             # Extraire sections depuis les DOCX sources
             client_sections = []
             for source in scan_result["rag_sources"]:
-                if source.get("extension") == ".docx":
+                # ✅ Normaliser extension pour comparaison
+                ext = (source.get("extension") or Path(source["path"]).suffix or "").lower().strip()
+                if ext and not ext.startswith("."):
+                    ext = f".{ext}"
+                
+                if ext == ".docx":
                     try:
                         sections = extract_sections_from_docx(Path(source["path"]))
                         client_sections.extend(sections)
@@ -573,9 +616,10 @@ def analyze_dataset(
     }
     
     # Patterns détectés
-    # Construction du section_title_map appris
+    # Construction du section_title_map appris depuis unknown_titles
     learned_title_map = {}
-    for title_norm, count in all_titles.most_common(50):
+    for title_norm, count in unknown_titles.most_common(100):
+        # Tenter de mapper avec heuristiques
         canonical = match_title_to_canonical(title_norm)
         if canonical and title_norm not in SEED_SECTION_TITLE_MAP:
             learned_title_map[title_norm] = canonical
@@ -612,6 +656,9 @@ def analyze_dataset(
     
     result.patterns = {
         "unknown_titles_top10": dict(unknown_titles.most_common(10)),
+        "unknown_titles_top": dict(unknown_titles.most_common(50)),  # ✅ Top 50 pour review
+        "unknown_titles_count": len(unknown_titles),  # ✅ Nombre de titres distincts inconnus
+        "unknown_titles_total_occurrences": sum(unknown_titles.values()),  # ✅ Total occurrences
         "learned_title_map": learned_title_map,
         "sections_stats": sections_stats,
         "common_structures": _detect_common_structures(successful_clients),
@@ -890,7 +937,11 @@ def _build_training_state(result: DatasetTrainingResult) -> Dict[str, Any]:
         
         "patterns": {
             "section_stats": sections_stats_v1,
-            "field_max_lines": field_max_lines
+            "field_max_lines": field_max_lines,
+            "section_title_map": full_title_map,  # ✅ Mapping complet (seed + learned)
+            "unknown_titles_top": result.patterns.get("unknown_titles_top", {}),  # ✅ Top 50
+            "unknown_titles_count": result.patterns.get("unknown_titles_count", 0),  # ✅ Distinct count
+            "unknown_titles_total_occurrences": result.patterns.get("unknown_titles_total_occurrences", 0),  # ✅ Total
         },
         
         "warnings": warnings

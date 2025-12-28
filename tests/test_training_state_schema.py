@@ -237,3 +237,50 @@ class TestTrainingStateSchema:
         coverage_pct = int(round(float(zero_stats.get("coverage", 0)) * 100))
         coverage_pct = max(0, min(100, coverage_pct))
         assert coverage_pct == 0
+    
+    def test_normalize_title_handles_special_chars(self):
+        """✅ normalize_title() gère apostrophes, tirets, etc."""
+        from src.rhpro.dataset_training import normalize_title
+        
+        # Apostrophes courbes
+        assert normalize_title("Points d'appui") == "POINTS D APPUI"
+        assert normalize_title("Points d'appui") == "POINTS D APPUI"
+        
+        # Tirets longs
+        assert normalize_title("Ressources – Points d'appui") == "RESSOURCES POINTS D APPUI"
+        
+        # Accents
+        assert normalize_title("Compétences") == "COMPETENCES"
+    
+    def test_match_title_to_canonical_unknown_frequent(self):
+        """✅ Les titres inconnus fréquents sont maintenant mappés."""
+        from src.rhpro.dataset_training import match_title_to_canonical
+        
+        # Titres fréquents ajoutés au mapping
+        assert match_title_to_canonical("DISCIPLINE AU TRAVAIL") == "competences"
+        assert match_title_to_canonical("QUALITE DU TRAVAIL FOURNI") == "competences"
+        assert match_title_to_canonical("LIMITATIONS") == "contraintes_freins"
+        assert match_title_to_canonical("QUALITE GENERALE") == "synthese_conclusion"
+        assert match_title_to_canonical("ENGAGEMENT ET PERSEVERANCE") == "motivations_valeurs"
+    
+    def test_training_state_includes_section_title_map(self, training_state):
+        """✅ training_state.json inclut section_title_map."""
+        assert "section_title_map" in training_state["patterns"]
+        title_map = training_state["patterns"]["section_title_map"]
+        
+        # Doit contenir au moins les seeds
+        assert "IDENTITE" in title_map
+        assert "COMPETENCES" in title_map
+        assert title_map["IDENTITE"] == "identity"
+    
+    def test_training_state_includes_unknown_titles(self, training_state):
+        """✅ training_state.json inclut unknown_titles_top."""
+        patterns = training_state["patterns"]
+        
+        assert "unknown_titles_top" in patterns
+        assert "unknown_titles_count" in patterns
+        assert "unknown_titles_total_occurrences" in patterns
+        
+        # Compteurs doivent être cohérents
+        assert isinstance(patterns["unknown_titles_count"], int)
+        assert patterns["unknown_titles_count"] >= 0
