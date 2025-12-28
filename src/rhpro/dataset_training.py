@@ -134,6 +134,90 @@ SEED_SECTION_TITLE_MAP = {
 # Normalisation des titres
 # ============================================================================
 
+def is_noise_cell_text(text: str) -> bool:
+    """
+    Détecte si le contenu d'une cellule/ligne est du bruit (labels formulaire, PII).
+    Plus strict que is_noise_title - utilisé pour filtrer contenu, pas seulement titres.
+    
+    Returns:
+        True si le texte est du bruit (à ignorer dans contenu)
+    """
+    if not text or len(text.strip()) <= 2:
+        return True
+    
+    text_upper = text.strip().upper()
+    
+    # Normaliser le texte pour comparaison (enlever caractères spéciaux)
+    text_normalized = text_upper.replace('°', ' ').replace('°', ' ').strip()
+    text_normalized = re.sub(r'\s+', ' ', text_normalized)
+    
+    # Libellés de formulaire
+    form_labels = {
+        'NOM', 'PRENOM', 'PRENOM NOM', 'NOM PRENOM',
+        'AVS', 'N AVS', 'NUMERO AVS', 'NO AVS', 'N AVS',
+        'DATE', 'DATES', 'DATE DE NAISSANCE', 'DATE NAISSANCE',
+        'DATES DE LA MESURE', 'PERIODE',
+        'CONSEILLER', 'CONSEILLERE', 'RESPONSABLE',
+        'TELEPHONE', 'TEL', 'MAIL', 'EMAIL', 'ADRESSE',
+        'STAGE', 'STAGE EN QUALITE DE', 'LIEU DE STAGE',
+        'EVALUATION', 'EVALUATION DE STAGE',
+        'ENTREPRISE', 'L ENTREPRISE', 'EMPLOYEUR',
+        'STAGIAIRE', 'LE STAGIAIRE', 'LA STAGIAIRE',
+        'SIGNATURE', 'SIGNATURES',
+        'PARTIES CONCERNEES', 'CONTACT', 'COORDONNEES'
+    }
+    if text_normalized in form_labels:
+        return True
+    
+    # AVS suisse pattern
+    if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
+        return True
+    
+    # Dates
+    if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
+        return True
+    
+    # Trop de chiffres (>= 6 digits)
+    digit_count = sum(c.isdigit() for c in text)
+    if digit_count >= 6:
+        return True
+    
+    # Uniquement chiffres
+    if text_upper.replace(' ', '').isdigit():
+        return True
+    
+    # Uniquement ponctuation
+    if all(c in '.,;:!?-_/*+= \t\n' for c in text):
+        return True
+    
+    return False
+
+
+def is_useful_line(text: str) -> bool:
+    """
+    Détermine si une ligne contient du contenu utile pour le training.
+    
+    Returns:
+        True si ligne utile (pas de bruit, assez substantielle)
+    """
+    if not text:
+        return False
+    
+    stripped = text.strip()
+    
+    # Trop court
+    if len(stripped) <= 3:
+        return False
+    
+    # Bruit
+    if is_noise_cell_text(stripped):
+        return False
+    
+    # OK si au moins quelques mots réels
+    words = [w for w in stripped.split() if len(w) >= 2]
+    return len(words) >= 2
+
+
 def is_noise_title(text: str) -> bool:
     """
     Détecte les titres parasites à ignorer, incluant PII et libellés de formulaires.
@@ -397,13 +481,14 @@ def detect_identity_presence(doc) -> bool:
     return matches >= 2
 
 
-def score_docx_for_training(docx_path: Path, gold_path: Optional[Path] = None) -> tuple[int, List[str]]:
+def score_docx_for_training(docx_path: Path, gold_path: Optional[Path] = None, is_gold_mode: bool = False) -> tuple[int, List[str]]:
     """
     Score un DOCX pour déterminer s'il est adapté à l'extraction de sections (rapport/bilan).
     
     Args:
         docx_path: Path du DOCX à scorer
         gold_path: Path du GOLD (si existe et est DOCX)
+        is_gold_mode: Si True, on est en mode GOLD strict (bonus amplifié)
         
     Returns:
         (score, reasons) où score est un int et reasons une liste de justifications
@@ -434,6 +519,15 @@ def score_docx_for_training(docx_path: Path, gold_path: Optional[Path] = None) -
         if kw in filename:
             score -= 60
             reasons.append(f"-60 (annexe/formulaire: {kw})")
+            break
+    
+    # ❌ V4.1: MALUS ULTRA-FORTS (journaux/transcriptions/conversations)
+    ultra_negative = ['journal', 'chatgpt', 'transcription', 'vous avez dit', 'a dit', 
+                     'conversation', 'whatsapp', 'notes', 'entretien', 'discussion']
+    for kw in ultra_negative:
+        if kw in filename:
+            score -= 80
+            reasons.append(f"-80 (journal/transcript: {kw})")
             break
     
     # Analyser le contenu
@@ -497,7 +591,11 @@ def score_docx_for_training(docx_path: Path, gold_path: Optional[Path] = None) -
 
 def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> tuple[Optional[Path], Dict]:
     """
-    Sélectionne le meilleur DOCX pour extraire les sections canoniques avec scoring V4.
+    Sélectionne le meilleur DOCX pour extraire les sections canoniques.
+    
+    V4.1: Mode GOLD strict
+    - Si GOLD DOCX présent → scorer UNIQUEMENT les GOLD
+    - Sinon → scorer tous les DOCX avec malus forts sur journaux/transcripts
     
     Args:
         client_folder: Dossier client
@@ -510,35 +608,54 @@ def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> tup
         "selected_path": None,
         "selected_score": 0,
         "selected_reasons": [],
-        "candidates": []
+        "candidates": [],
+        "gold_mode": False
     }
     
-    # Identifier le GOLD s'il existe et est un DOCX
+    # ✅ V4.1: Identifier TOUS les DOCX GOLD (pas seulement le premier)
+    gold_docx_list = []
     gold_path = None
+    
     if scan_result.get("gold"):
         gold_candidate = Path(scan_result["gold"]["path"])
         if gold_candidate.suffix.lower() == ".docx":
             gold_path = gold_candidate
+            gold_docx_list.append(gold_candidate)
     
     # Collecter tous les DOCX candidats
-    candidates = []
+    all_docx = []
     for source in scan_result.get("rag_sources", []):
         path = Path(source["path"])
         if path.suffix.lower() == ".docx":
-            candidates.append(path)
+            all_docx.append(path)
+            # Détecter GOLD alternatifs (nom contient "GOLD")
+            if "gold" in path.stem.lower() and path not in gold_docx_list:
+                gold_docx_list.append(path)
     
-    if not candidates:
+    if not all_docx:
         return None, debug_info
     
-    # Scorer chaque candidat
+    # ✅ V4.1: MODE GOLD STRICT
+    candidates_to_score = all_docx
+    is_gold_mode = False
+    
+    if gold_docx_list:
+        # Si GOLD présent → scorer UNIQUEMENT les GOLD
+        candidates_to_score = gold_docx_list
+        is_gold_mode = True
+        debug_info["gold_mode"] = True
+        debug_info["selected_reasons"].append("🔒 GOLD_STRICT_MODE")
+    
+    # Scorer les candidats
     scored_candidates = []
-    for docx_path in candidates:
-        score, reasons = score_docx_for_training(docx_path, gold_path)
+    for docx_path in candidates_to_score:
+        score, reasons = score_docx_for_training(docx_path, gold_path, is_gold_mode)
         scored_candidates.append({
             "path": str(docx_path),
             "name": docx_path.name,
             "score": score,
-            "reasons": reasons
+            "reasons": reasons,
+            "is_gold": docx_path in gold_docx_list
         })
     
     # Trier par score décroissant
@@ -548,7 +665,11 @@ def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> tup
     # Sélectionner le meilleur
     if scored_candidates:
         best = scored_candidates[0]
-        if best["score"] >= 30:  # Seuil minimum
+        
+        # ✅ V4.1: En mode GOLD, accepter même score bas
+        threshold = 0 if is_gold_mode else 30
+        
+        if best["score"] >= threshold:
             debug_info["selected_path"] = best["path"]
             debug_info["selected_score"] = best["score"]
             debug_info["selected_reasons"] = best["reasons"]
@@ -581,8 +702,11 @@ def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> tup
 def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     """
     Extrait les sections d'un fichier DOCX (titres + contenu).
-    V4: Lit UNIQUEMENT les paragraphes (pas les tables comme titres).
-    Tables utilisées uniquement pour detect_identity_presence.
+    
+    V4.1: 
+    - HEADINGS détectés UNIQUEMENT depuis paragraphes
+    - CONTENU extrait depuis paragraphes + tables (cellules filtrées)
+    - Tables ne créent JAMAIS de nouvelles sections
     
     Returns:
         Liste de {title: str, canonical: str|None, lines: int, content_preview: str}
@@ -593,10 +717,9 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     except Exception:
         return []
     
-    # ✅ V4: Lire UNIQUEMENT les paragraphes du body (pas les tables)
     sections = []
     current_section = None
-    current_lines = 0
+    current_lines = []  # ✅ Liste de lignes utiles
     
     # ✅ Auto-détection IDENTITY (utilise tables pour keywords)
     has_identity = detect_identity_presence(doc)
@@ -608,47 +731,64 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
             "content_preview": ""
         })
     
-    # Analyser uniquement les paragraphes du body
+    # ✅ ÉTAPE 1: Analyser paragraphes pour HEADINGS et CONTENU
     for para_obj in doc.paragraphs:
         text = para_obj.text.strip()
         
         if not text:
             continue
         
-        # ✅ Utiliser is_probable_heading avec filtres anti-bruit V4
+        # Détection heading (paragraphes uniquement)
         is_heading = is_probable_heading(text, para_obj)
         
         if is_heading:
-            # Sauvegarder section précédente
-            if current_section:
+            # Sauvegarder section précédente SI elle a des lignes utiles
+            if current_section and len(current_lines) > 0:
                 sections.append({
                     "title": current_section["title"],
                     "canonical": current_section["canonical"],
-                    "lines": current_lines,
-                    "content_preview": current_section["content_preview"][:200]
+                    "lines": len(current_lines),
+                    "content_preview": '\n'.join(current_lines[:5])[:200]
                 })
             
             # Nouvelle section
             canonical = match_title_to_canonical(text)
             current_section = {
                 "title": text,
-                "canonical": canonical,
-                "content_preview": ""
+                "canonical": canonical
             }
-            current_lines = 0
+            current_lines = []
         elif current_section:
-            # Accumuler contenu
-            current_lines += 1
-            if len(current_section["content_preview"]) < 200:
-                current_section["content_preview"] += text + "\n"
+            # Ajouter contenu si ligne utile
+            if is_useful_line(text):
+                current_lines.append(text)
     
-    # Dernière section
-    if current_section:
+    # ✅ ÉTAPE 2: Ajouter contenu des tables à la section active
+    # Tables ne créent JAMAIS de headings, seulement du contenu
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    cell_text = para.text.strip()
+                    
+                    if not cell_text:
+                        continue
+                    
+                    # Filtrer bruit (labels formulaire, PII)
+                    if is_noise_cell_text(cell_text):
+                        continue
+                    
+                    # Ajouter à section active si ligne utile
+                    if current_section and is_useful_line(cell_text):
+                        current_lines.append(cell_text)
+    
+    # Dernière section SI elle a des lignes utiles
+    if current_section and len(current_lines) > 0:
         sections.append({
             "title": current_section["title"],
             "canonical": current_section["canonical"],
-            "lines": current_lines,
-            "content_preview": current_section["content_preview"][:200]
+            "lines": len(current_lines),
+            "content_preview": '\n'.join(current_lines[:5])[:200]
         })
     
     return sections
@@ -878,22 +1018,26 @@ def analyze_dataset(
             for section in client_sections:
                 title_norm = normalize_title(section["title"])
                 canonical = section["canonical"]
+                lines_count = section["lines"]
                 
                 if canonical:
                     # Titre mappé: compter variant
                     all_titles[title_norm] += 1
-                    client_sections_found.add(canonical)
-                    # Garder le max de lignes pour cette section dans ce client
-                    client_section_max_lines[canonical] = max(
-                        client_section_max_lines.get(canonical, 0),
-                        section["lines"]
-                    )
+                    
+                    # ✅ V4.1: Section présente UNIQUEMENT si lines > 0
+                    if lines_count > 0:
+                        client_sections_found.add(canonical)
+                        # Garder le max de lignes pour cette section dans ce client
+                        client_section_max_lines[canonical] = max(
+                            client_section_max_lines.get(canonical, 0),
+                            lines_count
+                        )
                 else:
                     # ✅ Titre non mappé: filtrer le bruit avant comptage
                     if not is_noise_title(title_norm):
                         unknown_titles[title_norm] += 1
             
-            # Enregistrer les sections de ce client (UID interne)
+            # ✅ V4.1: Enregistrer UNIQUEMENT sections avec lines > 0
             client_uid = f"{client_folder.name}_{i}"  # UID interne non exporté
             for sec in client_sections_found:
                 section_clients[sec].add(client_uid)
