@@ -38,6 +38,30 @@ CANONICAL_SECTIONS = {
     "synthese_conclusion": "Synthèse / conclusion"
 }
 
+# ============================================================================
+# Sections internes (non-canoniques) - Micro-fix v3
+# ============================================================================
+# Ces sections sont extraites mais ne comptent pas dans les métriques canoniques
+
+INTERNAL_SECTIONS = {
+    "tests": "Tests et évaluations"
+}
+
+# Toutes les sections reconnues (canoniques + internes)
+ALL_SECTIONS = {**CANONICAL_SECTIONS, **INTERNAL_SECTIONS}
+
+# ============================================================================
+# Conteneurs / sous-titres (Micro-fix v3)
+# ============================================================================
+# Ces titres ne doivent PAS ouvrir de nouvelle section ni être comptés en unknown
+
+CONTAINER_HEADINGS = {
+    "RESSOURCES COMPORTEMENTALES",
+    "SOCIALES",
+    "PROFESSIONNELLES",
+    "RESSOURCES",
+}
+
 
 # Seed mapping : titre normalisé -> section canonique
 SEED_SECTION_TITLE_MAP = {
@@ -128,6 +152,10 @@ SEED_SECTION_TITLE_MAP = {
     "ORIENTATION": "pistes_metiers",
     "PISTES D ORIENTATION": "pistes_metiers",
     "VOCATIO": "pistes_metiers",
+    # Micro-fix v3: mapper RESULTATS DE LA DISCUSSION vers pistes_metiers
+    "RESULTATS DE LA DISCUSSION AVEC L'ASSURE": "pistes_metiers",
+    "RESULTATS DE LA DISCUSSION AVEC L ASSURE": "pistes_metiers",  # variante sans apostrophe
+    "RESULTATS DE LA DISCUSSION": "pistes_metiers",
     
     # Plan d'action
     "PLAN D ACTION": "plan_action",
@@ -140,7 +168,29 @@ SEED_SECTION_TITLE_MAP = {
     "CONCLUSION": "synthese_conclusion",
     "BILAN": "synthese_conclusion",
     "RECAPITULATIF": "synthese_conclusion",
-    "QUALITE GENERALE": "synthese_conclusion"
+    "QUALITE GENERALE": "synthese_conclusion",
+    
+    # Tests et évaluations (section interne non-canonique) - Micro-fix v3
+    "EVALUATIONS": "tests",
+    "EVALUATION": "tests",
+    "TESTS METIERS": "tests",
+    "TESTS": "tests",  # Note: filtre NOISE gère "TESTS" seul en minuscule
+    "FRANCAIS NIVEAU 2": "tests",
+    "FRANCAIS NIVEAU 3": "tests",
+    "FRANCAIS - NIVEAU 2": "tests",
+    "FRANCAIS - NIVEAU 3": "tests",
+    "FRANCAIS - NIVEAU 2/3": "tests",
+    "POSITIONNEMENT DE NIVEAU DE FRANCAIS": "tests",
+    "VITESSE DE FRAPPE EN FRANCAIS": "tests",
+    "WORD POSITIONNEMENT DE NIVEAU": "tests",
+    "WORD - POSITIONNEMENT DE NIVEAU": "tests",
+    "EXCEL POSITIONNEMENT DE NIVEAU": "tests",
+    "EXCEL - POSITIONNEMENT DE NIVEAU": "tests",
+    "POWERPOINT POSITIONNEMENT DE NIVEAU": "tests",
+    "POWERPOINT - POSITIONNEMENT DE NIVEAU": "tests",
+    "OUTLOOK 2010": "tests",
+    "OUTLOOK": "tests",
+    "POSITIONNEMENT": "tests",
 }
 
 
@@ -591,6 +641,77 @@ def match_title_to_canonical(title: str, learned_map: Optional[Dict[str, str]] =
             best_match = canonical
     
     return best_match
+
+
+def is_container_heading(title: str) -> bool:
+    """
+    Détermine si un titre est un conteneur/sous-titre (Micro-fix v3).
+    
+    Les conteneurs ne doivent PAS :
+    - ouvrir une nouvelle section
+    - être comptés en unknown_titles
+    
+    Args:
+        title: Titre normalisé
+        
+    Returns:
+        True si c'est un conteneur
+    """
+    normalized = normalize_heading_for_titles(title)
+    
+    # 1. Match exact dans CONTAINER_HEADINGS
+    if normalized in CONTAINER_HEADINGS:
+        return True
+    
+    # 2. Règle heuristique : 1-2 mots courts (sauf si mappé explicitement)
+    tokens = normalized.split()
+    if len(tokens) <= 2 and len(normalized) <= 20:
+        # Vérifier que ce n'est pas un titre mappé explicitement
+        if normalized not in SEED_SECTION_TITLE_MAP:
+            return True
+    
+    return False
+
+
+def apply_max_lines(text: str, max_lines: int) -> str:
+    """
+    Applique une limite de lignes sur un texte (Micro-fix v3).
+    
+    Stratégie heuristique (sans invention) :
+    - Nettoyer lignes vides / puces répétitives
+    - Garder l'ordre original
+    - Si > max_lines : garder (max_lines - 1) premières + fusionner reste
+    
+    Args:
+        text: Texte source
+        max_lines: Nombre max de lignes
+        
+    Returns:
+        Texte compressé (≤ max_lines)
+    """
+    if not text or max_lines <= 0:
+        return text
+    
+    # Split en lignes et nettoyer
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    # Si déjà OK, retourner tel quel
+    if len(lines) <= max_lines:
+        return '\n'.join(lines)
+    
+    # Garder (max_lines - 1) premières lignes
+    kept_lines = lines[:max_lines - 1]
+    
+    # Fusionner le reste dans la dernière ligne
+    remaining = lines[max_lines - 1:]
+    # Limiter la fusion pour éviter une ligne trop longue
+    merged = ' ; '.join(remaining)
+    if len(merged) > 200:  # Limite arbitraire
+        merged = merged[:197] + '...'
+    
+    kept_lines.append(merged)
+    
+    return '\n'.join(kept_lines)
 
 
 def is_probable_heading(para_text: str, para_obj=None) -> bool:
@@ -1258,7 +1379,7 @@ def analyze_dataset(
                             lines_count
                         )
                 else:
-                    # ✅ V4.1 + CORRECTIF B + COPILOT.MD: Titre non mappé: filtrer PII puis NOISE avant comptage
+                    # ✅ V4.1 + CORRECTIF B + COPILOT.MD + MICRO-FIX V3: Titre non mappé
                     # Normalisation stricte pour filtrage NOISE/PII (copilot.md section 2)
                     title_for_filter = normalize_heading_for_titles(title)
                     
@@ -1268,6 +1389,10 @@ def analyze_dataset(
                     
                     # Filtrer NOISE ensuite
                     if is_noise_title(title_for_filter):
+                        continue  # NE PAS compter, NE PAS stocker
+                    
+                    # Micro-fix v3: Filtrer conteneurs (ne PAS ouvrir section, ne PAS compter unknown)
+                    if is_container_heading(title_for_filter):
                         continue  # NE PAS compter, NE PAS stocker
                     
                     # Garder is_noise_heading() pour rétrocompatibilité (détecte autres patterns)
