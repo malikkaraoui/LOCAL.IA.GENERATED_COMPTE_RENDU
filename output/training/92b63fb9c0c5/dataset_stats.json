@@ -1,27 +1,27 @@
 {
-  "total_clients": 10,
-  "successful_scans": 10,
+  "total_clients": 19,
+  "successful_scans": 19,
   "errors": 0,
   "errors_top": [],
-  "gold_detected": 10,
+  "gold_detected": 19,
   "gold_detection_rate": 1.0,
-  "pipeline_ready": 10,
+  "pipeline_ready": 19,
   "pipeline_ready_rate": 1.0,
   "sources_stats": {
-    "mean": 30.6,
-    "median": 34.5,
+    "mean": 27.42105263157895,
+    "median": 23,
     "min": 8,
-    "max": 48,
-    "p10": 13,
+    "max": 68,
+    "p10": 12,
     "p90": 48
   },
   "extensions_distribution": {
-    ".docx": 110,
-    ".pdf": 174,
-    ".doc": 7,
-    ".msg": 15
+    ".docx": 159,
+    ".pdf": 321,
+    ".doc": 8,
+    ".msg": 33
   },
   "gold_strategies": {
-    "06_rapport_final": 10
+    "06_rapport_final": 19
   }
 }

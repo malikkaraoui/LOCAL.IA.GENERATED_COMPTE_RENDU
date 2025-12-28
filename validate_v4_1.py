@@ -86,6 +86,38 @@ def validate_v4_1(dataset_path: str):
         print()
     
     # ============================================================================
+    # CRITÈRE 1B : unknown_titles sans NOISE (copilot.md micro-fix v2)
+    # ============================================================================
+    print("=" * 70)
+    print("✅ CRITÈRE 1B : Anti-NOISE dans unknown_titles (v2)")
+    print("=" * 70)
+    
+    # Patterns NOISE exactes (copilot.md v2 - sans accents)
+    NOISE_TITLES = {
+        "LES RESULTATS DETAILLES SONT LES SUIVANTS",
+        "CI DESSOUS LES RESULTATS DETAILLES",
+        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE",  # sans accents
+        "TESTS",
+    }
+    
+    unknown_titles_dict = result.patterns.get("unknown_titles_top", {})
+    noise_detected = []
+    
+    for title, count in unknown_titles_dict.items():
+        if title in NOISE_TITLES:
+            noise_detected.append(f"{title} (count={count})")
+    
+    if noise_detected:
+        print(f"❌ ÉCHEC : {len(noise_detected)} titre(s) NOISE détecté(s)")
+        for noise in noise_detected:
+            print(f"   - {noise}")
+        print()
+    else:
+        print(f"✅ SUCCÈS : Aucun NOISE détecté dans unknown_titles_top")
+        print(f"   Patterns NOISE filtrés : {result.patterns.get('noise_titles_filtered', 0)}")
+        print()
+    
+    # ============================================================================
     # CRITÈRE 2 : unknown_titles sans PII
     # ============================================================================
     print("=" * 70)
@@ -136,6 +168,7 @@ def validate_v4_1(dataset_path: str):
         print()
     else:
         print("✅ SUCCÈS : Aucun PII détecté dans unknown_titles_top")
+        print(f"   Patterns PII filtrés : {result.patterns.get('pii_titles_filtered', 0)}")
         print(f"   Titres inconnus : {len(unknown_titles_dict)}")
         if unknown_titles_dict:
             print("   Top 5 :")

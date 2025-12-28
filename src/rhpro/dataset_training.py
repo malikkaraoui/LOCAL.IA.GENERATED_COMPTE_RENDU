@@ -341,14 +341,14 @@ def is_noise_title(text: str) -> bool:
     if not text or len(text) < 2:
         return True
     
-    # Normaliser pour matching cohérent
+    # Normaliser pour matching cohérent (micro-fix v2: sans accents)
     text_norm = normalize_heading_for_titles(text)
     
-    # ✅ Patterns NOISE exactes (copilot.md section 0)
+    # ✅ Patterns NOISE exactes (copilot.md v2 - sans accents)
     NOISE_TITLES = {
         "LES RESULTATS DETAILLES SONT LES SUIVANTS",
         "CI DESSOUS LES RESULTATS DETAILLES",
-        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE",  # apostrophe normalisée
+        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE",  # apostrophe normalisée, sans accents
         "TESTS",
     }
     
@@ -416,11 +416,13 @@ def is_pii_title(text: str) -> bool:
     if not text or len(text) < 2:
         return False
     
-    # Normaliser pour matching cohérent
+    # Normaliser pour matching cohérent (micro-fix v2: sans accents)
     text_norm = normalize_heading_for_titles(text)
     
-    # 1. Patterns NOM + PRENOM (copilot.md section 0)
+    # 1. Patterns NOM + PRENOM (copilot.md v2)
     # Détecte "NOM ... PRENOM ..." ou "PRENOM ... NOM ..."
+    # Supporte séparateurs : ":" espaces, "-", "/", etc.
+    # Ex: "NOM : X PRENOM : Y", "NOM X PRENOM Y", "NOM- X / PRENOM- Y"
     if re.search(r'\bNOM\b.*\bPRENOM\b|\bPRENOM\b.*\bNOM\b', text_norm):
         return True
     
@@ -492,15 +494,16 @@ def normalize_heading_for_titles(text: str) -> str:
     """
     Normalisation stricte pour filtrage NOISE/PII dans unknown_titles.
     
-    Applique (copilot.md section 4) :
+    Applique (copilot.md v2) :
     - strip + collapse espaces multiples en 1
     - .upper()
+    - suppression des accents (É → E, ASSURÉ → ASSURE)
     - apostrophe typographique ' → '
     - retirer ponctuation terminale (., ..., etc.)
     - normaliser tirets multiples en -
     
     Exemple:
-        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE..." 
+        "RÉSULTATS DE LA DISCUSSION AVEC L'ASSURÉ..." 
         → "RESULTATS DE LA DISCUSSION AVEC L'ASSURE"
     """
     if not text:
@@ -508,6 +511,10 @@ def normalize_heading_for_titles(text: str) -> str:
     
     # Strip et uppercase
     text = text.strip().upper()
+    
+    # Suppression des accents (micro-fix v2)
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
     
     # Normaliser apostrophes typographiques : ' ' ` → '
     text = text.replace(''', "'").replace(''', "'").replace('`', "'")
@@ -1415,7 +1422,6 @@ def analyze_dataset(
         logger.info(f"ℹ️ {noise_removed} titres NOISE filtrés de unknown_titles")
     
     # Reconstruction d'un Counter filtré pour most_common()
-    from collections import Counter
     filtered_counter = Counter(filtered_unknown)
     
     result.patterns = {

@@ -1,20 +1,20 @@
 {
   "schema_version": "training_state_v1.0",
-  "run_id": "BATCH 20_2025-12-28T17:18:29Z_92b63f",
-  "created_at": "2025-12-28T17:18:29Z",
+  "run_id": "BATCH 20_2025-12-28T19:37:36Z_92b63f",
+  "created_at": "2025-12-28T19:37:36Z",
   "dataset": {
     "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
     "dataset_id": "92b63fb9c0c5",
-    "clients_scanned": 10,
-    "clients_used": 10,
+    "clients_scanned": 19,
+    "clients_used": 19,
     "doc_types_stats": {
-      ".docx": 110,
-      ".pdf": 174,
-      ".doc": 7,
-      ".msg": 15
+      ".docx": 159,
+      ".pdf": 321,
+      ".doc": 8,
+      ".msg": 33
     },
     "gold_stats": {
-      "gold_detected_clients": 10,
+      "gold_detected_clients": 19,
       "gold_missing_clients": 0
     }
   },
@@ -66,43 +66,43 @@
   "patterns": {
     "section_stats": {
       "IDENTITY": {
-        "coverage_pct": 100,
-        "clients": 10,
+        "coverage_pct": 90,
+        "clients": 17,
         "lines": {
           "avg": 1.2,
           "median": 1,
-          "p90": 3
+          "p90": 2
         }
       },
       "SITUATION_PROFESSIONNELLE": {
-        "coverage_pct": 60,
-        "clients": 6,
+        "coverage_pct": 74,
+        "clients": 14,
         "lines": {
-          "avg": 2,
-          "median": 1,
-          "p90": 4
+          "avg": 5.6,
+          "median": 3,
+          "p90": 13
         }
       },
       "FORMATION": {
-        "coverage_pct": 80,
-        "clients": 8,
+        "coverage_pct": 84,
+        "clients": 16,
         "lines": {
-          "avg": 5.2,
+          "avg": 4.7,
           "median": 4,
-          "p90": 20
+          "p90": 6
         }
       },
       "COMPETENCES": {
-        "coverage_pct": 30,
-        "clients": 3,
+        "coverage_pct": 42,
+        "clients": 8,
         "lines": {
-          "avg": 3.3,
-          "median": 3,
-          "p90": 4
+          "avg": 4.4,
+          "median": 4,
+          "p90": 7
         }
       },
       "RESSOURCES_POINTS_APPUI": {
-        "coverage_pct": 10,
+        "coverage_pct": 5,
         "clients": 1,
         "lines": {
           "avg": 10,
@@ -111,7 +111,7 @@
         }
       },
       "RESSOURCES_POINTS_VIGILANCE": {
-        "coverage_pct": 10,
+        "coverage_pct": 5,
         "clients": 1,
         "lines": {
           "avg": 10,
@@ -120,55 +120,55 @@
         }
       },
       "MOTIVATIONS_VALEURS": {
-        "coverage_pct": 20,
-        "clients": 2,
+        "coverage_pct": 32,
+        "clients": 6,
         "lines": {
-          "avg": 1.5,
-          "median": 1,
-          "p90": 2
+          "avg": 5.7,
+          "median": 3,
+          "p90": 17
         }
       },
       "CONTRAINTES_FREINS": {
-        "coverage_pct": 10,
-        "clients": 1,
+        "coverage_pct": 79,
+        "clients": 15,
         "lines": {
-          "avg": 2,
+          "avg": 2.5,
           "median": 2,
-          "p90": 2
+          "p90": 4
         }
       },
       "OBJECTIFS": {
-        "coverage_pct": 10,
-        "clients": 1,
+        "coverage_pct": 37,
+        "clients": 7,
         "lines": {
-          "avg": 2,
-          "median": 2,
-          "p90": 2
+          "avg": 1.9,
+          "median": 1,
+          "p90": 5
         }
       },
       "PISTES_METIERS": {
-        "coverage_pct": 40,
-        "clients": 4,
+        "coverage_pct": 47,
+        "clients": 9,
         "lines": {
-          "avg": 4.5,
+          "avg": 3.9,
           "median": 1,
           "p90": 15
         }
       },
       "PLAN_ACTION": {
-        "coverage_pct": 40,
+        "coverage_pct": 21,
         "clients": 4,
         "lines": {
-          "avg": 4.8,
-          "median": 4,
-          "p90": 10
+          "avg": 3.8,
+          "median": 1,
+          "p90": 11
         }
       },
       "SYNTHESE_CONCLUSION": {
-        "coverage_pct": 70,
-        "clients": 7,
+        "coverage_pct": 79,
+        "clients": 15,
         "lines": {
-          "avg": 4.4,
+          "avg": 5.2,
           "median": 2,
           "p90": 21
         }
@@ -179,19 +179,19 @@
       "SURNAME": 1,
       "NUMERO_AVS": 1,
       "PROFESSION": 4,
-      "FORMATION": 20,
+      "FORMATION": 6,
       "Ressources_comportementales_Points_d'appui": 4,
       "Ressources_comportementales_Points_de_vigilance": 4,
-      "IDENTITY": 3,
-      "SITUATION_PROFESSIONNELLE": 4,
-      "COMPETENCES": 4,
+      "IDENTITY": 2,
+      "SITUATION_PROFESSIONNELLE": 13,
+      "COMPETENCES": 7,
       "RESSOURCES_POINTS_APPUI": 10,
       "RESSOURCES_POINTS_VIGILANCE": 10,
-      "MOTIVATIONS_VALEURS": 2,
-      "CONTRAINTES_FREINS": 2,
-      "OBJECTIFS": 2,
+      "MOTIVATIONS_VALEURS": 17,
+      "CONTRAINTES_FREINS": 4,
+      "OBJECTIFS": 5,
       "PISTES_METIERS": 15,
-      "PLAN_ACTION": 10,
+      "PLAN_ACTION": 11,
       "SYNTHESE_CONCLUSION": 21
     },
     "section_title_map": {
@@ -204,6 +204,10 @@
       "EXPERIENCE PROFESSIONNELLE": "situation_professionnelle",
       "EXPERIENCES": "situation_professionnelle",
       "PARCOURS": "situation_professionnelle",
+      "STAGE EN LAI 15": "situation_professionnelle",
+      "LAI 15": "situation_professionnelle",
+      "CONTEXTE ET DEROULEMENT DU STAGE": "situation_professionnelle",
+      "PROFESSION": "situation_professionnelle",
       "FORMATION": "formation",
       "PARCOURS FORMATION": "formation",
       "DIPLOMES": "formation",
@@ -223,6 +227,8 @@
       "PRISES D INITIATIVES": "competences",
       "AUTONOMIE": "competences",
       "PRESENTATION": "competences",
+      "SELON L EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES": "competences",
+      "DANS SON STAGE SES TACHES SONT LES SUIVANTES": "competences",
       "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
       "POINTS D APPUI": "ressources_points_appui",
       "FORCES": "ressources_points_appui",
@@ -236,19 +242,27 @@
       "INTERETS": "motivations_valeurs",
       "CENTRES D INTERET": "motivations_valeurs",
       "ENGAGEMENT ET PERSEVERANCE": "motivations_valeurs",
+      "TEST EVOLUTION": "motivations_valeurs",
       "CONTRAINTES": "contraintes_freins",
       "FREINS": "contraintes_freins",
       "LIMITES": "contraintes_freins",
       "LIMITATIONS": "contraintes_freins",
       "SANTE": "contraintes_freins",
+      "INCERTITUDES & OBSTACLES": "contraintes_freins",
+      "INCERTITUDES & OBSTACLES (LIMITATIONS)": "contraintes_freins",
+      "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": "contraintes_freins",
+      "LES LIMITATIONS MEDICALES DE L ASSURE SONT LES SUIVANTES": "contraintes_freins",
+      "DIFFICULTEES RENCONTREES": "contraintes_freins",
       "OBJECTIFS": "objectifs",
       "OBJECTIF": "objectifs",
       "PROJET": "objectifs",
       "PROJET PROFESSIONNEL": "objectifs",
+      "RELATION AU MARCHE DE L EMPLOI": "objectifs",
       "PISTES": "pistes_metiers",
       "PISTES METIERS": "pistes_metiers",
       "ORIENTATION": "pistes_metiers",
       "PISTES D ORIENTATION": "pistes_metiers",
+      "VOCATIO": "pistes_metiers",
       "PLAN D ACTION": "plan_action",
       "ACTIONS": "plan_action",
       "PLANIFICATION": "plan_action",
@@ -260,27 +274,18 @@
       "QUALITE GENERALE": "synthese_conclusion"
     },
     "unknown_titles_top": {
-      "LES RESULTATS DETAILLES SONT LES SUIVANTS": 8,
-      "PROFESSION": 4,
-      "RELATION AU MARCHE DE L’EMPLOI": 3,
-      "INCERTITUDES & OBSTACLES": 3,
-      "STAGE EN LAI 15": 2,
-      "VOCATIO": 2,
-      "SELON L’EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES": 2,
-      "TESTS": 2,
-      "TEST EVOLUTION": 2,
-      "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": 2,
-      "CI DESSOUS LES RESULTATS DETAILLES": 2,
-      "RESULTATS DE LA DISCUSSION AVEC L’ASSURE": 2,
-      "CONTEXTE ET DEROULEMENT DU STAGE": 1,
-      "DIFFICULTEES RENCONTREES": 1,
+      "RESULTATS DE LA DISCUSSION AVEC L’ASSURE": 3,
+      "EVALUATIONS": 2,
+      "RESSOURCES COMPORTEMENTALES": 2,
+      "SOCIALES": 2,
+      "FRANCAIS - NIVEAU 2": 2,
+      "FRANCAIS - NIVEAU 3": 2,
+      "VITESSE DE FRAPPE EN FRANCAIS": 2,
+      "WORD - POSITIONNEMENT DE NIVEAU": 2,
+      "POWERPOINT - POSITIONNEMENT DE NIVEAU": 2,
+      "OUTLOOK 2010": 2,
       "LA GESTION DE LA CONCENTRATION ET DE LA COMPREHENSION ECRITE": 1,
-      "LES LIMITATIONS MEDICALES DE L’ASSURE SONT LES SUIVANTES": 1,
-      "EVALUATIONS": 1,
-      "VOCABULAIRE B1": 1,
-      "LAI 15": 1,
-      "RESSOURCES COMPORTEMENTALES": 1,
-      "LES MOTIVATEURS PRINCIPAUX DE MONSIEUR ATTOU SONT": 1,
+      "VOCABULAIRE : B1": 1,
       "RELATION A LA CARRIERE": 1,
       "ORGANISATION PRIVILEGIEE": 1,
       "ROLE PRIVILEGIE": 1,
@@ -290,18 +295,11 @@
       "PERSEVERANT & ENTREPRENANT": 1,
       "INVENTIF & CONSCIENCIEUX": 1,
       "ENTREPRENANT & INVENTIF": 1,
-      "APRES DISCUSSION ET RETOUR DU TEST EVOLUTION AVEC MONSIEUR ATTOU NOUS AVONS DISCUTE ENSEMBLE DES DOMAINES D’ACTIVITE SUIVANTS": 1,
-      "SOCIALES": 1,
       "STAGES": 1,
-      "L’ENTREPRISE D’ACCUEIL EN DIFFICULTE N’A PAS PU GARDER MONSIEUR ATTOU C’EST POURQUOI L’ASSURE EST PLACE A": 1,
       "LE CAHIER DES CHARGES EST LE SUIVANT": 1,
       "VOICI LE CAHIER DES CHARGES": 1,
-      "INCERTITUDES & OBSTACLES (LIMITATIONS)": 1,
-      "NOM AYNE PRENOM MICKAEL": 1,
-      "DANS SON STAGE SES TACHES SONT LES SUIVANTES": 1,
       "ANALYSE DES PROBLEMES": 1,
-      "ETES VOUS D ACCORD D ETRE UNE PERSONNE DE REFERENCE POUR LE STAGIAIRE ? OUI": 1,
-      "AUTRES REMARQUES": 1,
+      "ETES-VOUS D'ACCORD D'ETRE UNE PERSONNE DE REFERENCE POUR LE STAGIAIRE ? OUI": 1,
       "ENTRETIEN & TRAVAUX MANUELS": 1,
       "LOGISTIQUE & TRANSPORT": 1,
       "MUSIQUE & SPECTACLE": 1,
@@ -309,10 +307,26 @@
       "SOCIAL (45)": 1,
       "REALISTE (39)": 1,
       "CONVENTIONNEL (37)": 1,
-      "SOUTIEN (39)": 1
+      "SOUTIEN (39)": 1,
+      "INDEPENDANCE (36)": 1,
+      "PERSUASION (36)": 1,
+      "COMPTABILITE": 1,
+      "POSITIONNEMENT DE NIVEAU DE FRANCAIS NON FRANCOPHONE": 1,
+      "AU NIVEAU DES SECTEURS PRIVILEGIES, CITONS LES TROIS PREMIERS SECTEURS": 1,
+      "TEST VOCATIO": 1,
+      "IL Y A LIEU DE S’Y REFERER POUR LE DETAIL. EN RESUME, IL RESSORT LES ELEMENTS SUIVANTS": 1,
+      "LES TROIS DOMAINES QUI COTENT LE PLUS FORT SONT": 1,
+      "TRI ET CLASSEMENT": 1,
+      "TEST D’ATTENTION": 1,
+      "EXCEL - POSITIONNEMENT DE NIVEAU": 1,
+      "AIDE AU PLACEMENT": 1,
+      "ENTRETIEN": 1,
+      "POSITIONNEMENT DE NIVEAU DE FRANCAIS": 1,
+      "AISANCE INFORMATIQUE": 1,
+      "POSITIONNEMENT WORD": 1
     },
-    "unknown_titles_count": 77,
-    "unknown_titles_total_occurrences": 99
+    "unknown_titles_count": 81,
+    "unknown_titles_total_occurrences": 92
   },
   "warnings": []
 }
