@@ -619,52 +619,58 @@ def show_test_tab():
         st.markdown("---")
         st.markdown("#### 📥 Téléchargements")
         
+        # ⚠️ IMPORTANT: Lire les fichiers AVANT les boutons pour éviter le rerun
+        docx_data = docx_path.read_bytes() if docx_path.exists() else None
+        metrics_data = metrics_path.read_bytes() if metrics_path.exists() else None
+        debug_data = debug_path.read_bytes() if debug_path.exists() else None
+        validation_path = output_path / f"{client_slug}_validation.json"
+        validation_data = validation_path.read_bytes() if validation_path.exists() else None
+        
         cols = st.columns(4)
         
         with cols[0]:
-            if docx_path.exists():
-                with open(docx_path, "rb") as f:
-                    st.download_button(
-                        "📄 DOCX",
-                        data=f,
-                        file_name=docx_path.name,
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
-                    )
+            if docx_data:
+                st.download_button(
+                    "📄 DOCX",
+                    data=docx_data,
+                    file_name=docx_path.name,
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="dl_docx"
+                )
         
         with cols[1]:
-            if metrics_path.exists():
-                with open(metrics_path, "rb") as f:
-                    st.download_button(
-                        "📊 Metrics",
-                        data=f,
-                        file_name=metrics_path.name,
-                        mime="application/json",
-                        use_container_width=True
-                    )
+            if metrics_data:
+                st.download_button(
+                    "📊 Metrics",
+                    data=metrics_data,
+                    file_name=metrics_path.name,
+                    mime="application/json",
+                    use_container_width=True,
+                    key="dl_metrics"
+                )
         
         with cols[2]:
-            if debug_path.exists():
-                with open(debug_path, "rb") as f:
-                    st.download_button(
-                        "🐛 Debug",
-                        data=f,
-                        file_name=debug_path.name,
-                        mime="application/json",
-                        use_container_width=True
-                    )
+            if debug_data:
+                st.download_button(
+                    "🐛 Debug",
+                    data=debug_data,
+                    file_name=debug_path.name,
+                    mime="application/json",
+                    use_container_width=True,
+                    key="dl_debug"
+                )
         
         with cols[3]:
-            validation_path = output_path / f"{client_slug}_validation.json"
-            if validation_path.exists():
-                with open(validation_path, "rb") as f:
-                    st.download_button(
-                        "✅ Validation",
-                        data=f,
-                        file_name=validation_path.name,
-                        mime="application/json",
-                        use_container_width=True
-                    )
+            if validation_data:
+                st.download_button(
+                    "✅ Validation",
+                    data=validation_data,
+                    file_name=validation_path.name,
+                    mime="application/json",
+                    use_container_width=True,
+                    key="dl_validation"
+                )
 
 
 def show_training_and_test_page():
