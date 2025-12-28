@@ -1,0 +1,60 @@
+{
+  "training_state_id": "run_new_456",
+  "schema_version": "training_state_v1.0",
+  "generated_at": "2025-12-28T14:30:00",
+  "dataset": {
+    "clients_used": 15,
+    "root_path": "/dataset/BATCH_B"
+  },
+  "patterns": {
+    "field_max_lines": {
+      "nom": 2,
+      "email": 2,
+      "telephone": 1,
+      "prenom": 1
+    },
+    "section_stats": {
+      "formation": {
+        "coverage_pct": 80,
+        "clients_with_section": 10,
+        "lines": {
+          "p90": 8.0,
+          "median": 5.0
+        }
+      },
+      "competences": {
+        "coverage_pct": 60,
+        "clients_with_section": 9,
+        "lines": {
+          "p90": 6.0,
+          "median": 4.0
+        }
+      },
+      "experience": {
+        "lines": {
+          "p90": 10.0,
+          "median": 7.0
+        },
+        "coverage_pct": 90,
+        "clients_with_section": 9
+      }
+    }
+  },
+  "warnings": [
+    {
+      "code": "WARN_EXTRACTION_FAILED",
+      "message": "Échec extraction"
+    },
+    {
+      "code": "WARN_LOGO_MISSING",
+      "message": "Logo non trouvé"
+    }
+  ],
+  "history": [
+    {
+      "run_id": "run_new_456",
+      "timestamp": "2025-12-28T14:30:00",
+      "clients": 15
+    }
+  ]
+}

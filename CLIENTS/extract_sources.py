@@ -44,8 +44,18 @@ from docx import Document  # python-docx
 
 LOG = logging.getLogger("extract_sources")
 
-SUPPORTED_DIRECT = {".pdf", ".docx", ".txt"}
+SUPPORTED_DIRECT = {".pdf", ".docx", ".txt", ".msg"}
 SUPPORTED_SOFFICE = {".doc", ".rtf", ".odt", ".docm", ".dot", ".dotx", ".dotm"}  # si --enable-soffice
+
+# ✅ Import lazy du module .msg
+MSG_SUPPORT_AVAILABLE = False
+try:
+    from core.extractors.msg_extractor import extract_msg_to_text
+    MSG_SUPPORT_AVAILABLE = True
+    LOG.info("extract-msg disponible : support .msg activé")
+except ImportError:
+    LOG.warning("extract-msg non installé : les fichiers .msg ne seront pas indexés")
+    extract_msg_to_text = None  # type: ignore
 
 
 # -------------------------
@@ -202,6 +212,12 @@ def extract_one(path: Path, enable_soffice: bool) -> ExtractedDoc:
             text = res["text"]
             pages = None
             extractor = "txt"
+        elif ext == ".msg":
+            if not MSG_SUPPORT_AVAILABLE or extract_msg_to_text is None:
+                raise ImportError("extract-msg non installé : pip install extract-msg>=0.48.0")
+            text, meta = extract_msg_to_text(path)
+            pages = None
+            extractor = "extract-msg"
         elif enable_soffice and ext in SUPPORTED_SOFFICE:
             soffice_bin = _soffice_available()
             if not soffice_bin:

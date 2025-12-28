@@ -387,6 +387,7 @@ class ReportOrchestrator:
             pdf_n = ext_counts.get(".pdf", 0)
             docx_n = ext_counts.get(".docx", 0)
             txt_n = ext_counts.get(".txt", 0)
+            msg_n = ext_counts.get(".msg", 0)
             m4a_n = ext_counts.get(".m4a", 0)
             mp3_n = ext_counts.get(".mp3", 0)
             wav_n = ext_counts.get(".wav", 0)
@@ -394,7 +395,7 @@ class ReportOrchestrator:
                 "EXTRACTING",
                 (
                     f"Sources détectées: {len(files)} fichier(s) "
-                    f"(pdf={pdf_n}, docx={docx_n}, txt={txt_n}, m4a={m4a_n}, mp3={mp3_n}, wav={wav_n}). "
+                    f"(pdf={pdf_n}, docx={docx_n}, txt={txt_n}, msg={msg_n}, m4a={m4a_n}, mp3={mp3_n}, wav={wav_n}). "
                     f"Audio RAG (transcriptions): {ingested_txt} .txt"
                 ),
                 0.12,

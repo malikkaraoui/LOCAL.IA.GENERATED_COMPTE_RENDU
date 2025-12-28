@@ -1,20 +1,17 @@
 {
   "schema_version": "training_state_v1.0",
-  "run_id": "BATCH 20_2025-12-28T17:18:29Z_92b63f",
-  "created_at": "2025-12-28T17:18:29Z",
+  "run_id": "samples_2025-12-28T16:45:12Z_7007cc",
+  "created_at": "2025-12-28T16:45:12Z",
   "dataset": {
-    "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
-    "dataset_id": "92b63fb9c0c5",
-    "clients_scanned": 10,
-    "clients_used": 10,
+    "root_path": "/Users/malik/Documents/Espace de travail/SCRIPT.IA/data/samples",
+    "dataset_id": "7007cc882cb4",
+    "clients_scanned": 5,
+    "clients_used": 5,
     "doc_types_stats": {
-      ".docx": 110,
-      ".pdf": 174,
-      ".doc": 7,
-      ".msg": 15
+      ".docx": 2
     },
     "gold_stats": {
-      "gold_detected_clients": 10,
+      "gold_detected_clients": 5,
       "gold_missing_clients": 0
     }
   },
@@ -66,111 +63,111 @@
   "patterns": {
     "section_stats": {
       "IDENTITY": {
-        "coverage_pct": 100,
-        "clients": 10,
+        "coverage_pct": 40,
+        "clients": 2,
         "lines": {
-          "avg": 1.2,
+          "avg": 1,
           "median": 1,
-          "p90": 3
+          "p90": 1
         }
       },
       "SITUATION_PROFESSIONNELLE": {
-        "coverage_pct": 60,
-        "clients": 6,
+        "coverage_pct": 0,
+        "clients": 0,
         "lines": {
-          "avg": 2,
-          "median": 1,
-          "p90": 4
+          "avg": 0,
+          "median": 0,
+          "p90": 0
         }
       },
       "FORMATION": {
-        "coverage_pct": 80,
-        "clients": 8,
+        "coverage_pct": 40,
+        "clients": 2,
         "lines": {
-          "avg": 5.2,
+          "avg": 4,
           "median": 4,
-          "p90": 20
-        }
-      },
-      "COMPETENCES": {
-        "coverage_pct": 30,
-        "clients": 3,
-        "lines": {
-          "avg": 3.3,
-          "median": 3,
           "p90": 4
         }
       },
-      "RESSOURCES_POINTS_APPUI": {
-        "coverage_pct": 10,
-        "clients": 1,
+      "COMPETENCES": {
+        "coverage_pct": 0,
+        "clients": 0,
         "lines": {
-          "avg": 10,
-          "median": 10,
-          "p90": 10
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "RESSOURCES_POINTS_APPUI": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
         }
       },
       "RESSOURCES_POINTS_VIGILANCE": {
-        "coverage_pct": 10,
-        "clients": 1,
+        "coverage_pct": 0,
+        "clients": 0,
         "lines": {
-          "avg": 10,
-          "median": 10,
-          "p90": 10
+          "avg": 0,
+          "median": 0,
+          "p90": 0
         }
       },
       "MOTIVATIONS_VALEURS": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "CONTRAINTES_FREINS": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "OBJECTIFS": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "PISTES_METIERS": {
+        "coverage_pct": 40,
+        "clients": 2,
+        "lines": {
+          "avg": 5,
+          "median": 5,
+          "p90": 9
+        }
+      },
+      "PLAN_ACTION": {
         "coverage_pct": 20,
+        "clients": 1,
+        "lines": {
+          "avg": 7,
+          "median": 7,
+          "p90": 7
+        }
+      },
+      "SYNTHESE_CONCLUSION": {
+        "coverage_pct": 40,
         "clients": 2,
         "lines": {
           "avg": 1.5,
           "median": 1,
           "p90": 2
-        }
-      },
-      "CONTRAINTES_FREINS": {
-        "coverage_pct": 10,
-        "clients": 1,
-        "lines": {
-          "avg": 2,
-          "median": 2,
-          "p90": 2
-        }
-      },
-      "OBJECTIFS": {
-        "coverage_pct": 10,
-        "clients": 1,
-        "lines": {
-          "avg": 2,
-          "median": 2,
-          "p90": 2
-        }
-      },
-      "PISTES_METIERS": {
-        "coverage_pct": 40,
-        "clients": 4,
-        "lines": {
-          "avg": 4.5,
-          "median": 1,
-          "p90": 15
-        }
-      },
-      "PLAN_ACTION": {
-        "coverage_pct": 40,
-        "clients": 4,
-        "lines": {
-          "avg": 4.8,
-          "median": 4,
-          "p90": 10
-        }
-      },
-      "SYNTHESE_CONCLUSION": {
-        "coverage_pct": 70,
-        "clients": 7,
-        "lines": {
-          "avg": 4.4,
-          "median": 2,
-          "p90": 21
         }
       }
     },
@@ -179,20 +176,20 @@
       "SURNAME": 1,
       "NUMERO_AVS": 1,
       "PROFESSION": 4,
-      "FORMATION": 20,
+      "FORMATION": 4,
       "Ressources_comportementales_Points_d'appui": 4,
       "Ressources_comportementales_Points_de_vigilance": 4,
-      "IDENTITY": 3,
-      "SITUATION_PROFESSIONNELLE": 4,
-      "COMPETENCES": 4,
-      "RESSOURCES_POINTS_APPUI": 10,
-      "RESSOURCES_POINTS_VIGILANCE": 10,
-      "MOTIVATIONS_VALEURS": 2,
-      "CONTRAINTES_FREINS": 2,
-      "OBJECTIFS": 2,
-      "PISTES_METIERS": 15,
-      "PLAN_ACTION": 10,
-      "SYNTHESE_CONCLUSION": 21
+      "IDENTITY": 1,
+      "SITUATION_PROFESSIONNELLE": 0,
+      "COMPETENCES": 0,
+      "RESSOURCES_POINTS_APPUI": 0,
+      "RESSOURCES_POINTS_VIGILANCE": 0,
+      "MOTIVATIONS_VALEURS": 0,
+      "CONTRAINTES_FREINS": 0,
+      "OBJECTIFS": 0,
+      "PISTES_METIERS": 9,
+      "PLAN_ACTION": 7,
+      "SYNTHESE_CONCLUSION": 2
     },
     "section_title_map": {
       "IDENTITE": "identity",
@@ -260,59 +257,24 @@
       "QUALITE GENERALE": "synthese_conclusion"
     },
     "unknown_titles_top": {
-      "LES RESULTATS DETAILLES SONT LES SUIVANTS": 8,
-      "PROFESSION": 4,
-      "RELATION AU MARCHE DE L’EMPLOI": 3,
-      "INCERTITUDES & OBSTACLES": 3,
-      "STAGE EN LAI 15": 2,
-      "VOCATIO": 2,
-      "SELON L’EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES": 2,
-      "TESTS": 2,
-      "TEST EVOLUTION": 2,
-      "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": 2,
-      "CI DESSOUS LES RESULTATS DETAILLES": 2,
-      "RESULTATS DE LA DISCUSSION AVEC L’ASSURE": 2,
-      "CONTEXTE ET DEROULEMENT DU STAGE": 1,
-      "DIFFICULTEES RENCONTREES": 1,
-      "LA GESTION DE LA CONCENTRATION ET DE LA COMPREHENSION ECRITE": 1,
-      "LES LIMITATIONS MEDICALES DE L’ASSURE SONT LES SUIVANTES": 1,
-      "EVALUATIONS": 1,
-      "VOCABULAIRE B1": 1,
-      "LAI 15": 1,
-      "RESSOURCES COMPORTEMENTALES": 1,
-      "LES MOTIVATEURS PRINCIPAUX DE MONSIEUR ATTOU SONT": 1,
-      "RELATION A LA CARRIERE": 1,
-      "ORGANISATION PRIVILEGIEE": 1,
-      "ROLE PRIVILEGIE": 1,
-      "ACTIVITES PRIVILEGIEES": 1,
-      "SECTEURS PRIVILEGIES": 1,
-      "CONSCIENCIEUX & PERSEVERANT": 1,
-      "PERSEVERANT & ENTREPRENANT": 1,
-      "INVENTIF & CONSCIENCIEUX": 1,
-      "ENTREPRENANT & INVENTIF": 1,
-      "APRES DISCUSSION ET RETOUR DU TEST EVOLUTION AVEC MONSIEUR ATTOU NOUS AVONS DISCUTE ENSEMBLE DES DOMAINES D’ACTIVITE SUIVANTS": 1,
-      "SOCIALES": 1,
-      "STAGES": 1,
-      "L’ENTREPRISE D’ACCUEIL EN DIFFICULTE N’A PAS PU GARDER MONSIEUR ATTOU C’EST POURQUOI L’ASSURE EST PLACE A": 1,
-      "LE CAHIER DES CHARGES EST LE SUIVANT": 1,
-      "VOICI LE CAHIER DES CHARGES": 1,
+      "PROFESSION": 1,
+      "TESTS": 1,
+      "POSITIONNEMENT DE NIVEAU DE FRANCAIS NON FRANCOPHONE": 1,
+      "TEST EVOLUTION": 1,
+      "AU NIVEAU DES ACTIVITES PRIVILEGIEES LES RESULTATS DU TEST DE MADAME BASILIO MONTRENT TROIS ACTIVITES EN PHASE AVEC SON PROFIL COMPORTEMENTAL": 1,
+      "AU NIVEAU DES SECTEURS PRIVILEGIES CITONS LES TROIS PREMIERS SECTEURS": 1,
+      "AU NIVEAU DES FONCTIONS PRIVILEGIEES MADAME BASILIO SE POSITIONNE DANS LES FONCTIONS « ENTREPRENANT » ET « PERSEVERANT »": 1,
+      "TEST VOCATIO": 1,
+      "IL Y A LIEU DE S’Y REFERER POUR LE DETAIL EN RESUME IL RESSORT LES ELEMENTS SUIVANTS": 1,
+      "LES TROIS DOMAINES QUI COTENT LE PLUS FORT SONT": 1,
+      "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": 1,
+      "STAGE EN LAI 15": 1,
       "INCERTITUDES & OBSTACLES (LIMITATIONS)": 1,
-      "NOM AYNE PRENOM MICKAEL": 1,
-      "DANS SON STAGE SES TACHES SONT LES SUIVANTES": 1,
-      "ANALYSE DES PROBLEMES": 1,
-      "ETES VOUS D ACCORD D ETRE UNE PERSONNE DE REFERENCE POUR LE STAGIAIRE ? OUI": 1,
-      "AUTRES REMARQUES": 1,
-      "ENTRETIEN & TRAVAUX MANUELS": 1,
-      "LOGISTIQUE & TRANSPORT": 1,
-      "MUSIQUE & SPECTACLE": 1,
-      "DROIT & JUSTICE": 1,
-      "SOCIAL (45)": 1,
-      "REALISTE (39)": 1,
-      "CONVENTIONNEL (37)": 1,
-      "SOUTIEN (39)": 1
+      "LORS DE SES STAGES IL A PU REALISER LES ACTIVITES SUIVANTES": 1,
+      "STAGE EN LAI 18 AU SEIN DE BILLIGHT SA": 1
     },
-    "unknown_titles_count": 77,
-    "unknown_titles_total_occurrences": 99
+    "unknown_titles_count": 15,
+    "unknown_titles_total_occurrences": 15
   },
   "warnings": []
 }

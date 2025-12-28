@@ -1,0 +1,13 @@
+{
+  "dataset_id": "7007cc882cb4",
+  "timestamp": "2025-12-28T16:45:11.892962",
+  "total_clients": 5,
+  "successful_scans": 5,
+  "client_folders": [
+    "client_01",
+    "client_02",
+    "client_03",
+    "client_04",
+    "client_05"
+  ]
+}

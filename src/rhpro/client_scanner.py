@@ -201,7 +201,7 @@ def find_gold_document(client_folder: Path) -> Optional[Dict[str, Any]]:
     return None
 
 
-def find_rag_sources(client_folder: Path) -> List[Dict[str, Any]]:
+def find_rag_sources(client_folder: Path, index_msg: bool = False) -> List[Dict[str, Any]]:
     """
     Trouve tous les documents exploitables pour RAG.
     
@@ -214,9 +214,12 @@ def find_rag_sources(client_folder: Path) -> List[Dict[str, Any]]:
     
     Args:
         client_folder: Dossier du client
+        index_msg: Si True, inclure les .msg dans rag_sources. Si False, les compter séparément.
         
     Returns:
         Liste de dicts avec path, category, extension, size_bytes
+        
+    CORRECTIF A: Support .msg avec option index_msg
     """
     sources = []
     
@@ -228,12 +231,15 @@ def find_rag_sources(client_folder: Path) -> List[Dict[str, Any]]:
         ("05_mesures", EXPECTED_FOLDERS["05_mesures"]),
     ]
     
+    # Toutes les extensions sont indexées par défaut maintenant (y compris .msg)
+    extensions_to_index = DOCUMENT_EXTENSIONS
+    
     # Scanner les dossiers spécifiques
     for category, folder_variants in scan_targets:
         folder = find_folder(client_folder, folder_variants)
         if folder:
             for file_path in folder.rglob("*"):
-                if file_path.is_file() and file_path.suffix in DOCUMENT_EXTENSIONS:
+                if file_path.is_file() and file_path.suffix in extensions_to_index:
                     sources.append({
                         "path": str(file_path),
                         "category": category,
@@ -244,7 +250,7 @@ def find_rag_sources(client_folder: Path) -> List[Dict[str, Any]]:
     
     # Scanner la racine (uniquement fichiers directs, pas récursif)
     for file_path in client_folder.iterdir():
-        if file_path.is_file() and file_path.suffix in DOCUMENT_EXTENSIONS:
+        if file_path.is_file() and file_path.suffix in extensions_to_index:
             # Exclure si c'est le gold déjà détecté
             sources.append({
                 "path": str(file_path),
@@ -257,12 +263,13 @@ def find_rag_sources(client_folder: Path) -> List[Dict[str, Any]]:
     return sources
 
 
-def scan_client_folder(client_folder_path: str) -> Dict[str, Any]:
+def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict[str, Any]:
     """
     Analyse complète d'un dossier client.
     
     Args:
         client_folder_path: Chemin vers le dossier client
+        index_msg: Si True, inclure .msg dans rag_sources. Si False (défaut), les compter dans warnings.
         
     Returns:
         Dict avec :
@@ -274,6 +281,9 @@ def scan_client_folder(client_folder_path: str) -> Dict[str, Any]:
         - warnings: Liste des alertes
         - pipeline_ready: bool
         - stats: Statistiques
+        - msg_files_count: Nombre de .msg détectés (si index_msg=False)
+        
+    CORRECTIF A: Support .msg avec option index_msg
     """
     client_folder = Path(client_folder_path).resolve()
     
@@ -293,7 +303,11 @@ def scan_client_folder(client_folder_path: str) -> Dict[str, Any]:
     gold = find_gold_document(client_folder)
     
     # Détecter sources RAG
-    rag_sources = find_rag_sources(client_folder)
+    rag_sources = find_rag_sources(client_folder, index_msg=index_msg)
+    
+    # Compter tous les .msg détectés
+    all_sources_with_msg = find_rag_sources(client_folder, index_msg=True)
+    msg_files_count = sum(1 for s in all_sources_with_msg if s["extension"] == ".msg")
     
     # Exclure le gold des sources RAG si présent
     if gold:
@@ -317,6 +331,8 @@ def scan_client_folder(client_folder_path: str) -> Dict[str, Any]:
                       if path is None and key in ["01_personnel", "06_rapport"]]
     if missing_folders:
         warnings.append(f"⚠️  Dossiers manquants : {', '.join(missing_folders)}")
+    
+    # Les .msg sont indexés par défaut maintenant
     
     # Pipeline ready ?
     pipeline_ready = (
@@ -351,6 +367,7 @@ def scan_client_folder(client_folder_path: str) -> Dict[str, Any]:
             "total_size_mb": round(total_size / 1024 / 1024, 2),
             "folders_detected": sum(1 for v in folder_structure.values() if v is not None),
             "folders_missing": sum(1 for v in folder_structure.values() if v is None),
+            "msg_files_count": msg_files_count,  # ✅ CORRECTIF A
         },
         "scan_timestamp": datetime.now().isoformat(),
     }

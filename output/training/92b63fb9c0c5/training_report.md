@@ -1,63 +1,63 @@
 # Training Report - 92b63fb9c0c5
 
-**Date** : 2025-12-28T11:31:03.343245
-**Clients analysés** : 5
-**Scans réussis** : 5
-**Clients utilisés** : 5
+**Date** : 2025-12-28T17:18:28.636870
+**Clients analysés** : 10
+**Scans réussis** : 10
+**Clients utilisés** : 10
 
 ## 📊 Statistiques Globales
 
-- **GOLD détectés** : 5 (100.0%)
-- **Pipeline ready** : 5 (100.0%)
+- **GOLD détectés** : 10 (100.0%)
+- **Pipeline ready** : 10 (100.0%)
 
 ### Sources
 
-- **Moyenne** : 28.8
-- **Médiane** : 35.0
-- **Min / Max** : 8 / 43
-- **P10 / P90** : 8.0 / 43.0
+- **Moyenne** : 30.6
+- **Médiane** : 34.5
+- **Min / Max** : 8 / 48
+- **P10 / P90** : 13.0 / 48.0
 
 ### Extensions
 
-- `.pdf` : 75
-- `.docx` : 56
-- `.msg` : 11
-- `.doc` : 2
+- `.pdf` : 174
+- `.docx` : 110
+- `.msg` : 15
+- `.doc` : 7
 
 ## 📑 Sections Canoniques
 
-Coverage basée sur **5 clients utilisés**.
+Coverage basée sur **10 clients utilisés**.
 
 | Section | Coverage % | Clients | Avg Lines | P90 Lines |
 |---------|------------|---------|-----------|-----------|
-| COMPETENCES | 60% | 3 | 1.0 | 2.0 |
-| CONTRAINTES_FREINS | 20% | 1 | 3.0 | 3.0 |
-| FORMATION | 40% | 2 | 10.5 | 20.0 |
-| IDENTITY | 80% | 4 | 1.0 | 1.0 |
-| MOTIVATIONS_VALEURS | 60% | 3 | 1.3 | 2.0 |
-| OBJECTIFS | 40% | 2 | 3.0 | 5.0 |
-| PISTES_METIERS | 40% | 2 | 1.0 | 1.0 |
-| PLAN_ACTION | 60% | 3 | 1.0 | 1.0 |
-| RESSOURCES_POINTS_APPUI | 20% | 1 | 0.0 | 0.0 |
-| RESSOURCES_POINTS_VIGILANCE | 20% | 1 | 0.0 | 0.0 |
-| SITUATION_PROFESSIONNELLE | 80% | 4 | 2.5 | 6.0 |
-| SYNTHESE_CONCLUSION | 40% | 2 | 0.5 | 1.0 |
+| COMPETENCES | 30% | 3 | 3.3 | 4.0 |
+| CONTRAINTES_FREINS | 10% | 1 | 2.0 | 2.0 |
+| FORMATION | 80% | 8 | 5.2 | 20.0 |
+| IDENTITY | 100% | 10 | 1.2 | 3.0 |
+| MOTIVATIONS_VALEURS | 20% | 2 | 1.5 | 2.0 |
+| OBJECTIFS | 10% | 1 | 2.0 | 2.0 |
+| PISTES_METIERS | 40% | 4 | 4.5 | 15.0 |
+| PLAN_ACTION | 40% | 4 | 4.8 | 10.0 |
+| RESSOURCES_POINTS_APPUI | 10% | 1 | 10.0 | 10.0 |
+| RESSOURCES_POINTS_VIGILANCE | 10% | 1 | 10.0 | 10.0 |
+| SITUATION_PROFESSIONNELLE | 60% | 6 | 2.0 | 4.0 |
+| SYNTHESE_CONCLUSION | 70% | 7 | 4.4 | 21.0 |
 
 ## 🎯 Patterns Détectés
 
 ### Titres Inconnus (Top 10)
 
-- `STRATEGIES COMPORTEMENTALES` : 2 occurrences
-- `JOURNAL MOHAMMED ALI` : 1 occurrences
-- `18 NOVEMBRE` : 1 occurrences
-- `ARRET DE STAGE AVEC SAID` : 1 occurrences
-- `EVALUTATION VALUATION DE STAGE LAI` : 1 occurrences
-- `PONCTUALITE ET ASSIDUITE` : 1 occurrences
-- `TACHES EFFECTUEES` : 1 occurrences
-- `PERFORMANCE AU TRAVAIL` : 1 occurrences
-- `VOUS AVEZ DIT` : 1 occurrences
-- `CHATGPT A DIT` : 1 occurrences
+- `LES RESULTATS DETAILLES SONT LES SUIVANTS` : 8 occurrences
+- `PROFESSION` : 4 occurrences
+- `RELATION AU MARCHE DE L’EMPLOI` : 3 occurrences
+- `INCERTITUDES & OBSTACLES` : 3 occurrences
+- `STAGE EN LAI 15` : 2 occurrences
+- `VOCATIO` : 2 occurrences
+- `SELON L’EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES` : 2 occurrences
+- `TESTS` : 2 occurrences
+- `TEST EVOLUTION` : 2 occurrences
+- `ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES` : 2 occurrences
 
 ## 💡 Recommandations
 
-- 📝 Titres inconnus fréquents : STRATEGIES COMPORTEMENTALES, JOURNAL MOHAMMED ALI, 18 NOVEMBRE, ARRET DE STAGE AVEC SAID, EVALUTATION VALUATION DE STAGE LAI → Ajouter mappings dans field_specs.py
+- 📝 Titres inconnus fréquents : LES RESULTATS DETAILLES SONT LES SUIVANTS, PROFESSION, RELATION AU MARCHE DE L’EMPLOI, INCERTITUDES & OBSTACLES, STAGE EN LAI 15 → Ajouter mappings dans field_specs.py

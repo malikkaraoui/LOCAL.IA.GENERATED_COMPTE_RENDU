@@ -218,6 +218,54 @@ def is_useful_line(text: str) -> bool:
     return len(words) >= 2
 
 
+def is_noise_heading(text: str) -> bool:
+    """
+    Détecte si un texte détecté comme heading contient des PII ou libellés de formulaire.
+    Plus strict que is_noise_title - empêche création de section ET ajout dans unknown_titles.
+    
+    CORRECTIF B: Filtre "NOM AYNE PRENOM MICKAEL", AVS, dates des unknown_titles.
+    
+    Returns:
+        True si le texte contient des données nominatives ou patterns formulaire
+    """
+    if not text or len(text.strip()) < 2:
+        return True
+    
+    text_upper = text.strip().upper()
+    text_normalized = re.sub(r'\s+', ' ', text_upper)
+    
+    # 1. Patterns nominatifs directs : "NOM xxx PRENOM yyy"
+    if re.search(r'\bNOM\s+\w+\s+PRENOM\s+\w+', text_normalized):
+        return True
+    if re.search(r'\bPRENOM\s+\w+\s+NOM\s+\w+', text_normalized):
+        return True
+    
+    # 2. AVS suisse : 756.xxxx.xxxx.xx
+    if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
+        return True
+    
+    # 3. Dates : dd/mm/yyyy, dd.mm.yyyy
+    if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
+        return True
+    
+    # 4. Trop de chiffres (>= 8 digits) = probablement données perso
+    digit_count = sum(c.isdigit() for c in text)
+    if digit_count >= 8:
+        return True
+    
+    # 5. Libellés de formulaire seuls
+    form_labels = {
+        'NOM', 'PRENOM', 'PRENOM NOM', 'NOM PRENOM',
+        'AVS', 'N AVS', 'NUMERO AVS', 'NO AVS', 'N AVS',
+        'DATE', 'DATES', 'DATE DE NAISSANCE', 'DATE NAISSANCE',
+        'NUMERO', 'NO', 'REF', 'REFERENCE'
+    }
+    if text_normalized in form_labels:
+        return True
+    
+    return False
+
+
 def is_noise_title(text: str) -> bool:
     """
     Détecte les titres parasites à ignorer, incluant PII et libellés de formulaires.
@@ -741,6 +789,10 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
         # Détection heading (paragraphes uniquement)
         is_heading = is_probable_heading(text, para_obj)
         
+        # ✅ CORRECTIF B: Ignorer si heading contient PII/formulaire
+        if is_heading and is_noise_heading(text):
+            is_heading = False
+        
         if is_heading:
             # Sauvegarder section précédente SI elle a des lignes utiles
             if current_section and len(current_lines) > 0:
@@ -843,7 +895,7 @@ def discover_client_folders(
         raise NotADirectoryError(f"Pas un dossier : {root}")
     
     client_folders = []
-    exploitable_extensions = {".docx", ".pdf", ".txt", ".doc"}
+    exploitable_extensions = {".docx", ".pdf", ".txt", ".doc", ".msg"}
     typical_subfolders = {
         "01", "02", "03", "04", "05", "06",
         "rapport final", "06 rapport final", "tests et bilans",
@@ -919,6 +971,7 @@ def analyze_dataset(
     scan_depth: int = 3,
     limit: Optional[int] = None,
     validation_profile: Optional[ValidationProfile] = None,
+    index_msg: bool = True,
 ) -> DatasetTrainingResult:
     """
     Analyse un dataset de clients et extrait patterns/métriques.
@@ -926,6 +979,10 @@ def analyze_dataset(
     Args:
         root_dir: Répertoire racine du dataset
         out_dir: Dossier de sortie pour les artefacts
+        scan_depth: Profondeur de scan
+        limit: Limiter le nombre de clients à analyser
+        validation_profile: Profil de validation optionnel
+        index_msg: Si True, inclure les .msg dans le RAG (défaut: True)
         scan_depth: Profondeur de scan
         limit: Limiter le nombre de clients à analyser
         validation_profile: Profil de validation optionnel
@@ -962,29 +1019,42 @@ def analyze_dataset(
         try:
             print(f"  [{i}/{len(client_folders)}] {client_folder.name}")
             
-            # Scanner le client
-            scan_result = scan_client_folder(str(client_folder))
+            # Scanner le client (✅ Utiliser le paramètre index_msg)
+            scan_result = scan_client_folder(str(client_folder), index_msg=index_msg)
+            
+            # ✅ ROBUSTESSE: Extraire avec .get() pour éviter KeyError
+            rag_sources = scan_result.get("rag_sources") or []
             
             # Extraire inventaire sources
             sources_by_type = {}
-            for source in scan_result["rag_sources"]:
+            for source in rag_sources:
+                # Vérifier que path existe
+                path = source.get("path")
+                if not path:
+                    continue
                 # ✅ Normaliser extension (lowercase, avec point)
-                ext = (source.get("extension") or Path(source["path"]).suffix or "").lower().strip()
+                ext = (source.get("extension") or Path(path).suffix or "").lower().strip()
                 if ext and not ext.startswith("."):
                     ext = f".{ext}"
                 sources_by_type[ext] = sources_by_type.get(ext, 0) + 1
                 rag_extensions[ext] += 1
             
-            # Détection GOLD
+            # ✅ ROBUSTESSE: Détection GOLD avec .get()
+            gold = scan_result.get("gold") or None
+            gold_path = (gold or {}).get("path") or (gold or {}).get("selected_path")
+            gold_score = (gold or {}).get("score")
+            gold_strategy = (gold or {}).get("strategy")
+            
             gold_info = None
-            if scan_result["gold"]:
+            if gold_path:
                 gold_info = {
                     "detected": True,
-                    "file": Path(scan_result["gold"]["path"]).name,
-                    "score": scan_result["gold"]["score"],
-                    "strategy": scan_result["gold"]["strategy"],
+                    "file": Path(gold_path).name,
+                    "score": gold_score,
+                    "strategy": gold_strategy,
                 }
-                gold_strategies[scan_result["gold"]["strategy"]] += 1
+                if gold_strategy:
+                    gold_strategies[gold_strategy] += 1
             
             # ✅ V4: Extraire sections depuis le MEILLEUR DOCX avec scoring
             client_sections = []
@@ -1016,7 +1086,8 @@ def analyze_dataset(
             client_section_max_lines = {}  # section -> max_lines dans ce client
             
             for section in client_sections:
-                title_norm = normalize_title(section["title"])
+                title = section["title"]
+                title_norm = normalize_title(title)
                 canonical = section["canonical"]
                 lines_count = section["lines"]
                 
@@ -1033,8 +1104,8 @@ def analyze_dataset(
                             lines_count
                         )
                 else:
-                    # ✅ Titre non mappé: filtrer le bruit avant comptage
-                    if not is_noise_title(title_norm):
+                    # ✅ V4.1 + CORRECTIF B: Titre non mappé: filtrer le bruit ET PII avant comptage
+                    if not is_noise_title(title_norm) and not is_noise_heading(title):
                         unknown_titles[title_norm] += 1
             
             # ✅ V4.1: Enregistrer UNIQUEMENT sections avec lines > 0
@@ -1046,14 +1117,19 @@ def analyze_dataset(
             # Calculer métriques si debug/metrics disponibles
             client_metrics = None
             
+            # ✅ ROBUSTESSE: Gérer warnings qui peut être dict ou list
+            warnings = scan_result.get("warnings") or []
+            if isinstance(warnings, dict):
+                warnings = [warnings]
+            
             client_info = {
                 "folder_name": client_folder.name,
                 "folder_path": str(client_folder),
-                "sources_count": len(scan_result["rag_sources"]),
+                "sources_count": len(rag_sources),
                 "sources_by_type": sources_by_type,
                 "gold": gold_info,
                 "sections_extracted": len(client_sections),
-                "warnings_count": len(scan_result.get("warnings", [])),
+                "warnings_count": len(warnings),
                 "pipeline_ready": scan_result.get("pipeline_ready", False),
                 "metrics": client_metrics,
             }
@@ -1061,11 +1137,18 @@ def analyze_dataset(
             result.clients.append(client_info)
             
         except Exception as e:
-            print(f"    ❌ Erreur : {e}")
+            import traceback
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"    ❌ Erreur ({error_type}): {error_msg}")
+            # Optionnel: afficher traceback en debug
+            # traceback.print_exc()
+            
             result.clients.append({
                 "folder_name": client_folder.name,
                 "folder_path": str(client_folder),
-                "error": str(e),
+                "error": error_msg,
+                "error_type": error_type,
             })
     
     # Calculer statistiques globales
@@ -1077,10 +1160,15 @@ def analyze_dataset(
     # Distributions
     sources_counts = [c["sources_count"] for c in successful_clients if "sources_count" in c]
     
+    # ✅ ROBUSTESSE: Calculer errors_top pour affichage
+    error_clients = [c for c in result.clients if "error" in c]
+    errors_top = Counter([c.get("error_type", "UnknownError") for c in error_clients]).most_common(5)
+    
     result.stats = {
         "total_clients": total_clients,
         "successful_scans": len(successful_clients),
         "errors": total_clients - len(successful_clients),
+        "errors_top": errors_top,  # ✅ Top 5 types d'erreurs
         "gold_detected": gold_detected,
         "gold_detection_rate": gold_detected / len(successful_clients) if successful_clients else 0,
         "pipeline_ready": pipeline_ready,
@@ -1355,14 +1443,23 @@ def _build_training_state(result: DatasetTrainingResult) -> Dict[str, Any]:
             # Ajouter aux field_max_lines (utiliser p90)
             field_max_lines[canonical.upper()] = int(stats["p90_lines"])
     
-    # Warnings (ex: .msg non indexés)
+    # ✅ Warnings : vérifier support .msg
     warnings = []
+    
+    # Vérifier si extract-msg est disponible
+    try:
+        from core.extractors.msg_extractor import MSG_SUPPORT_AVAILABLE
+    except ImportError:
+        MSG_SUPPORT_AVAILABLE = False
+    
+    # Si .msg présents et extract-msg non installé -> warning
     if ".msg" in ext_counts and ext_counts[".msg"] > 0:
-        warnings.append({
-            "code": "EXT_NOT_INDEXED",
-            "message": "Des fichiers .msg sont présents mais non indexés par défaut",
-            "count": ext_counts[".msg"]
-        })
+        if not MSG_SUPPORT_AVAILABLE:
+            warnings.append({
+                "code": "MSG_EXTRACTOR_MISSING",
+                "message": "Des fichiers .msg sont présents mais extract-msg n'est pas installé (pip install extract-msg>=0.48.0)",
+                "count": ext_counts[".msg"]
+            })
     
     root_path = str(Path(result.clients[0]["folder_path"]).parent) if result.clients else ""
     
@@ -1437,61 +1534,135 @@ def _merge_training_states(
     new: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Fusionne deux training_states (compatible training_state_v1.0).
+    Fusionne deux training_states (compatible training_state_v1.0) - VERSION SAFE.
     
-    V4.1: Ne fusionne QUE les patterns non-nominatifs.
+    V4.1 Fix: Ne plante JAMAIS même si les schémas diffèrent.
     Base = new (on garde metadata/schema à jour).
+    Fusionne uniquement les patterns non-nominatifs de manière défensive.
     """
-    merged = new.copy()
+    import copy
     
-    # ✅ 1. Fusionner unknown_titles (compteurs)
-    if "patterns" in existing and "patterns" in new:
-        old_unknown = existing["patterns"].get("unknown_titles_top", {})
-        new_unknown = new["patterns"].get("unknown_titles_top", {})
-        merged["patterns"]["unknown_titles_top"] = _merge_counters(old_unknown, new_unknown)
-        
-        # Recalculer unknown_titles_top10 depuis merged
-        all_unknown = merged["patterns"]["unknown_titles_top"]
-        top10 = dict(sorted(all_unknown.items(), key=lambda x: -x[1])[:10])
-        merged["patterns"]["unknown_titles_top10"] = top10
-        merged["patterns"]["unknown_titles_count"] = len(all_unknown)
-        merged["patterns"]["unknown_titles_total_occurrences"] = sum(all_unknown.values())
+    # ✅ Base = copie profonde de new pour éviter mutations
+    merged = copy.deepcopy(new)
     
-    # ✅ 2. Fusionner sections_stats (max de p90, coverage pondéré)
-    if "patterns" in existing and "patterns" in new:
-        old_sections = existing["patterns"].get("sections_stats", {})
-        new_sections = new["patterns"].get("sections_stats", {})
-        
-        for sec in set(old_sections.keys()) | set(new_sections.keys()):
-            old_st = old_sections.get(sec, {})
-            new_st = new_sections.get(sec, {})
+    # ✅ Défensif : vérifier que patterns existe dans merged
+    if "patterns" not in merged:
+        merged["patterns"] = {}
+    
+    try:
+        # ✅ 1. Fusionner field_max_lines (prendre le max)
+        if "patterns" in existing and "field_max_lines" in existing["patterns"]:
+            old_max = existing["patterns"]["field_max_lines"]
+            new_max = merged["patterns"].get("field_max_lines", {})
             
-            # Prendre max de p90_lines (le meilleur exemple)
-            merged["patterns"]["sections_stats"][sec]["p90_lines"] = max(
-                old_st.get("p90_lines", 0),
-                new_st.get("p90_lines", 0)
-            )
+            if "field_max_lines" not in merged["patterns"]:
+                merged["patterns"]["field_max_lines"] = {}
             
-            # Coverage pondéré simple (moyenne)
-            old_cov = old_st.get("coverage", 0)
-            new_cov = new_st.get("coverage", 0)
-            merged["patterns"]["sections_stats"][sec]["coverage"] = (old_cov + new_cov) / 2
+            for field, max_val in old_max.items():
+                current = merged["patterns"]["field_max_lines"].get(field, 0)
+                merged["patterns"]["field_max_lines"][field] = max(max_val, current)
+    except Exception as e:
+        # Silencieux : si échec, on garde new intact
+        pass
     
-    # ✅ 3. Fusionner learned_title_map (union)
-    if "patterns" in existing and "patterns" in new:
-        old_map = existing["patterns"].get("learned_title_map", {})
-        new_map = new["patterns"].get("learned_title_map", {})
-        merged["patterns"]["learned_title_map"] = {**old_map, **new_map}
+    try:
+        # ✅ 2. Fusionner section_stats (max de p90, max de coverage)
+        if "patterns" in existing and "section_stats" in existing["patterns"]:
+            old_sections = existing["patterns"]["section_stats"]
+            
+            if "section_stats" not in merged["patterns"]:
+                merged["patterns"]["section_stats"] = {}
+            
+            new_sections = merged["patterns"]["section_stats"]
+            
+            # Union des sections
+            all_sections = set(old_sections.keys()) | set(new_sections.keys())
+            
+            for sec in all_sections:
+                old_st = old_sections.get(sec, {})
+                new_st = new_sections.get(sec, {})
+                
+                # Initialiser section si absente
+                if sec not in merged["patterns"]["section_stats"]:
+                    merged["patterns"]["section_stats"][sec] = {}
+                
+                merged_sec = merged["patterns"]["section_stats"][sec]
+                
+                # Fusionner lines (prendre max de p90)
+                old_lines = old_st.get("lines", {})
+                new_lines = new_st.get("lines", {})
+                
+                if "lines" not in merged_sec:
+                    merged_sec["lines"] = {}
+                
+                # p90 = max
+                old_p90 = old_lines.get("p90", 0)
+                new_p90 = new_lines.get("p90", 0)
+                merged_sec["lines"]["p90"] = max(old_p90, new_p90)
+                
+                # Autres stats : prendre new par défaut
+                for key in ["median", "mean", "min", "max", "p10"]:
+                    if key in new_lines:
+                        merged_sec["lines"][key] = new_lines[key]
+                    elif key in old_lines:
+                        merged_sec["lines"][key] = old_lines[key]
+                
+                # Coverage : prendre le max (meilleur coverage observé)
+                old_cov = old_st.get("coverage_pct", 0)
+                new_cov = new_st.get("coverage_pct", 0)
+                merged_sec["coverage_pct"] = max(old_cov, new_cov)
+                
+                # Autres champs : garder new
+                for key in ["clients_with_section", "total_blocks"]:
+                    if key in new_st:
+                        merged_sec[key] = new_st[key]
+                    elif key in old_st:
+                        merged_sec[key] = old_st[key]
+    except Exception as e:
+        # Silencieux : si échec, on garde new intact
+        pass
     
-    # ✅ 4. Historique (optionnel, si supporté par schéma)
-    history_entry = {
-        "run_id": new.get("training_state_id"),
-        "timestamp": new.get("generated_at"),
-        "clients": new.get("dataset", {}).get("clients_used", 0)
-    }
-    if "history" not in merged:
-        merged["history"] = []
-    merged["history"].append(history_entry)
+    try:
+        # ✅ 3. Fusionner warnings (union par code)
+        if "warnings" in existing:
+            old_warnings = existing["warnings"]
+            
+            if "warnings" not in merged:
+                merged["warnings"] = []
+            
+            # Union par code (éviter doublons)
+            existing_codes = {w["code"] for w in merged["warnings"] if "code" in w}
+            
+            for warn in old_warnings:
+                if "code" in warn and warn["code"] not in existing_codes:
+                    merged["warnings"].append(warn)
+                    existing_codes.add(warn["code"])
+    except Exception as e:
+        # Silencieux : si échec, on garde new intact
+        pass
+    
+    try:
+        # ✅ 4. Historique (optionnel)
+        history_entry = {
+            "run_id": new.get("training_state_id"),
+            "timestamp": new.get("generated_at"),
+            "clients": new.get("dataset", {}).get("clients_used", 0)
+        }
+        
+        if "history" not in merged:
+            merged["history"] = []
+        
+        # Ajouter historique de existing si présent
+        if "history" in existing:
+            for entry in existing["history"]:
+                if entry not in merged["history"]:
+                    merged["history"].append(entry)
+        
+        # Ajouter nouveau run
+        merged["history"].append(history_entry)
+    except Exception as e:
+        # Silencieux : pas critique
+        pass
     
     return merged
 
@@ -1532,6 +1703,32 @@ def _generate_training_report_md(result: DatasetTrainingResult) -> str:
     
     for ext, count in sorted(result.stats['extensions_distribution'].items(), key=lambda x: -x[1]):
         lines.append(f"- `{ext}` : {count}")
+    
+    # ✅ Ajouter section erreurs si présentes
+    if result.stats.get('errors', 0) > 0:
+        lines.extend([
+            f"",
+            f"## ❌ Erreurs ({result.stats['errors']} clients)",
+            f"",
+        ])
+        
+        errors_top = result.stats.get('errors_top', [])
+        if errors_top:
+            lines.append("### Top Erreurs")
+            lines.append("")
+            for error_type, count in errors_top:
+                lines.append(f"- **{error_type}** : {count} client(s)")
+            lines.append("")
+        
+        # Lister les clients en erreur avec détails
+        error_clients = [c for c in result.clients if "error" in c]
+        if error_clients:
+            lines.append("### Détail par client")
+            lines.append("")
+            for client in error_clients[:10]:  # Limiter à 10
+                lines.append(f"- **{client['folder_name']}** : {client.get('error_type', 'Error')} - {client['error']}")
+            if len(error_clients) > 10:
+                lines.append(f"- ... et {len(error_clients) - 10} autres")
     
     # ✅ Ajouter section stats avec clients_used
     if "sections_stats" in result.patterns:

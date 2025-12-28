@@ -92,23 +92,26 @@ def show_training_tab():
     ⚠️ **Aucune donnée nominative** n'est stockée dans training_state.json (uniquement stats agrégées).
     """)
     
-    # ✅ V4.1: Presets (Mode test / Mode batch)
+    # ✅ V4.1 Fix 6: Presets UX avec aide claire
     st.markdown("#### ⚡ Presets rapides")
+    
     col_preset1, col_preset2 = st.columns(2)
     
     with col_preset1:
-        if st.button("🧪 Mode Test (5 clients)", use_container_width=True):
+        if st.button("🧪 Mode Test (5 clients)", use_container_width=True, help="Rapide : analyser 5 clients pour tester"):
             st.session_state["preset_limit"] = 5
             st.session_state["preset_depth"] = 3
             st.session_state["preset_merge"] = False
             st.success("✅ Mode Test activé : limit=5, depth=3, merge=OFF")
+            st.rerun()
     
     with col_preset2:
-        if st.button("🚀 Mode Batch (tous)", use_container_width=True):
+        if st.button("🚀 Mode Batch (tous)", use_container_width=True, help="Production : analyser tous les clients détectés"):
             st.session_state["preset_limit"] = 0
             st.session_state["preset_depth"] = 4
-            st.session_state["preset_merge"] = False
-            st.success("✅ Mode Batch activé : limit=0, depth=4, merge=OFF")
+            st.session_state["preset_merge"] = True
+            st.success("✅ Mode Batch activé : limit=0, depth=4, merge=ON")
+            st.rerun()
     
     st.markdown("---")
     
@@ -128,12 +131,25 @@ def show_training_tab():
     
     # Configuration avec aide détaillée
     st.markdown("#### ⚙️ Configuration")
-    st.markdown("""
-    **📖 Aide** :
-    - **scan_depth** : Profondeur max pour détecter les dossiers clients (augmenter si dataset non structuré)
-    - **limit** : 0 = tous, sinon limite aux N premiers clients (utile pour tests rapides)
-    - **merge** : Fusionne patterns avec training_state.json existant (⚠️ N'ajoute PAS de données nominatives)
-    """)
+    
+    with st.expander("📖 Aide : que font ces paramètres ?", expanded=False):
+        st.markdown("""
+        **scan_depth** (profondeur de scan) :
+        - Profondeur maximale pour détecter les dossiers clients de manière récursive
+        - Augmenter (ex: 4-5) si votre dataset a une structure imbriquée complexe
+        - Valeur standard : 3
+        
+        **limit** (limite de clients) :
+        - `0` = analyser TOUS les clients détectés (mode production)
+        - `5-10` = analyser seulement les N premiers (mode test rapide)
+        - Utile pour valider la pipeline avant un traitement complet
+        
+        **merge** (fusion incrémentale) :
+        - `OFF` = Écraser training_state.json existant (mode classique)
+        - `ON` = Fusionner avec training_state.json existant (mode incrémental)
+        - ⚠️ Le merge fusionne UNIQUEMENT les patterns agrégés (field_max_lines, section_stats, warnings)
+        - ✅ AUCUNE donnée nominative n'est fusionnée (clients_used reste celui du nouveau run)
+        """)
     
     col1, col2, col3 = st.columns(3)
     
@@ -322,7 +338,10 @@ def show_training_tab():
         if state.get("warnings"):
             st.markdown("#### ⚠️ Warnings")
             for warning in state["warnings"]:
-                st.warning(f"**{warning['code']}** : {warning['message']} (count: {warning['count']})")
+                if isinstance(warning, dict):
+                    st.warning(f"**{warning.get('code', 'WARNING')}** : {warning.get('message', str(warning))} (count: {warning.get('count', '?')})")
+                else:
+                    st.warning(str(warning))
         
         # Boutons download
         st.markdown("---")

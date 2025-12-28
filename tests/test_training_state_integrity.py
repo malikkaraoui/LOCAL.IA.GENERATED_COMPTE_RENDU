@@ -165,11 +165,12 @@ def test_merge_never_crashes():
 
 def test_merge_function_compatible_v1_0():
     """
-    V4.1 Test : _merge_training_states() accepte schéma training_state_v1.0.
+    V4.1 Fix 5 & 7 : _merge_training_states() accepte schéma training_state_v1.0 SAFE.
     
     Teste la fonction pure sans dépendances fichiers.
+    Vérifie que merge ne plante JAMAIS et fusionne correctement.
     """
-    # État existant (v1.0)
+    # État existant (v1.0 réaliste)
     existing = {
         "training_state_id": "old_123",
         "schema_version": "training_state_v1.0",
@@ -178,23 +179,27 @@ def test_merge_function_compatible_v1_0():
             "clients_used": 5
         },
         "patterns": {
-            "unknown_titles_top": {
-                "TITRE_OLD": 10,
-                "TITRE_COMMUN": 5
+            "field_max_lines": {
+                "nom": 2,
+                "prenom": 1
             },
-            "sections_stats": {
+            "section_stats": {
                 "formation": {
-                    "coverage": 0.8,
-                    "p90_lines": 5.0
+                    "coverage_pct": 80.0,
+                    "clients_with_section": 4,
+                    "lines": {
+                        "p90": 5.0,
+                        "median": 3.0
+                    }
                 }
-            },
-            "learned_title_map": {
-                "FORMATION": "formation"
             }
-        }
+        },
+        "warnings": [
+            {"code": "WARN_OLD", "message": "Old warning"}
+        ]
     }
     
-    # Nouvel état (v1.0)
+    # Nouvel état (v1.0 réaliste)
     new = {
         "training_state_id": "new_456",
         "schema_version": "training_state_v1.0",
@@ -203,48 +208,66 @@ def test_merge_function_compatible_v1_0():
             "clients_used": 3
         },
         "patterns": {
-            "unknown_titles_top": {
-                "TITRE_NEW": 7,
-                "TITRE_COMMUN": 3
+            "field_max_lines": {
+                "nom": 1,
+                "email": 1
             },
-            "sections_stats": {
+            "section_stats": {
                 "formation": {
-                    "coverage": 0.6,
-                    "p90_lines": 7.0
+                    "coverage_pct": 60.0,
+                    "clients_with_section": 2,
+                    "lines": {
+                        "p90": 7.0,
+                        "median": 4.0
+                    }
                 },
                 "competences": {
-                    "coverage": 0.5,
-                    "p90_lines": 4.0
+                    "coverage_pct": 50.0,
+                    "clients_with_section": 2,
+                    "lines": {
+                        "p90": 4.0,
+                        "median": 3.0
+                    }
                 }
-            },
-            "learned_title_map": {
-                "COMPETENCES": "competences"
             }
-        }
+        },
+        "warnings": [
+            {"code": "WARN_NEW", "message": "New warning"}
+        ]
     }
     
-    # ✅ Merge ne doit PAS planter
+    # ✅ TEST 1 : Merge ne doit PAS planter
     try:
         merged = _merge_training_states(existing, new)
     except Exception as e:
         pytest.fail(f"_merge_training_states a planté : {e}")
     
-    # Vérifications
+    # ✅ TEST 2 : Base = new
     assert merged["training_state_id"] == "new_456", "Doit garder le nouvel ID"
+    assert merged["dataset"]["clients_used"] == 3, "Doit garder clients_used de new"
+    
+    # ✅ TEST 3 : field_max_lines fusionné (max)
+    assert merged["patterns"]["field_max_lines"]["nom"] == 2, "nom = max(2, 1)"
+    assert merged["patterns"]["field_max_lines"]["email"] == 1, "email = 1 (uniquement dans new)"
+    assert merged["patterns"]["field_max_lines"]["prenom"] == 1, "prenom = 1 (uniquement dans old)"
+    
+    # ✅ TEST 4 : section_stats fusionné (max p90, max coverage)
+    formation_merged = merged["patterns"]["section_stats"]["formation"]
+    assert formation_merged["lines"]["p90"] == 7.0, "formation.p90 = max(5, 7)"
+    assert formation_merged["coverage_pct"] == 80.0, "formation.coverage = max(80, 60)"
+    
+    # competences doit exister
+    assert "competences" in merged["patterns"]["section_stats"]
+    
+    # ✅ TEST 5 : warnings fusionné (union)
+    assert len(merged["warnings"]) == 2, "2 warnings (union)"
+    codes = {w["code"] for w in merged["warnings"]}
+    assert "WARN_OLD" in codes
+    assert "WARN_NEW" in codes
+    
+    # ✅ TEST 6 : Historique créé
     assert "history" in merged, "Doit créer historique"
     assert len(merged["history"]) >= 1, "Doit avoir au moins 1 entrée historique"
-    
-    # unknown_titles fusionnés
-    assert merged["patterns"]["unknown_titles_top"]["TITRE_OLD"] == 10
-    assert merged["patterns"]["unknown_titles_top"]["TITRE_NEW"] == 7
-    assert merged["patterns"]["unknown_titles_top"]["TITRE_COMMUN"] == 8  # 5 + 3
-    
-    # sections_stats : p90 = max
-    assert merged["patterns"]["sections_stats"]["formation"]["p90_lines"] == 7.0  # max(5, 7)
-    
-    # learned_title_map : union
-    assert "FORMATION" in merged["patterns"]["learned_title_map"]
-    assert "COMPETENCES" in merged["patterns"]["learned_title_map"]
 
 
 # ============================================================================
@@ -294,3 +317,55 @@ def test_training_state_schema_complete():
             assert "avg" in stats["lines"]
             assert "median" in stats["lines"]
             assert "p90" in stats["lines"]
+
+
+# ============================================================================
+# TEST 7 : Contraintes d'intégrité après merge
+# ============================================================================
+
+def test_merge_preserves_integrity_constraints():
+    """
+    V4.1 Fix 7 : Après merge, TOUTES les contraintes d'intégrité restent valides.
+    
+    Vérifie que le merge ne casse pas les invariants :
+    - coverage_pct ∈ [0..100]
+    - clients_with_section <= clients_used
+    - Si coverage > 0, alors p90 >= 1
+    """
+    batch20 = Path("/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20")
+    
+    if not batch20.exists():
+        pytest.skip("BATCH 20 non disponible")
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Run 1
+        result1 = analyze_dataset(str(batch20), out_dir=tmpdir, limit=3)
+        export_training_artifacts(result1, out_dir=tmpdir, merge_existing=False)
+        
+        # Run 2 avec merge
+        result2 = analyze_dataset(str(batch20), out_dir=tmpdir, limit=5)
+        paths = export_training_artifacts(result2, out_dir=tmpdir, merge_existing=True)
+        
+        # Charger merged state
+        state = load_training_state(paths["training_state"])
+        clients_used = state["dataset"]["clients_used"]
+        sections_stats = state["patterns"]["section_stats"]
+        
+        # ✅ Vérifier TOUTES les contraintes
+        for sec, stats in sections_stats.items():
+            coverage_pct = stats["coverage_pct"]
+            clients_with_section = stats.get("clients", 0)
+            p90 = stats["lines"]["p90"]
+            
+            # Contrainte 1 : coverage_pct borné
+            assert 0 <= coverage_pct <= 100, \
+                f"[Merge] Section {sec}: coverage_pct={coverage_pct}% HORS BORNES"
+            
+            # Contrainte 2 : clients_with_section <= clients_used
+            assert clients_with_section <= clients_used, \
+                f"[Merge] Section {sec}: clients={clients_with_section} > clients_used={clients_used}"
+            
+            # Contrainte 3 : Si présent, p90 >= 1
+            if coverage_pct > 0:
+                assert p90 >= 1, \
+                    f"[Merge] Section {sec}: coverage={coverage_pct}% mais p90={p90} < 1"

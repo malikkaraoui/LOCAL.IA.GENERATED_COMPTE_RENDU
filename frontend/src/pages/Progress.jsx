@@ -83,7 +83,7 @@ function Progress() {
     const audioTxt = sourceStats.audio_ingested?.txt ?? 0;
     const sourceDir = sourceStats.source_dir;
 
-    const keys = ['.pdf', '.docx', '.txt', '.m4a', '.mp3', '.wav'];
+    const keys = ['.pdf', '.docx', '.txt', '.msg', '.m4a', '.mp3', '.wav'];
     const picked = keys
       .map((k) => ({ key: k, value: byExt[k] || 0 }))
       .filter((kv) => kv.value > 0);

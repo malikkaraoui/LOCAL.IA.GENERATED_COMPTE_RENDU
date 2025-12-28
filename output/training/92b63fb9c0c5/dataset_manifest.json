@@ -1,13 +1,18 @@
 {
   "dataset_id": "92b63fb9c0c5",
-  "timestamp": "2025-12-28T11:31:03.343245",
-  "total_clients": 5,
-  "successful_scans": 5,
+  "timestamp": "2025-12-28T17:18:28.636870",
+  "total_clients": 10,
+  "successful_scans": 10,
   "client_folders": [
     "ALI Mohammed",
     "ALVES MOREIRA Sergio Paulo",
     "ATTOU Abdelkader",
     "AYER MARTINEZ Jose",
-    "AYNE Michael"
+    "AYNE Michael",
+    "BARTOLUCCI Fabrizio",
+    "BASILIO Teresa Cristina",
+    "BENZINE Rabia",
+    "BERNARD Yann",
+    "BOGET Laura"
   ]
 }

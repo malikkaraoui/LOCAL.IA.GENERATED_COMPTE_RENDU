@@ -1,4 +1,4 @@
-"""Extraction des sources client (TXT/PDF/DOCX...)."""
+"""Extraction des sources client (TXT/PDF/DOCX/MSG...)."""
 
 from __future__ import annotations
 
@@ -21,10 +21,18 @@ from .errors import Result, ExtractionError
 from .logger import get_logger
 from .models import SourceDoc
 
+# ✅ Import lazy du module .msg
+try:
+    from .extractors.msg_extractor import MSG_SUPPORT_AVAILABLE, extract_msg_safe
+except ImportError:
+    MSG_SUPPORT_AVAILABLE = False
+    extract_msg_safe = None  # type: ignore
+
 LOG = get_logger("core.extract")
 
 SUPPORTED_DIRECT = {".pdf", ".docx", ".txt"}
 SUPPORTED_SOFFICE = {".doc", ".rtf", ".odt", ".docm", ".dot", ".dotx", ".dotm"}
+SUPPORTED_MSG = {".msg"}  # ✅ Emails Outlook
 
 
 def sha256_text(text: str) -> str:
@@ -127,6 +135,54 @@ def extract_txt(path: Path) -> Result[dict]:
         return Result.fail(error)
 
 
+def extract_msg(path: Path, output_dir: Optional[Path] = None) -> Result[dict]:
+    """Extrait le contenu d'un email Outlook .msg.
+    
+    Args:
+        path: Chemin vers le fichier .msg
+        output_dir: Dossier pour extraire les pièces jointes (optionnel)
+        
+    Returns:
+        Result[dict]: Succès avec {"text", "pages": None, "meta"} ou échec avec ExtractionError
+        
+    Notes:
+        - Requiert extract-msg installé (pip install extract-msg)
+        - Extrait automatiquement les pièces jointes PDF/DOCX/DOC/TXT dans output_dir si fourni
+        - Format texte : [EMAIL_MSG] Subject/From/To/Date/Attachments + Body
+    """
+    if not MSG_SUPPORT_AVAILABLE or extract_msg_safe is None:
+        error = ExtractionError("extract-msg non installé (pip install extract-msg>=0.48.0)")
+        LOG.warning("Tentative extraction .msg sans extract-msg : %s", path.name)
+        return Result.fail(error)
+    
+    try:
+        LOG.info("Extraction MSG: %s", path.name)
+        text, meta, error = extract_msg_safe(path, output_dir)
+        
+        if error:
+            return Result.fail(ExtractionError(error))
+        
+        if text is None:
+            return Result.fail(ExtractionError("Extraction .msg retourné None"))
+        
+        LOG.debug(
+            "MSG extrait: %d caractères, %d pièces jointes",
+            len(text),
+            meta.get("attachments_count", 0) if meta else 0,
+        )
+        
+        return Result.ok({
+            "text": text,
+            "pages": None,
+            "meta": meta,
+        })
+        
+    except Exception as exc:
+        error = ExtractionError(f"Échec extraction MSG {path.name}: {exc}")
+        LOG.error("Erreur extraction MSG %s: %s", path.name, exc)
+        return Result.fail(error)
+
+
 def soffice_available() -> Optional[str]:
     return shutil.which("soffice")
 
@@ -197,8 +253,22 @@ def extract_sources(
     root: Path,
     *,
     enable_soffice: bool = False,
+    enable_msg: bool = True,  # ✅ Support .msg activé par défaut
     include_extensions: Optional[Sequence[str]] = None,
+    msg_attachments_dir: Optional[Path] = None,  # ✅ Dossier pour extraire pièces jointes .msg
 ) -> dict:
+    """Extrait le texte de tous les documents d'un dossier.
+    
+    Args:
+        root: Dossier racine contenant les documents
+        enable_soffice: Activer conversion via LibreOffice
+        enable_msg: Activer extraction emails .msg (défaut: True)
+        include_extensions: Liste d'extensions à inclure (None = toutes supportées)
+        msg_attachments_dir: Dossier pour extraire pièces jointes des .msg
+        
+    Returns:
+        dict: Payload avec counts et liste des documents extraits
+    """
     root = Path(root).expanduser().resolve()
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"Dossier introuvable: {root}")
@@ -207,11 +277,21 @@ def extract_sources(
     files = walk_files(root)
     documents: list[SourceDoc] = []
     ok = errors = skipped = 0
+    
+    # ✅ Liste des fichiers additionnels extraits depuis pièces jointes .msg
+    additional_files: list[Path] = []
 
     for path in files:
         ext = path.suffix.lower()
         allowed = not allow_exts or ext in allow_exts
-        supported = ext in SUPPORTED_DIRECT or (enable_soffice and ext in SUPPORTED_SOFFICE)
+        
+        # ✅ Vérifier support (inclut .msg si enable_msg=True)
+        supported = (
+            ext in SUPPORTED_DIRECT
+            or (enable_soffice and ext in SUPPORTED_SOFFICE)
+            or (enable_msg and ext in SUPPORTED_MSG)
+        )
+        
         if not supported or not allowed:
             skipped += 1
             continue
@@ -229,6 +309,19 @@ def extract_sources(
             elif ext == ".txt":
                 result = extract_txt(path)
                 extractor = "txt"
+            elif enable_msg and ext == ".msg":
+                # ✅ Extraction email .msg avec pièces jointes
+                result = extract_msg(path, output_dir=msg_attachments_dir)
+                extractor = "extract-msg"
+                
+                # ✅ Si pièces jointes extraites, les ajouter à la liste pour traitement
+                if result and result.success and result.value.get("meta"):
+                    att_paths = result.value["meta"].get("extracted_attachments_paths", [])
+                    for att_path_str in att_paths:
+                        att_path = Path(att_path_str)
+                        if att_path.exists() and att_path not in additional_files:
+                            additional_files.append(att_path)
+                            LOG.info("Pièce jointe .msg à indexer : %s", att_path.name)
             elif enable_soffice and ext in SUPPORTED_SOFFICE:
                 soffice_bin = soffice_available()
                 if not soffice_bin:
@@ -287,11 +380,57 @@ def extract_sources(
             )
             errors += 1
             LOG.warning("FAIL %s -> %s", path.name, exc)
+    
+    # ✅ Traiter les pièces jointes extraites des .msg
+    if additional_files:
+        LOG.info("Traitement de %d pièces jointes extraites depuis .msg", len(additional_files))
+        for att_path in additional_files:
+            ext = att_path.suffix.lower()
+            result = None
+            extractor = "msg-attachment"
+            
+            try:
+                if ext == ".pdf":
+                    result = extract_pdf(att_path)
+                    extractor = "msg-attachment:pdf"
+                elif ext == ".docx":
+                    result = extract_docx(att_path)
+                    extractor = "msg-attachment:docx"
+                elif ext == ".txt":
+                    result = extract_txt(att_path)
+                    extractor = "msg-attachment:txt"
+                elif ext == ".doc" and enable_soffice:
+                    soffice_bin = soffice_available()
+                    if soffice_bin:
+                        result = extract_via_soffice(att_path, soffice_bin)
+                        extractor = "msg-attachment:doc"
+                
+                if result and result.success:
+                    data = result.value
+                    doc = SourceDoc(
+                        path=str(att_path),
+                        ext=ext,
+                        size_bytes=att_path.stat().st_size,
+                        mtime_iso=file_mtime_iso(att_path),
+                        extractor=extractor,
+                        text=data["text"],
+                        text_sha256=sha256_text(data["text"]),
+                        pages=data.get("pages"),
+                    )
+                    documents.append(doc)
+                    ok += 1
+                elif result:
+                    errors += 1
+            except Exception as exc:
+                LOG.warning("FAIL pièce jointe %s -> %s", att_path.name, exc)
+                errors += 1
 
     payload = {
         "root": str(root),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "enable_soffice": enable_soffice,
+        "enable_msg": enable_msg,  # ✅ Ajouter flag .msg
+        "msg_attachments_extracted": len(additional_files),  # ✅ Stats pièces jointes
         "counts": {
             "ok": ok,
             "errors": errors,

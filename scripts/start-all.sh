@@ -156,25 +156,55 @@ else
 fi
 echo ""
 
-# 7. Résumé
+# 7. Démarrer Streamlit (application principale avec menu)
+echo -e "${CYAN}═══════════════════════════════════════${NC}"
+echo -e "${CYAN}7️⃣  Démarrage Streamlit (Menu Navigation)${NC}"
+echo -e "${CYAN}═══════════════════════════════════════${NC}"
+if curl -s http://localhost:8501 > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Streamlit déjà actif${NC}"
+else
+    nohup .venv/bin/streamlit run streamlit_app.py --server.port 8501 --server.headless true > /tmp/streamlit.log 2>&1 &
+    STREAMLIT_PID=$!
+    echo -e "${YELLOW}⏳ Attente de Streamlit...${NC}"
+    for i in {1..10}; do
+        if curl -s http://localhost:8501 > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Streamlit démarré (PID: $STREAMLIT_PID)${NC}"
+            break
+        fi
+        sleep 1
+    done
+
+    if ! curl -s http://localhost:8501 > /dev/null 2>&1; then
+        echo -e "${RED}❌ Streamlit non accessible${NC}"
+        tail -20 /tmp/streamlit.log
+        exit 1
+    fi
+fi
+echo ""
+
+# 8. Résumé
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo -e "${GREEN}🎉 Tous les services sont démarrés !${NC}"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo ""
-echo -e "${CYAN}📱 Frontend:${NC}  http://localhost:5173"
-echo -e "${CYAN}🔧 Backend:${NC}   ${API_BASE_URL}/api/health"
-echo -e "${CYAN}📚 API Docs:${NC}  ${API_BASE_URL}/api/docs"
-echo -e "${CYAN}🔐 Login:${NC}     admin / admin123"
+echo -e "${CYAN}📱 Frontend:${NC}   http://localhost:5173"
+echo -e "${CYAN}🎓 Streamlit:${NC}  http://localhost:8501 (avec menu)"
+echo -e "${CYAN}🔧 Backend:${NC}    ${API_BASE_URL}/api/health"
+echo -e "${CYAN}📚 API Docs:${NC}   ${API_BASE_URL}/api/docs"
+echo -e "${CYAN}🔐 Login:${NC}      admin / admin123"
 echo ""
 echo -e "${CYAN}📋 Logs:${NC}"
-echo -e "   Worker:   tail -f /tmp/worker.log"
-echo -e "   Backend:  tail -f /tmp/backend.log"
-echo -e "   Frontend: tail -f /tmp/frontend.log"
+echo -e "   Worker:    tail -f /tmp/worker.log"
+echo -e "   Backend:   tail -f /tmp/backend.log"
+echo -e "   Frontend:  tail -f /tmp/frontend.log"
+echo -e "   Streamlit: tail -f /tmp/streamlit.log"
 echo -e "   Tout-en-un: ./scripts/tail-logs.sh"
 echo ""
 echo -e "${YELLOW}💡 Pour arrêter tous les services: ./scripts/stop.sh${NC}"
 echo ""
-echo -e "${GREEN}🚀 Ouvrez votre navigateur sur http://localhost:5173${NC}"
+echo -e "${GREEN}🚀 Ouvrez votre navigateur sur:${NC}"
+echo -e "   ${GREEN}Frontend:${NC}   http://localhost:5173"
+echo -e "   ${GREEN}Streamlit:${NC}  http://localhost:8501"
 echo ""
 
 # Ouvrir le navigateur (optionnel)

@@ -1,0 +1,24 @@
+{
+  "total_clients": 5,
+  "successful_scans": 5,
+  "errors": 0,
+  "errors_top": [],
+  "gold_detected": 5,
+  "gold_detection_rate": 1.0,
+  "pipeline_ready": 2,
+  "pipeline_ready_rate": 0.4,
+  "sources_stats": {
+    "mean": 0.4,
+    "median": 0,
+    "min": 0,
+    "max": 1,
+    "p10": 0,
+    "p90": 1
+  },
+  "extensions_distribution": {
+    ".docx": 2
+  },
+  "gold_strategies": {
+    "recursive_scan": 5
+  }
+}
