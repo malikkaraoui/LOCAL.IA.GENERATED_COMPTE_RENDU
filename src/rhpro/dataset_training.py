@@ -53,6 +53,10 @@ SEED_SECTION_TITLE_MAP = {
     "EXPERIENCE PROFESSIONNELLE": "situation_professionnelle",
     "EXPERIENCES": "situation_professionnelle",
     "PARCOURS": "situation_professionnelle",
+    "STAGE EN LAI 15": "situation_professionnelle",
+    "LAI 15": "situation_professionnelle",
+    "CONTEXTE ET DEROULEMENT DU STAGE": "situation_professionnelle",
+    "PROFESSION": "situation_professionnelle",
     
     # Formation
     "FORMATION": "formation",
@@ -76,6 +80,8 @@ SEED_SECTION_TITLE_MAP = {
     "PRISES D INITIATIVES": "competences",
     "AUTONOMIE": "competences",
     "PRESENTATION": "competences",
+    "SELON L EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES": "competences",
+    "DANS SON STAGE SES TACHES SONT LES SUIVANTES": "competences",
     
     # Ressources points d'appui
     "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
@@ -95,6 +101,7 @@ SEED_SECTION_TITLE_MAP = {
     "INTERETS": "motivations_valeurs",
     "CENTRES D INTERET": "motivations_valeurs",
     "ENGAGEMENT ET PERSEVERANCE": "motivations_valeurs",
+    "TEST EVOLUTION": "motivations_valeurs",
     
     # Contraintes/freins
     "CONTRAINTES": "contraintes_freins",
@@ -102,18 +109,25 @@ SEED_SECTION_TITLE_MAP = {
     "LIMITES": "contraintes_freins",
     "LIMITATIONS": "contraintes_freins",
     "SANTE": "contraintes_freins",
+    "INCERTITUDES & OBSTACLES": "contraintes_freins",
+    "INCERTITUDES & OBSTACLES (LIMITATIONS)": "contraintes_freins",
+    "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": "contraintes_freins",
+    "LES LIMITATIONS MEDICALES DE L ASSURE SONT LES SUIVANTES": "contraintes_freins",
+    "DIFFICULTEES RENCONTREES": "contraintes_freins",
     
     # Objectifs
     "OBJECTIFS": "objectifs",
     "OBJECTIF": "objectifs",
     "PROJET": "objectifs",
     "PROJET PROFESSIONNEL": "objectifs",
+    "RELATION AU MARCHE DE L EMPLOI": "objectifs",
     
     # Pistes métiers
     "PISTES": "pistes_metiers",
     "PISTES METIERS": "pistes_metiers",
     "ORIENTATION": "pistes_metiers",
     "PISTES D ORIENTATION": "pistes_metiers",
+    "VOCATIO": "pistes_metiers",
     
     # Plan d'action
     "PLAN D ACTION": "plan_action",
@@ -224,6 +238,7 @@ def is_noise_heading(text: str) -> bool:
     Plus strict que is_noise_title - empêche création de section ET ajout dans unknown_titles.
     
     CORRECTIF B: Filtre "NOM AYNE PRENOM MICKAEL", AVS, dates des unknown_titles.
+    ENHANCEMENT: Filtre MONSIEUR/MADAME, phrases intro répétitives, noise patterns.
     
     Returns:
         True si le texte contient des données nominatives ou patterns formulaire
@@ -240,20 +255,30 @@ def is_noise_heading(text: str) -> bool:
     if re.search(r'\bPRENOM\s+\w+\s+NOM\s+\w+', text_normalized):
         return True
     
-    # 2. AVS suisse : 756.xxxx.xxxx.xx
+    # 2. Contient NOM et PRENOM dans le même heading (peu importe l'ordre)
+    has_nom = 'NOM' in text_normalized.split()
+    has_prenom = 'PRENOM' in text_normalized.split()
+    if has_nom and has_prenom:
+        return True
+    
+    # 3. Contient MONSIEUR ou MADAME (PII)
+    if re.search(r'\b(MONSIEUR|MADAME|M\.|MME)\b', text_normalized):
+        return True
+    
+    # 4. AVS suisse : 756.xxxx.xxxx.xx
     if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
         return True
     
-    # 3. Dates : dd/mm/yyyy, dd.mm.yyyy
+    # 5. Dates : dd/mm/yyyy, dd.mm.yyyy
     if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
         return True
     
-    # 4. Trop de chiffres (>= 8 digits) = probablement données perso
+    # 6. Trop de chiffres (>= 8 digits) = probablement données perso
     digit_count = sum(c.isdigit() for c in text)
     if digit_count >= 8:
         return True
     
-    # 5. Libellés de formulaire seuls
+    # 7. Libellés de formulaire seuls
     form_labels = {
         'NOM', 'PRENOM', 'PRENOM NOM', 'NOM PRENOM',
         'AVS', 'N AVS', 'NUMERO AVS', 'NO AVS', 'N AVS',
@@ -261,6 +286,25 @@ def is_noise_heading(text: str) -> bool:
         'NUMERO', 'NO', 'REF', 'REFERENCE'
     }
     if text_normalized in form_labels:
+        return True
+    
+    # 8. Patterns de noise récurrents (sous-intros de tableaux)
+    noise_patterns = [
+        'LES RESULTATS DETAILLES SONT LES SUIVANTS',
+        'CI DESSOUS LES RESULTATS DETAILLES',
+        'RESULTATS DE LA DISCUSSION AVEC L ASSURE',
+        'TESTS',  # Seul, c'est souvent un conteneur vide
+    ]
+    if text_normalized in noise_patterns:
+        return True
+    
+    # 9. Phrases très longues avec intro générique (souvent PII ou noise)
+    if len(text_normalized) > 60 and any(intro in text_normalized for intro in [
+        'LES MOTIVATEURS PRINCIPAUX DE',
+        'VOICI',
+        'APRES DISCUSSION',
+        'SUITE A',
+    ]):
         return True
     
     return False
