@@ -447,7 +447,8 @@ def analyze_dataset(
     # Collecteurs de patterns
     all_titles = Counter()
     unknown_titles = Counter()
-    section_lengths = defaultdict(list)  # section -> [longueurs en lignes]
+    section_clients = defaultdict(set)  # section -> {client_uid,...}
+    section_lines_per_client = defaultdict(list)  # section -> [max_lines_per_client,...]
     gold_strategies = Counter()
     rag_extensions = Counter()
     coverage_scores = []
@@ -490,7 +491,10 @@ def analyze_dataset(
                     except Exception:
                         pass
             
-            # Collecter titres et stats de sections
+            # Collecter titres et sections PAR CLIENT
+            client_sections_found = set()
+            client_section_max_lines = {}  # section -> max_lines dans ce client
+            
             for section in client_sections:
                 title_norm = normalize_title(section["title"])
                 canonical = section["canonical"]
@@ -498,10 +502,21 @@ def analyze_dataset(
                 if canonical:
                     # Titre mappé: compter variant
                     all_titles[title_norm] += 1
-                    section_lengths[canonical].append(section["lines"])
+                    client_sections_found.add(canonical)
+                    # Garder le max de lignes pour cette section dans ce client
+                    client_section_max_lines[canonical] = max(
+                        client_section_max_lines.get(canonical, 0),
+                        section["lines"]
+                    )
                 else:
                     # Titre non mappé
                     unknown_titles[title_norm] += 1
+            
+            # Enregistrer les sections de ce client (UID interne)
+            client_uid = f"{client_folder.name}_{i}"  # UID interne non exporté
+            for sec in client_sections_found:
+                section_clients[sec].add(client_uid)
+                section_lines_per_client[sec].append(client_section_max_lines[sec])
             
             # Calculer métriques si debug/metrics disponibles
             client_metrics = None
@@ -565,26 +580,39 @@ def analyze_dataset(
         if canonical and title_norm not in SEED_SECTION_TITLE_MAP:
             learned_title_map[title_norm] = canonical
     
-    # Stats par section canonique
+    # Stats par section canonique (basées sur les CLIENTS, pas les documents)
     sections_stats = {}
-    for canonical, lengths in section_lengths.items():
-        if lengths:
-            sections_stats[canonical] = {
-                "title_variants_top": [
-                    title for title, _ in all_titles.most_common(20)
-                    if match_title_to_canonical(title) == canonical
-                ][:5],
-                "avg_lines": round(statistics.mean(lengths), 1),
-                "p50_lines": round(statistics.median(lengths), 1),
-                "p90_lines": round(_percentile(lengths, 90), 1),
-                "clients_with_section": len(lengths),
-                "coverage": round(len(lengths) / len(successful_clients), 2) if successful_clients else 0
-            }
+    clients_used = len(successful_clients)  # ou pipeline_ready si préféré
+    
+    for canonical in CANONICAL_SECTIONS.keys():
+        n_clients = len(section_clients.get(canonical, set()))
+        lines = section_lines_per_client.get(canonical, [])
+        
+        if lines:
+            avg_lines = statistics.mean(lines)
+            median_lines = statistics.median(lines)
+            p90_lines = _percentile(lines, 90)
+        else:
+            avg_lines = median_lines = p90_lines = 0
+        
+        # Coverage en pourcentage (0..100)
+        coverage_pct = 0 if clients_used == 0 else round(100 * n_clients / clients_used, 1)
+        
+        sections_stats[canonical] = {
+            "title_variants_top": [
+                title for title, _ in all_titles.most_common(20)
+                if match_title_to_canonical(title) == canonical
+            ][:5],
+            "avg_lines": round(avg_lines, 1),
+            "p50_lines": round(median_lines, 1),
+            "p90_lines": round(p90_lines, 1),
+            "clients": n_clients,  # ✅ Nombre de clients ayant la section
+            "coverage": coverage_pct / 100,  # Pour compatibilité (ratio 0..1)
+        }
     
     result.patterns = {
         "unknown_titles_top10": dict(unknown_titles.most_common(10)),
         "learned_title_map": learned_title_map,
-        "section_lengths": dict(section_lengths),
         "sections_stats": sections_stats,
         "common_structures": _detect_common_structures(successful_clients),
     }
@@ -667,9 +695,12 @@ def export_training_artifacts(
     # Merge si demandé
     state_path = out_path / "training_state.json"
     if merge_existing and state_path.exists():
-        with open(state_path, "r", encoding="utf-8") as f:
-            existing_state = json.load(f)
-        training_state = _merge_training_states(existing_state, training_state)
+        # ⚠️ Merge non implémenté pour v1.0 - bloquer pour éviter crash
+        raise NotImplementedError(
+            "merge_existing=True non supporté pour training_state v1.0. "
+            "Le schéma a changé et le merge doit être réimplémenté. "
+            "Utilisez merge_existing=False pour écraser le fichier existant."
+        )
     
     with open(state_path, "w", encoding="utf-8") as f:
         json.dump(training_state, f, indent=2, ensure_ascii=False)
@@ -777,9 +808,13 @@ def _build_training_state(result: DatasetTrainingResult) -> Dict[str, Any]:
     
     if "sections_stats" in result.patterns:
         for canonical, stats in result.patterns["sections_stats"].items():
-            coverage_pct = int(stats["coverage"] * 100)
+            # ✅ Garde-fou : s'assurer que coverage_pct est entre 0 et 100
+            coverage_pct = int(round(float(stats.get("coverage", 0)) * 100))
+            coverage_pct = max(0, min(100, coverage_pct))  # Clamp 0-100
+            
             sections_stats_v1[canonical.upper()] = {
                 "coverage_pct": coverage_pct,
+                "clients": stats.get("clients", 0),  # ✅ Nombre de clients
                 "lines": {
                     "avg": stats["avg_lines"],
                     "median": int(stats["p50_lines"]),
@@ -920,6 +955,7 @@ def _generate_training_report_md(result: DatasetTrainingResult) -> str:
         f"**Date** : {result.timestamp}",
         f"**Clients analysés** : {result.stats['total_clients']}",
         f"**Scans réussis** : {result.stats['successful_scans']}",
+        f"**Clients utilisés** : {result.stats['successful_scans']}",  # ✅ clients_used explicite
         f"",
         f"## 📊 Statistiques Globales",
         f"",
@@ -939,6 +975,25 @@ def _generate_training_report_md(result: DatasetTrainingResult) -> str:
     
     for ext, count in sorted(result.stats['extensions_distribution'].items(), key=lambda x: -x[1]):
         lines.append(f"- `{ext}` : {count}")
+    
+    # ✅ Ajouter section stats avec clients_used
+    if "sections_stats" in result.patterns:
+        lines.extend([
+            f"",
+            f"## 📑 Sections Canoniques",
+            f"",
+            f"Coverage basée sur **{result.stats['successful_scans']} clients utilisés**.",
+            f"",
+            f"| Section | Coverage % | Clients | Avg Lines | P90 Lines |",
+            f"|---------|------------|---------|-----------|-----------|",
+        ])
+        
+        for canonical, stats in sorted(result.patterns["sections_stats"].items()):
+            coverage_pct = int(stats["coverage"] * 100)
+            clients = stats.get("clients", 0)
+            avg = stats["avg_lines"]
+            p90 = stats["p90_lines"]
+            lines.append(f"| {canonical.upper()} | {coverage_pct}% | {clients} | {avg:.1f} | {p90:.1f} |")
     
     lines.extend([
         f"",

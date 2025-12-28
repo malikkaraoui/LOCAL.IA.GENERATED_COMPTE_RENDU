@@ -31,10 +31,22 @@ from rapport_orchestrator import RapportOrchestrator, PipelineConfig
 
 
 def browse_directory(label: str, help_text: str = "", key_suffix: str = "") -> Optional[str]:
-    """Permet de sélectionner un dossier via tkinter ou saisie manuelle."""
-    col1, col2 = st.columns([3, 1])
-    
+    """
+    Permet de sélectionner un dossier via saisie manuelle ou suggestions.
+    Alternative sans tkinter pour compatibilité maximale.
+    """
     key_base = f"{label}_{key_suffix}" if key_suffix else label
+    
+    # Suggestions de chemins communs
+    suggestions = [
+        "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
+        "/Users/malik/Documents/SCRIPT.IA_DATA/training_sandbox",
+        "./sandbox",
+        str(Path.home() / "Documents"),
+    ]
+    
+    # Input avec autocomplete via selectbox
+    col1, col2 = st.columns([4, 1])
     
     with col1:
         path_input = st.text_input(
@@ -42,30 +54,27 @@ def browse_directory(label: str, help_text: str = "", key_suffix: str = "") -> O
             value=st.session_state.get(f"path_{key_base}", ""),
             help=help_text,
             key=f"input_{key_base}",
+            placeholder="Ex: /Users/malik/Documents/...",
         )
     
     with col2:
         st.write("")
         st.write("")
-        if st.button("📁 Browse", key=f"browse_{key_base}"):
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
-                
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes('-topmost', True)
-                
-                folder_path = filedialog.askdirectory(
-                    title=f"Sélectionner : {label}",
-                )
-                
-                if folder_path:
-                    st.session_state[f"path_{key_base}"] = folder_path
+        # Bouton pour afficher les suggestions
+        if st.button("💡", key=f"suggest_{key_base}", help="Afficher les suggestions"):
+            st.session_state[f"show_suggestions_{key_base}"] = not st.session_state.get(f"show_suggestions_{key_base}", False)
+    
+    # Afficher les suggestions si demandé
+    if st.session_state.get(f"show_suggestions_{key_base}", False):
+        st.markdown("**Chemins suggérés** (cliquez pour utiliser) :")
+        for suggestion in suggestions:
+            if Path(suggestion).exists():
+                if st.button(f"✅ {suggestion}", key=f"use_{key_base}_{hash(suggestion)}"):
+                    st.session_state[f"path_{key_base}"] = suggestion
+                    st.session_state[f"show_suggestions_{key_base}"] = False
                     st.rerun()
-            
-            except Exception as e:
-                st.error(f"Erreur browse : {e}")
+            else:
+                st.caption(f"⚠️ {suggestion} (n'existe pas)")
     
     return path_input if path_input else None
 
@@ -228,7 +237,7 @@ def show_training_tab():
                         sections_data.append({
                             "Section": canonical.upper(),
                             "Coverage %": f"{stats['coverage']*100:.0f}%",
-                            "Clients": stats["clients_with_section"],
+                            "Clients": stats.get("clients", stats.get("clients_with_section", 0)),  # ✅ Utiliser le nouveau champ
                             "Avg lines": stats["avg_lines"],
                             "P50": stats["p50_lines"],
                             "P90": stats["p90_lines"],
@@ -280,31 +289,39 @@ def show_training_tab():
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    with open(training_state_path, "rb") as f:
-                        st.download_button(
-                            "📄 training_state.json",
-                            data=f,
-                            file_name=training_state_path.name,
-                            mime="application/json",
-                            use_container_width=True
-                        )
+                    # Lire le fichier une seule fois
+                    training_state_data = training_state_path.read_bytes()
+                    st.download_button(
+                        "📄 training_state.json",
+                        data=training_state_data,
+                        file_name=training_state_path.name,
+                        mime="application/json",
+                        use_container_width=True,
+                        key="download_training_state"
+                    )
                 
                 with col2:
                     report_path = Path(paths["report"])
                     if report_path.exists():
-                        with open(report_path, "rb") as f:
-                            st.download_button(
-                                "📝 training_report.md",
-                                data=f,
-                                file_name=report_path.name,
-                                mime="text/markdown",
-                                use_container_width=True
-                            )
+                        # Lire le fichier une seule fois
+                        report_data = report_path.read_bytes()
+                        st.download_button(
+                            "📝 training_report.md",
+                            data=report_data,
+                            file_name=report_path.name,
+                            mime="text/markdown",
+                            use_container_width=True,
+                            key="download_training_report"
+                        )
                 
                 with col3:
-                    if st.button("📂 Ouvrir dossier", use_container_width=True):
-                        import subprocess
-                        subprocess.run(["open", str(training_state_path.parent)])
+                    # Afficher le chemin et permettre de copier
+                    st.caption("Dossier de sortie:")
+                    st.code(str(training_state_path.parent), language=None)
+                    # Bouton pour ouvrir dans Finder (macOS)
+                    open_folder_code = f"open '{str(training_state_path.parent)}'"
+                    st.caption("Commande à exécuter:")
+                    st.code(open_folder_code, language="bash")
                 
                 # Sauvegarder le path pour l'onglet Test
                 st.session_state["last_training_state"] = str(training_state_path)

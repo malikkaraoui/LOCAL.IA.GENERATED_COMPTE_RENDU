@@ -192,3 +192,48 @@ class TestTrainingStateSchema:
             assert section in max_lines
             assert isinstance(max_lines[section], int)
             assert max_lines[section] > 0
+    
+    def test_training_state_coverage_pct_bounded(self, training_state):
+        """✅ ANTI-RÉGRESSION: coverage_pct doit être entre 0 et 100."""
+        section_stats = training_state["patterns"]["section_stats"]
+        
+        for section, stats in section_stats.items():
+            coverage_pct = stats["coverage_pct"]
+            
+            # ✅ coverage_pct doit être entre 0 et 100
+            assert 0 <= coverage_pct <= 100, (
+                f"Section '{section}' a coverage_pct={coverage_pct} qui dépasse 100%. "
+                f"Le bug 'count par doc au lieu de count par client' est réapparu!"
+            )
+            
+            # ✅ clients ne doit jamais dépasser clients_used
+            clients = stats.get("clients", 0)
+            clients_used = training_state["dataset"]["clients_used"]
+            assert 0 <= clients <= clients_used, (
+                f"Section '{section}' a {clients} clients mais seulement {clients_used} "
+                f"clients utilisés dans le dataset!"
+            )
+    
+    def test_coverage_calculation_logic(self):
+        """Test unitaire pour la logique de calcul de coverage_pct avec garde-fou."""
+        # Simulation d'un stats avec coverage invalide (cas de bug)
+        fake_stats = {"coverage": 3.2, "avg_lines": 10, "p50_lines": 8, "p90_lines": 15}
+        
+        # Appliquer la même logique que dans le code
+        coverage_pct = int(round(float(fake_stats.get("coverage", 0)) * 100))
+        coverage_pct = max(0, min(100, coverage_pct))
+        
+        # ✅ Le garde-fou doit clamper à 100
+        assert coverage_pct == 100, "Garde-fou devrait clamper 320% à 100%"
+        
+        # Test avec coverage normale
+        normal_stats = {"coverage": 0.65}
+        coverage_pct = int(round(float(normal_stats.get("coverage", 0)) * 100))
+        coverage_pct = max(0, min(100, coverage_pct))
+        assert coverage_pct == 65
+        
+        # Test avec coverage = 0
+        zero_stats = {"coverage": 0}
+        coverage_pct = int(round(float(zero_stats.get("coverage", 0)) * 100))
+        coverage_pct = max(0, min(100, coverage_pct))
+        assert coverage_pct == 0

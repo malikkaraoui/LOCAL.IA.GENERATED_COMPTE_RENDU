@@ -1,0 +1,205 @@
+{
+  "schema_version": "training_state_v1.0",
+  "run_id": "BATCH 20_2025-12-28T10:29:28Z_92b63f",
+  "created_at": "2025-12-28T10:29:28Z",
+  "dataset": {
+    "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
+    "dataset_id": "92b63fb9c0c5",
+    "clients_scanned": 5,
+    "clients_used": 5,
+    "doc_types_stats": {
+      ".docx": 56,
+      ".pdf": 75,
+      ".doc": 2,
+      ".msg": 11
+    },
+    "gold_stats": {
+      "gold_detected_clients": 5,
+      "gold_missing_clients": 0
+    }
+  },
+  "conventions": {
+    "fallback_value": "Non renseigné",
+    "status_enum": [
+      "GO",
+      "NO_GO",
+      "DRAFT"
+    ],
+    "scores": {
+      "coverage_range": [
+        0,
+        100
+      ],
+      "quality_range": [
+        0,
+        1
+      ],
+      "confidence_range": [
+        0,
+        1
+      ]
+    }
+  },
+  "profiles": {
+    "STRICT": {
+      "coverage_min": 85,
+      "quality_min": 0.75,
+      "confidence_min": 0.7,
+      "sources_count_min": 1,
+      "profession_or_formation_required": true
+    },
+    "STANDARD": {
+      "coverage_min": 75,
+      "quality_min": 0.65,
+      "confidence_min": 0.6,
+      "sources_count_min": 1,
+      "profession_or_formation_required": true
+    },
+    "DRAFT": {
+      "coverage_min": 0,
+      "quality_min": 0.0,
+      "confidence_min": 0.0,
+      "sources_count_min": 0,
+      "profession_or_formation_required": false
+    }
+  },
+  "patterns": {
+    "section_stats": {
+      "IDENTITY": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "SITUATION_PROFESSIONNELLE": {
+        "coverage_pct": 80,
+        "clients": 4,
+        "lines": {
+          "avg": 12,
+          "median": 10,
+          "p90": 26
+        }
+      },
+      "FORMATION": {
+        "coverage_pct": 80,
+        "clients": 4,
+        "lines": {
+          "avg": 6.5,
+          "median": 3,
+          "p90": 20
+        }
+      },
+      "COMPETENCES": {
+        "coverage_pct": 80,
+        "clients": 4,
+        "lines": {
+          "avg": 10,
+          "median": 9,
+          "p90": 15
+        }
+      },
+      "RESSOURCES_POINTS_APPUI": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "RESSOURCES_POINTS_VIGILANCE": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "MOTIVATIONS_VALEURS": {
+        "coverage_pct": 60,
+        "clients": 3,
+        "lines": {
+          "avg": 1.7,
+          "median": 2,
+          "p90": 2
+        }
+      },
+      "CONTRAINTES_FREINS": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "OBJECTIFS": {
+        "coverage_pct": 100,
+        "clients": 5,
+        "lines": {
+          "avg": 4.4,
+          "median": 4,
+          "p90": 5
+        }
+      },
+      "PISTES_METIERS": {
+        "coverage_pct": 40,
+        "clients": 2,
+        "lines": {
+          "avg": 3.5,
+          "median": 3,
+          "p90": 7
+        }
+      },
+      "PLAN_ACTION": {
+        "coverage_pct": 100,
+        "clients": 5,
+        "lines": {
+          "avg": 1.8,
+          "median": 1,
+          "p90": 4
+        }
+      },
+      "SYNTHESE_CONCLUSION": {
+        "coverage_pct": 60,
+        "clients": 3,
+        "lines": {
+          "avg": 4.3,
+          "median": 4,
+          "p90": 6
+        }
+      }
+    },
+    "field_max_lines": {
+      "NAME": 1,
+      "SURNAME": 1,
+      "NUMERO_AVS": 1,
+      "PROFESSION": 4,
+      "FORMATION": 20,
+      "Ressources_comportementales_Points_d'appui": 4,
+      "Ressources_comportementales_Points_de_vigilance": 4,
+      "IDENTITY": 0,
+      "SITUATION_PROFESSIONNELLE": 26,
+      "COMPETENCES": 15,
+      "RESSOURCES_POINTS_APPUI": 0,
+      "RESSOURCES_POINTS_VIGILANCE": 0,
+      "MOTIVATIONS_VALEURS": 2,
+      "CONTRAINTES_FREINS": 0,
+      "OBJECTIFS": 5,
+      "PISTES_METIERS": 7,
+      "PLAN_ACTION": 4,
+      "SYNTHESE_CONCLUSION": 6
+    }
+  },
+  "warnings": [
+    {
+      "code": "EXT_NOT_INDEXED",
+      "message": "Des fichiers .msg sont présents mais non indexés par défaut",
+      "count": 11
+    }
+  ]
+}

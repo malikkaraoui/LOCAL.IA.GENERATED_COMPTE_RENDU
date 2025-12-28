@@ -11,8 +11,9 @@ Permet de :
 import streamlit as st
 import sys
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import json
+import pandas as pd
 
 # Ajouter le projet au path
 project_root = Path(__file__).parent.parent
@@ -40,7 +41,8 @@ import pandas as pd
 
 def browse_directory(label: str, help_text: str = "") -> Optional[str]:
     """
-    Permet de sélectionner un dossier via tkinter ou saisie manuelle.
+    Permet de sélectionner un dossier via saisie manuelle ou suggestions.
+    Alternative sans tkinter pour compatibilité maximale.
     
     Args:
         label: Label pour le widget
@@ -49,7 +51,15 @@ def browse_directory(label: str, help_text: str = "") -> Optional[str]:
     Returns:
         Chemin du dossier ou None
     """
-    col1, col2 = st.columns([3, 1])
+    # Suggestions de chemins communs
+    suggestions = [
+        "/Users/malik/Documents/RH PRO BASE DONNEE/DATASET TRAINING/BATCH 20",
+        "/Users/malik/Documents/SCRIPT.IA_DATA/training_sandbox",
+        "./sandbox",
+        str(Path.home() / "Documents"),
+    ]
+    
+    col1, col2 = st.columns([4, 1])
     
     with col1:
         path_input = st.text_input(
@@ -57,33 +67,27 @@ def browse_directory(label: str, help_text: str = "") -> Optional[str]:
             value=st.session_state.get(f"path_{label}", ""),
             help=help_text,
             key=f"input_{label}",
+            placeholder="Ex: /Users/malik/Documents/...",
         )
     
     with col2:
         st.write("")  # Spacer
         st.write("")  # Spacer
-        if st.button("📁 Browse", key=f"browse_{label}"):
-            try:
-                import tkinter as tk
-                from tkinter import filedialog
-                
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes('-topmost', True)
-                
-                folder_path = filedialog.askdirectory(
-                    title=f"Sélectionner : {label}",
-                    initialdir=path_input if path_input else None,
-                )
-                
-                root.destroy()
-                
-                if folder_path:
-                    st.session_state[f"path_{label}"] = folder_path
+        # Bouton pour afficher les suggestions
+        if st.button("💡", key=f"suggest_{label}", help="Afficher les suggestions"):
+            st.session_state[f"show_suggestions_{label}"] = not st.session_state.get(f"show_suggestions_{label}", False)
+    
+    # Afficher les suggestions si demandé
+    if st.session_state.get(f"show_suggestions_{label}", False):
+        st.markdown("**Chemins suggérés** (cliquez pour utiliser) :")
+        for suggestion in suggestions:
+            if Path(suggestion).exists():
+                if st.button(f"✅ {suggestion}", key=f"use_{label}_{hash(suggestion)}"):
+                    st.session_state[f"path_{label}"] = suggestion
+                    st.session_state[f"show_suggestions_{label}"] = False
                     st.rerun()
-            
-            except Exception as e:
-                st.error(f"Erreur browse : {e}")
+            else:
+                st.caption(f"⚠️ {suggestion} (n'existe pas)")
     
     return path_input if path_input else None
 

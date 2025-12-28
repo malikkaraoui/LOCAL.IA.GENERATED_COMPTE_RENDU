@@ -1,0 +1,26 @@
+{
+  "total_clients": 5,
+  "successful_scans": 5,
+  "errors": 0,
+  "gold_detected": 5,
+  "gold_detection_rate": 1.0,
+  "pipeline_ready": 5,
+  "pipeline_ready_rate": 1.0,
+  "sources_stats": {
+    "mean": 28.8,
+    "median": 35,
+    "min": 8,
+    "max": 43,
+    "p10": 8,
+    "p90": 43
+  },
+  "extensions_distribution": {
+    ".docx": 56,
+    ".pdf": 75,
+    ".doc": 2,
+    ".msg": 11
+  },
+  "gold_strategies": {
+    "06_rapport_final": 5
+  }
+}
