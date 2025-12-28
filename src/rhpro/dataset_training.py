@@ -247,6 +247,8 @@ def is_noise_heading(text: str) -> bool:
         return True
     
     text_upper = text.strip().upper()
+    # Normaliser apostrophes (' → ')
+    text_upper = text_upper.replace("'", "'").replace("`", "'")
     text_normalized = re.sub(r'\s+', ' ', text_upper)
     
     # 1. Patterns nominatifs directs : "NOM xxx PRENOM yyy"
@@ -261,8 +263,12 @@ def is_noise_heading(text: str) -> bool:
     if has_nom and has_prenom:
         return True
     
-    # 3. Contient MONSIEUR ou MADAME (PII)
-    if re.search(r'\b(MONSIEUR|MADAME|M\.|MME)\b', text_normalized):
+    # 3. Contient MONSIEUR ou MADAME (PII) - regex flexible pour M. et MME
+    # Pattern qui capture M. avec ou sans espace, Monsieur, Madame, etc.
+    if re.search(r'\b(MONSIEUR|MADAME|M\s*\.|M\.|MME|MR)\b', text_normalized):
+        return True
+    # Pattern spécifique pour "M. NOM" avec point collé
+    if re.search(r'\bM\.\s*[A-Z]', text_normalized):
         return True
     
     # 4. AVS suisse : 756.xxxx.xxxx.xx
@@ -292,11 +298,23 @@ def is_noise_heading(text: str) -> bool:
     noise_patterns = [
         'LES RESULTATS DETAILLES SONT LES SUIVANTS',
         'CI DESSOUS LES RESULTATS DETAILLES',
-        'RESULTATS DE LA DISCUSSION AVEC L ASSURE',
+        'RESULTATS DE LA DISCUSSION AVEC L\'ASSURE',  # Avec apostrophe normalisée
+        'RESULTATS DE LA DISCUSSION AVEC L ASSURE',   # Sans apostrophe
         'TESTS',  # Seul, c'est souvent un conteneur vide
     ]
     if text_normalized in noise_patterns:
         return True
+    
+    # 9. Phrases très longues avec intro générique (souvent PII ou noise)
+    if len(text_normalized) > 60 and any(intro in text_normalized for intro in [
+        'LES MOTIVATEURS PRINCIPAUX DE',
+        'VOICI',
+        'APRES DISCUSSION',
+        'SUITE A',
+    ]):
+        return True
+    
+    return False
     
     # 9. Phrases très longues avec intro générique (souvent PII ou noise)
     if len(text_normalized) > 60 and any(intro in text_normalized for intro in [
