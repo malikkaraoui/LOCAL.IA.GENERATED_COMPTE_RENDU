@@ -330,18 +330,35 @@ def is_noise_heading(text: str) -> bool:
 
 def is_noise_title(text: str) -> bool:
     """
-    Détecte les titres parasites à ignorer, incluant PII et libellés de formulaires.
+    Détecte les titres NOISE à ignorer (copilot.md section 0 et 5).
+    
+    Utilise un set lookup pour matching exact des patterns NOISE.
+    NE filtre PAS le PII (délégué à is_pii_title).
     
     Returns:
-        True si le titre est du bruit (à ignorer)
+        True si le titre est du NOISE (à ignorer)
     """
     if not text or len(text) < 2:
+        return True
+    
+    # Normaliser pour matching cohérent
+    text_norm = normalize_heading_for_titles(text)
+    
+    # ✅ Patterns NOISE exactes (copilot.md section 0)
+    NOISE_TITLES = {
+        "LES RESULTATS DETAILLES SONT LES SUIVANTS",
+        "CI DESSOUS LES RESULTATS DETAILLES",
+        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE",  # apostrophe normalisée
+        "TESTS",
+    }
+    
+    if text_norm in NOISE_TITLES:
         return True
     
     # Liste noire explicite (chiffres romains, lettres seules)
     noise_tokens = {'X', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
                     'TS', 'PS', 'S', 'N', 'P', 'R', 'T', 'A', 'B', 'C', 'D', 'E', 'F', 'G'}
-    if text in noise_tokens:
+    if text_norm in noise_tokens:
         return True
     
     # ✅ Libellés de champs formulaires (V4)
@@ -354,43 +371,75 @@ def is_noise_title(text: str) -> bool:
         'TELEPHONE', 'TEL', 'MAIL', 'EMAIL', 'ADRESSE',
         'STAGE', 'STAGE EN QUALITE DE', 'LIEU DE STAGE',
         'EVALUATION', 'EVALUATION DE STAGE',
-        'ENTREPRISE', 'L ENTREPRISE', 'EMPLOYEUR',
+        'ENTREPRISE', "L'ENTREPRISE", "L ENTREPRISE", 'EMPLOYEUR',
         'STAGIAIRE', 'LE STAGIAIRE', 'LA STAGIAIRE',
         'SIGNATURE', 'SIGNATURES',
         'PARTIES CONCERNEES', 'CONTACT', 'COORDONNEES'
     }
-    if text in form_labels:
+    if text_norm in form_labels:
         return True
     
-    # ✅ Patterns PII (V4)
-    # AVS suisse : 756.xxxx.xxxx.xx
-    if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
-        return True
-    
-    # Trop de chiffres (>= 6 digits) = probablement données perso
-    digit_count = sum(c.isdigit() for c in text)
-    if digit_count >= 6:
-        return True
-    
-    # Dates : dd/mm/yyyy, dd.mm.yyyy, dd mm yyyy
-    if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
-        return True
-    
-    # Trop court (< 4 caractères) - mais exclusion des vrais mots courts
-    if len(text) < 4:
+    # Trop court (< 4 caractères)
+    if len(text_norm) < 4:
         return True
     
     # Uniquement chiffres
-    if text.isdigit():
+    if text_norm.replace(' ', '').isdigit():
         return True
     
     # Uniquement ponctuation
-    if all(c in '.,;:!?-_/*+=' for c in text):
+    if all(c in '.,;:!?-_/*+= \t' for c in text_norm):
         return True
     
     # Un seul token ET trop court (< 3 caractères)
-    tokens = text.split()
+    tokens = text_norm.split()
     if len(tokens) == 1 and len(tokens[0]) < 3:
+        return True
+    
+    return False
+
+
+def is_pii_title(text: str) -> bool:
+    """
+    Détecte les titres contenant du PII (copilot.md section 0 et 5).
+    
+    Filtre :
+    - NOM ... PRENOM ... (dans n'importe quel ordre)
+    - MONSIEUR/MADAME en début
+    - AVS suisse (756.xxxx.xxxx.xx)
+    - Dates (dd/mm/yyyy)
+    - Trop de chiffres (>= 6 digits)
+    
+    Returns:
+        True si le titre contient du PII (à IGNORER et NE JAMAIS STOCKER)
+    """
+    if not text or len(text) < 2:
+        return False
+    
+    # Normaliser pour matching cohérent
+    text_norm = normalize_heading_for_titles(text)
+    
+    # 1. Patterns NOM + PRENOM (copilot.md section 0)
+    # Détecte "NOM ... PRENOM ..." ou "PRENOM ... NOM ..."
+    if re.search(r'\bNOM\b.*\bPRENOM\b|\bPRENOM\b.*\bNOM\b', text_norm):
+        return True
+    
+    # 2. MONSIEUR ou MADAME en début (copilot.md section 0)
+    # M. peut avoir un espace après le point : "M. DUBOIS" ou "M.DUBOIS"
+    if re.match(r'^\s*(MONSIEUR|MADAME|M\.\s*|MME|MR)\b', text_norm):
+        return True
+    
+    # 3. AVS suisse : 756.xxxx.xxxx.xx
+    if re.search(r'\b756[\s\.]?\d{4}[\s\.]?\d{4}[\s\.]?\d{2}\b', text):
+        return True
+    
+    # 4. Dates : dd/mm/yyyy, dd.mm.yyyy, dd mm yyyy
+    if re.search(r'\b\d{1,2}[\/\.\s]\d{1,2}[\/\.\s]\d{2,4}\b', text):
+        return True
+    
+    # 5. Trop de chiffres (>= 6 digits) = probablement données perso
+    digit_count = sum(c.isdigit() for c in text)
+    if digit_count >= 6:
         return True
     
     return False
@@ -434,6 +483,42 @@ def normalize_title(title: str) -> str:
     text = re.sub(r'[:;.,]', ' ', text)
     
     # Collapse espaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
+
+
+def normalize_heading_for_titles(text: str) -> str:
+    """
+    Normalisation stricte pour filtrage NOISE/PII dans unknown_titles.
+    
+    Applique (copilot.md section 4) :
+    - strip + collapse espaces multiples en 1
+    - .upper()
+    - apostrophe typographique ' → '
+    - retirer ponctuation terminale (., ..., etc.)
+    - normaliser tirets multiples en -
+    
+    Exemple:
+        "RESULTATS DE LA DISCUSSION AVEC L'ASSURE..." 
+        → "RESULTATS DE LA DISCUSSION AVEC L'ASSURE"
+    """
+    if not text:
+        return ""
+    
+    # Strip et uppercase
+    text = text.strip().upper()
+    
+    # Normaliser apostrophes typographiques : ' ' ` → '
+    text = text.replace(''', "'").replace(''', "'").replace('`', "'")
+    
+    # Normaliser tirets multiples en -
+    text = re.sub(r'[-–—]+', '-', text)
+    
+    # Retirer ponctuation terminale : ., ..., !!!, etc.
+    text = re.sub(r'[.!?,;:]+$', '', text)
+    
+    # Collapse espaces multiples
     text = re.sub(r'\s+', ' ', text).strip()
     
     return text
@@ -1166,9 +1251,24 @@ def analyze_dataset(
                             lines_count
                         )
                 else:
-                    # ✅ V4.1 + CORRECTIF B: Titre non mappé: filtrer le bruit ET PII avant comptage
-                    if not is_noise_title(title_norm) and not is_noise_heading(title):
-                        unknown_titles[title_norm] += 1
+                    # ✅ V4.1 + CORRECTIF B + COPILOT.MD: Titre non mappé: filtrer PII puis NOISE avant comptage
+                    # Normalisation stricte pour filtrage NOISE/PII (copilot.md section 2)
+                    title_for_filter = normalize_heading_for_titles(title)
+                    
+                    # Filtrer PII en premier (zéro tolérance)
+                    if is_pii_title(title_for_filter):
+                        continue  # NE PAS compter, NE PAS stocker
+                    
+                    # Filtrer NOISE ensuite
+                    if is_noise_title(title_for_filter):
+                        continue  # NE PAS compter, NE PAS stocker
+                    
+                    # Garder is_noise_heading() pour rétrocompatibilité (détecte autres patterns)
+                    if is_noise_heading(title):
+                        continue
+                    
+                    # Seulement maintenant => unknown
+                    unknown_titles[title_for_filter] += 1
             
             # ✅ V4.1: Enregistrer UNIQUEMENT sections avec lines > 0
             client_uid = f"{client_folder.name}_{i}"  # UID interne non exporté
@@ -1286,14 +1386,49 @@ def analyze_dataset(
             "coverage": coverage_pct / 100,  # Pour compatibilité (ratio 0..1)
         }
     
+    # ✅ GARDE ANTI-PII (ceinture + bretelles) avant sérialisation JSON (copilot.md section 3)
+    filtered_unknown = {}
+    pii_removed = 0
+    noise_removed = 0
+    
+    for k, v in unknown_titles.items():
+        kk = normalize_heading_for_titles(k)
+        
+        # Filtrer PII
+        if is_pii_title(kk):
+            pii_removed += 1
+            continue  # NE PAS stocker
+        
+        # Filtrer NOISE (cohérence)
+        if is_noise_title(kk):
+            noise_removed += 1
+            continue  # NE PAS stocker
+        
+        # OK, garder le titre normalisé comme clé
+        filtered_unknown[kk] = v
+    
+    # Ajouter warning si PII détecté (sans texte PII)
+    if pii_removed > 0:
+        logger.warning(f"⚠️ {pii_removed} titres PII filtrés de unknown_titles (non stockés)")
+    
+    if noise_removed > 0:
+        logger.info(f"ℹ️ {noise_removed} titres NOISE filtrés de unknown_titles")
+    
+    # Reconstruction d'un Counter filtré pour most_common()
+    from collections import Counter
+    filtered_counter = Counter(filtered_unknown)
+    
     result.patterns = {
-        "unknown_titles_top10": dict(unknown_titles.most_common(10)),
-        "unknown_titles_top": dict(unknown_titles.most_common(50)),  # ✅ Top 50 pour review
-        "unknown_titles_count": len(unknown_titles),  # ✅ Nombre de titres distincts inconnus
-        "unknown_titles_total_occurrences": sum(unknown_titles.values()),  # ✅ Total occurrences
+        "unknown_titles_top10": dict(filtered_counter.most_common(10)),
+        "unknown_titles_top": dict(filtered_counter.most_common(50)),  # ✅ Top 50 pour review
+        "unknown_titles_count": len(filtered_counter),  # ✅ Nombre de titres distincts inconnus
+        "unknown_titles_total_occurrences": sum(filtered_counter.values()),  # ✅ Total occurrences
         "learned_title_map": learned_title_map,
         "sections_stats": sections_stats,
         "common_structures": _detect_common_structures(successful_clients),
+        # Métadonnées filtrage (copilot.md section 3)
+        "pii_titles_filtered": pii_removed,
+        "noise_titles_filtered": noise_removed,
     }
     
     # Recommandations
