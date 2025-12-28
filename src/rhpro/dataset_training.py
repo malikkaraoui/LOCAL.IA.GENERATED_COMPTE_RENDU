@@ -673,6 +673,62 @@ def is_container_heading(title: str) -> bool:
     return False
 
 
+def is_subheading(title: str) -> bool:
+    """
+    Détermine si un titre est un sous-titre (Micro-fix v3.1).
+    
+    Les sous-titres ne doivent PAS :
+    - ouvrir une nouvelle section
+    - être comptés en unknown_titles
+    
+    Règles de détection :
+    1. Questions : contient '?'
+    2. Listes numérotées : commence par \\d+\\.
+    3. Phrases longues : > 8 mots (heuristique)
+    4. Étiquettes : "MOT : ..." ou "MOT MOT : ..." (préfixe ≤ 2 mots)
+    
+    Args:
+        title: Titre à analyser (peut être normalisé ou non)
+        
+    Returns:
+        True si c'est un sous-titre
+    """
+    # Garder titre original pour détecter '?' et ':' avant normalisation
+    original = title.upper().strip()
+    
+    # Règle 1 : Questions (détection sur titre original)
+    if '?' in original:
+        return True
+    
+    # Normaliser pour les autres règles
+    normalized = normalize_heading_for_titles(title)
+    tokens = normalized.split()
+    
+    # Règle 2 : Listes numérotées (commence par 1., 2., etc.)
+    if re.match(r'^\d+\.', normalized):
+        return True
+    
+    # Règle 3 : Phrases longues (> 8 mots)
+    if len(tokens) > 8:
+        return True
+    
+    # Règle 4 : Étiquettes avec ':' sur titre original (avant que normalisation supprime ':')
+    # Format attendu : "MOT : ...", "MOT MOT : ..." mais PAS "MOT MOT MOT : ..."
+    if ':' in original:
+        # Split sur ':' depuis l'original
+        parts_raw = original.split(':', 1)
+        if len(parts_raw) == 2:
+            prefix_raw = parts_raw[0].strip()
+            suffix_raw = parts_raw[1].strip()
+            # Compter mots dans préfixe original
+            prefix_tokens_raw = prefix_raw.split()
+            # Si préfixe court (1-2 mots) ET suffixe non vide → étiquette
+            if 1 <= len(prefix_tokens_raw) <= 2 and len(suffix_raw) > 0:
+                return True
+    
+    return False
+
+
 def apply_max_lines(text: str, max_lines: int) -> str:
     """
     Applique une limite de lignes sur un texte (Micro-fix v3).
@@ -1393,6 +1449,10 @@ def analyze_dataset(
                     
                     # Micro-fix v3: Filtrer conteneurs (ne PAS ouvrir section, ne PAS compter unknown)
                     if is_container_heading(title_for_filter):
+                        continue  # NE PAS compter, NE PAS stocker
+                    
+                    # Micro-fix v3.1: Filtrer sous-titres (questions, listes, phrases longues, étiquettes)
+                    if is_subheading(title_for_filter):
                         continue  # NE PAS compter, NE PAS stocker
                     
                     # Garder is_noise_heading() pour rétrocompatibilité (détecte autres patterns)
