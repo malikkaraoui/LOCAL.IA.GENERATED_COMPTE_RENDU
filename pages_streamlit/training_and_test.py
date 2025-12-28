@@ -188,149 +188,155 @@ def show_training_tab():
                 
                 st.success("✅ Export terminé !")
                 
-                # Afficher résumé
-                st.markdown("---")
-                st.markdown("### 📊 Ce que j'ai retenu")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric(
-                        "Clients analysés",
-                        result.stats["total_clients"]
-                    )
-                
-                with col2:
-                    st.metric(
-                        "Clients utilisables",
-                        result.stats["successful_scans"]
-                    )
-                
-                with col3:
-                    st.metric(
-                        "GOLD détectés",
-                        result.stats["gold_detected"],
-                        f"{result.stats['gold_detection_rate']:.0%}"
-                    )
-                
-                with col4:
-                    st.metric(
-                        "Pipeline ready",
-                        result.stats["pipeline_ready"],
-                        f"{result.stats['pipeline_ready_rate']:.0%}"
-                    )
-                
-                # Types de docs
-                st.markdown("#### 📄 Types de documents détectés")
-                doc_types = result.stats.get("extensions_distribution", {})
-                if doc_types:
-                    cols = st.columns(len(doc_types))
-                    for i, (ext, count) in enumerate(doc_types.items()):
-                        with cols[i]:
-                            st.metric(ext, count)
-                
-                # Sections canoniques
-                if "sections_stats" in result.patterns:
-                    st.markdown("#### 📑 Sections canoniques détectées")
-                    
-                    sections_data = []
-                    for canonical, stats in result.patterns["sections_stats"].items():
-                        sections_data.append({
-                            "Section": canonical.upper(),
-                            "Coverage %": f"{stats['coverage']*100:.0f}%",
-                            "Clients": stats.get("clients", stats.get("clients_with_section", 0)),  # ✅ Utiliser le nouveau champ
-                            "Avg lines": stats["avg_lines"],
-                            "P50": stats["p50_lines"],
-                            "P90": stats["p90_lines"],
-                        })
-                    
-                    if sections_data:
-                        st.dataframe(sections_data, use_container_width=True, hide_index=True)
-                
-                # Afficher training_state.json
-                st.markdown("#### 🎯 Training State (v1.0)")
-                training_state_path = Path(paths["training_state"])
-                
-                with open(training_state_path, "r") as f:
-                    state = json.load(f)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric("Schema Version", state["schema_version"])
-                    st.metric("Run ID", state["run_id"])
-                    st.metric("Fallback Value", state["conventions"]["fallback_value"])
-                
-                with col2:
-                    st.metric("Clients scannés", state["dataset"]["clients_scanned"])
-                    st.metric("Clients utilisés", state["dataset"]["clients_used"])
-                    st.metric("GOLD détectés", state["dataset"]["gold_stats"]["gold_detected_clients"])
-                
-                # Profils de validation
-                st.markdown("#### ⚖️ Profils de validation")
-                profiles_cols = st.columns(3)
-                
-                for i, (profile_name, profile_data) in enumerate(state["profiles"].items()):
-                    with profiles_cols[i]:
-                        st.markdown(f"**{profile_name}**")
-                        st.write(f"- Coverage min: {profile_data['coverage_min']}%")
-                        st.write(f"- Quality min: {profile_data['quality_min']}")
-                        st.write(f"- Confidence min: {profile_data['confidence_min']}")
-                
-                # Warnings
-                if state.get("warnings"):
-                    st.markdown("#### ⚠️ Warnings")
-                    for warning in state["warnings"]:
-                        st.warning(f"**{warning['code']}** : {warning['message']} (count: {warning['count']})")
-                
-                # Boutons download
-                st.markdown("---")
-                st.markdown("#### 📥 Téléchargements")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    # Lire le fichier une seule fois
-                    training_state_data = training_state_path.read_bytes()
-                    st.download_button(
-                        "📄 training_state.json",
-                        data=training_state_data,
-                        file_name=training_state_path.name,
-                        mime="application/json",
-                        use_container_width=True,
-                        key="download_training_state"
-                    )
-                
-                with col2:
-                    report_path = Path(paths["report"])
-                    if report_path.exists():
-                        # Lire le fichier une seule fois
-                        report_data = report_path.read_bytes()
-                        st.download_button(
-                            "📝 training_report.md",
-                            data=report_data,
-                            file_name=report_path.name,
-                            mime="text/markdown",
-                            use_container_width=True,
-                            key="download_training_report"
-                        )
-                
-                with col3:
-                    # Afficher le chemin et permettre de copier
-                    st.caption("Dossier de sortie:")
-                    st.code(str(training_state_path.parent), language=None)
-                    # Bouton pour ouvrir dans Finder (macOS)
-                    open_folder_code = f"open '{str(training_state_path.parent)}'"
-                    st.caption("Commande à exécuter:")
-                    st.code(open_folder_code, language="bash")
-                
-                # Sauvegarder le path pour l'onglet Test
-                st.session_state["last_training_state"] = str(training_state_path)
-                st.session_state["last_dataset_root"] = dataset_root
+                # Sauvegarder dans session_state pour persistance
+                st.session_state["training_result"] = result
+                st.session_state["training_paths"] = paths
             
             except Exception as e:
                 st.error(f"❌ Erreur export : {e}")
                 st.code(traceback.format_exc())
+    
+    # Réafficher les résultats s'ils existent dans session_state
+    if "training_result" in st.session_state and "training_paths" in st.session_state:
+        result = st.session_state["training_result"]
+        paths = st.session_state["training_paths"]
+        
+        # Afficher résumé
+        st.markdown("---")
+        st.markdown("### 📊 Ce que j'ai retenu")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "Clients analysés",
+                result.stats["total_clients"]
+            )
+        
+        with col2:
+            st.metric(
+                "Clients utilisables",
+                result.stats["successful_scans"]
+            )
+        
+        with col3:
+            st.metric(
+                "GOLD détectés",
+                result.stats["gold_detected"],
+                f"{result.stats['gold_detection_rate']:.0%}"
+            )
+        
+        with col4:
+            st.metric(
+                "Pipeline ready",
+                result.stats["pipeline_ready"],
+                f"{result.stats['pipeline_ready_rate']:.0%}"
+            )
+        
+        # Types de docs
+        st.markdown("#### 📄 Types de documents détectés")
+        doc_types = result.stats.get("extensions_distribution", {})
+        if doc_types:
+            cols = st.columns(len(doc_types))
+            for i, (ext, count) in enumerate(doc_types.items()):
+                with cols[i]:
+                    st.metric(ext, count)
+        
+        # Sections canoniques
+        if "sections_stats" in result.patterns:
+            st.markdown("#### 📑 Sections canoniques détectées")
+            
+            sections_data = []
+            for canonical, stats in result.patterns["sections_stats"].items():
+                sections_data.append({
+                    "Section": canonical.upper(),
+                    "Coverage %": f"{stats['coverage']*100:.0f}%",
+                    "Clients": stats.get("clients", stats.get("clients_with_section", 0)),
+                    "Avg lines": stats["avg_lines"],
+                    "P50": stats["p50_lines"],
+                    "P90": stats["p90_lines"],
+                })
+            
+            if sections_data:
+                st.dataframe(sections_data, use_container_width=True, hide_index=True)
+        
+        # Afficher training_state.json
+        st.markdown("#### 🎯 Training State (v1.0)")
+        training_state_path = Path(paths["training_state"])
+        
+        with open(training_state_path, "r") as f:
+            state = json.load(f)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Schema Version", state["schema_version"])
+            st.metric("Run ID", state["run_id"])
+            st.metric("Fallback Value", state["conventions"]["fallback_value"])
+        
+        with col2:
+            st.metric("Clients scannés", state["dataset"]["clients_scanned"])
+            st.metric("Clients utilisés", state["dataset"]["clients_used"])
+            st.metric("GOLD détectés", state["dataset"]["gold_stats"]["gold_detected_clients"])
+        
+        # Profils de validation
+        st.markdown("#### ⚖️ Profils de validation")
+        profiles_cols = st.columns(3)
+        
+        for i, (profile_name, profile_data) in enumerate(state["profiles"].items()):
+            with profiles_cols[i]:
+                st.markdown(f"**{profile_name}**")
+                st.write(f"- Coverage min: {profile_data['coverage_min']}%")
+                st.write(f"- Quality min: {profile_data['quality_min']}")
+                st.write(f"- Confidence min: {profile_data['confidence_min']}")
+        
+        # Warnings
+        if state.get("warnings"):
+            st.markdown("#### ⚠️ Warnings")
+            for warning in state["warnings"]:
+                st.warning(f"**{warning['code']}** : {warning['message']} (count: {warning['count']})")
+        
+        # Boutons download
+        st.markdown("---")
+        st.markdown("#### 📥 Téléchargements")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            training_state_data = training_state_path.read_bytes()
+            st.download_button(
+                "📄 training_state.json",
+                data=training_state_data,
+                file_name=training_state_path.name,
+                mime="application/json",
+                use_container_width=True,
+                key="download_training_state"
+            )
+        
+        with col2:
+            report_path = Path(paths["report"])
+            if report_path.exists():
+                report_data = report_path.read_bytes()
+                st.download_button(
+                    "📝 training_report.md",
+                    data=report_data,
+                    file_name=report_path.name,
+                    mime="text/markdown",
+                    use_container_width=True,
+                    key="download_training_report"
+                )
+        
+        with col3:
+            st.caption("Dossier de sortie:")
+            st.code(str(training_state_path.parent), language=None)
+            open_folder_code = f"open '{str(training_state_path.parent)}'"
+            st.caption("Commande à exécuter:")
+            st.code(open_folder_code, language="bash")
+        
+        # Sauvegarder le path pour l'onglet Test
+        st.session_state["last_training_state"] = str(training_state_path)
+        if dataset_valid:
+            st.session_state["last_dataset_root"] = dataset_root
 
 
 def show_test_tab():

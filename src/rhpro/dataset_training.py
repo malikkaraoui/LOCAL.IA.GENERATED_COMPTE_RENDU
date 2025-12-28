@@ -134,6 +134,45 @@ SEED_SECTION_TITLE_MAP = {
 # Normalisation des titres
 # ============================================================================
 
+def is_noise_title(text: str) -> bool:
+    """
+    Détecte les titres parasites à ignorer.
+    
+    Returns:
+        True si le titre est du bruit (à ignorer)
+    """
+    if not text or len(text) < 2:
+        return True
+    
+    # Liste noire explicite
+    noise_tokens = {'X', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
+                    'TS', 'PS', 'S', 'N', 'P', 'R', 'T', 'A', 'B', 'C', 'D', 'E', 'F', 'G'}
+    if text in noise_tokens:
+        return True
+    
+    # Trop court (< 4 caractères)
+    if len(text) < 4:
+        # Sauf si c'est un vrai mot court utile
+        useful_short = {'NOM', 'AVS', 'AGE', 'TEL', 'RUE', 'CP', 'LIEU', 'DATE'}
+        if text not in useful_short:
+            return True
+    
+    # Uniquement chiffres
+    if text.isdigit():
+        return True
+    
+    # Uniquement ponctuation
+    if all(c in '.,;:!?-_/*+=' for c in text):
+        return True
+    
+    # Un seul token ET trop court (< 3 caractères)
+    tokens = text.split()
+    if len(tokens) == 1 and len(tokens[0]) < 3:
+        return True
+    
+    return False
+
+
 def normalize_title(title: str) -> str:
     """
     Normalise un titre de section pour matching robuste.
@@ -142,7 +181,7 @@ def normalize_title(title: str) -> str:
     - uppercase
     - strip accents (é → E)
     - trim + collapse espaces
-    - remplacer ' par '
+    - remplacer apostrophes typographiques
     - enlever ponctuation faible en fin (;.,)
     - compacter tirets/puces
     - conserver chiffres
@@ -239,10 +278,137 @@ def match_title_to_canonical(title: str, learned_map: Optional[Dict[str, str]] =
     return best_match
 
 
+def is_probable_heading(para_text: str, para_obj=None) -> bool:
+    """
+    Détermine si un paragraphe est probablement un titre de section.
+    Avec filtres anti-bruit stricts.
+    
+    Args:
+        para_text: Texte du paragraphe (déjà strippé)
+        para_obj: Objet python-docx Paragraph (optionnel, pour style/runs)
+        
+    Returns:
+        True si probable titre, False sinon
+    """
+    if not para_text or len(para_text) < 2:
+        return False
+    
+    # ❌ FILTRES ANTI-BRUIT (priorité absolue)
+    normalized = normalize_title(para_text)
+    if is_noise_title(normalized):
+        return False
+    
+    # Trop long pour un titre
+    if len(para_text) > 150:
+        return False
+    
+    # ✅ SIGNAUX DE TITRE
+    signals = []
+    
+    # 1. Style
+    if para_obj:
+        style_name = para_obj.style.name.lower()
+        if any(kw in style_name for kw in ['heading', 'titre', 'title']):
+            signals.append('style')
+    
+    # 2. Majuscules (au moins 70% de lettres majuscules)
+    if para_text.isupper() and len(para_text.split()) >= 2:
+        signals.append('uppercase')
+    
+    # 3. Gras + court (mais avec au moins 2 mots)
+    if para_obj and len(para_text) < 80 and len(para_text.split()) >= 2:
+        if para_obj.runs and any(run.bold for run in para_obj.runs):
+            signals.append('bold')
+    
+    # 4. Se termine par ':' et >= 2 mots
+    if para_text.endswith(':') and len(para_text.split()) >= 2:
+        signals.append('colon')
+    
+    # 5. Numérotés: "1. Titre", "2.1 Titre"
+    if len(para_text) < 100 and re.match(r'^\s*\d+(\.\d+)?[)\.-]\s+\S+', para_text):
+        signals.append('numbered')
+    
+    return len(signals) > 0
+
+
+def detect_identity_presence(doc) -> bool:
+    """
+    Détecte si un document contient probablement une section identité,
+    même sans titre explicite (ex: dans un tableau).
+    
+    Args:
+        doc: Document python-docx
+        
+    Returns:
+        True si indices d'identité trouvés
+    """
+    # Mots-clés identité
+    keywords = ['NOM', 'PRENOM', 'AVS', 'DATE DE NAISSANCE', 'NAISSANCE', 
+                'ADRESSE', 'NATIONALITE', 'ETAT CIVIL', 'SEXE', 'AGE']
+    
+    # Chercher dans tout le texte (paragraphs + tables)
+    all_text = []
+    
+    # Paragraphes
+    for para in doc.paragraphs:
+        all_text.append(para.text.upper())
+    
+    # Tables
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    all_text.append(para.text.upper())
+    
+    # Compter combien de keywords différents sont présents
+    full_text = ' '.join(all_text)
+    matches = sum(1 for kw in keywords if kw in full_text)
+    
+    # Si au moins 2 keywords différents → identité présente
+    return matches >= 2
+
+
+def select_best_docx_for_sections(client_folder: Path, scan_result: Dict) -> Optional[Path]:
+    """
+    Sélectionne le meilleur DOCX pour extraire les sections canoniques.
+    Stratégie: GOLD > heuristique "rapport/bilan" > plus gros fichier.
+    
+    Args:
+        client_folder: Dossier client
+        scan_result: Résultat du scan
+        
+    Returns:
+        Path du DOCX à analyser, ou None
+    """
+    # 1. Si GOLD existe et c'est un DOCX → utiliser
+    if scan_result.get("gold"):
+        gold_path = Path(scan_result["gold"]["path"])
+        if gold_path.suffix.lower() == ".docx":
+            return gold_path
+    
+    # 2. Fallback: chercher tous les DOCX
+    docx_files = []
+    for ext in [".docx", ".DOCX"]:
+        docx_files.extend(client_folder.rglob(f"*{ext}"))
+    
+    if not docx_files:
+        return None
+    
+    # 3. Heuristique: prioriser rapport/bilan/final/synthese
+    priority_keywords = ['rapport', 'bilan', 'final', 'synthese', 'compte_rendu']
+    for docx in docx_files:
+        name_lower = docx.stem.lower()
+        if any(kw in name_lower for kw in priority_keywords):
+            return docx
+    
+    # 4. Sinon: prendre le plus gros
+    return max(docx_files, key=lambda p: p.stat().st_size)
+
+
 def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     """
     Extrait les sections d'un fichier DOCX (titres + contenu).
-    Robuste : lit paragraphes + tables, détecte styles FR/EN.
+    Robuste : lit paragraphes + tables, détecte styles FR/EN, filtre anti-bruit.
     
     Returns:
         Liste de {title: str, canonical: str|None, lines: int, content_preview: str}
@@ -257,39 +423,38 @@ def extract_sections_from_docx(docx_path: Path) -> List[Dict[str, Any]]:
     all_paras = []
     
     # 1. Paragraphes du body
-    all_paras.extend(doc.paragraphs)
+    all_paras.extend([(p, p) for p in doc.paragraphs])  # (para_obj, para_obj) pour compatibilité
     
     # 2. Paragraphes dans les tables (pour identité, etc.)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                all_paras.extend(cell.paragraphs)
+                for p in cell.paragraphs:
+                    all_paras.append((p, p))
     
     sections = []
     current_section = None
     current_lines = 0
     
-    for para in all_paras:
-        text = para.text.strip()
+    # ✅ Auto-détection IDENTITY
+    has_identity = detect_identity_presence(doc)
+    if has_identity:
+        # Injecter une section pseudo-identité
+        sections.append({
+            "title": "IDENTITE (AUTO)",
+            "canonical": "identity",
+            "lines": 1,  # Estimation minimale
+            "content_preview": ""
+        })
+    
+    for para_obj, _ in all_paras:
+        text = para_obj.text.strip()
         
         if not text:
             continue
         
-        # ✅ Détecter titre (robuste : FR + EN + numérotés)
-        style_name = para.style.name.lower()
-        is_heading = (
-            # Styles EN
-            'heading' in style_name or
-            # Styles FR
-            'titre' in style_name or
-            'title' in style_name or
-            # Court + gras
-            (len(text) < 80 and para.runs and any(run.bold for run in para.runs)) or
-            # Tout majuscules (court)
-            (len(text) < 100 and text.isupper()) or
-            # Numérotés: "1. Titre", "2.1 Titre", etc.
-            (len(text) < 100 and re.match(r'^\s*\d+(\.\d+)?[)\.-]\s+\S+', text))
-        )
+        # ✅ Utiliser la nouvelle fonction is_probable_heading avec filtres anti-bruit
+        is_heading = is_probable_heading(text, para_obj)
         
         if is_heading:
             # Sauvegarder section précédente
@@ -519,20 +684,14 @@ def analyze_dataset(
                 }
                 gold_strategies[scan_result["gold"]["strategy"]] += 1
             
-            # Extraire sections depuis les DOCX sources
+            # ✅ Extraire sections depuis le MEILLEUR DOCX (GOLD ou fallback)
             client_sections = []
-            for source in scan_result["rag_sources"]:
-                # ✅ Normaliser extension pour comparaison
-                ext = (source.get("extension") or Path(source["path"]).suffix or "").lower().strip()
-                if ext and not ext.startswith("."):
-                    ext = f".{ext}"
-                
-                if ext == ".docx":
-                    try:
-                        sections = extract_sections_from_docx(Path(source["path"]))
-                        client_sections.extend(sections)
-                    except Exception:
-                        pass
+            best_docx = select_best_docx_for_sections(client_folder, scan_result)
+            if best_docx and best_docx.exists():
+                try:
+                    client_sections = extract_sections_from_docx(best_docx)
+                except Exception:
+                    pass
             
             # Collecter titres et sections PAR CLIENT
             client_sections_found = set()
@@ -552,8 +711,9 @@ def analyze_dataset(
                         section["lines"]
                     )
                 else:
-                    # Titre non mappé
-                    unknown_titles[title_norm] += 1
+                    # ✅ Titre non mappé: filtrer le bruit avant comptage
+                    if not is_noise_title(title_norm):
+                        unknown_titles[title_norm] += 1
             
             # Enregistrer les sections de ce client (UID interne)
             client_uid = f"{client_folder.name}_{i}"  # UID interne non exporté
