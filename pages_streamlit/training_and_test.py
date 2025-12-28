@@ -99,11 +99,12 @@ def show_training_tab():
         key_suffix="training"
     )
     
-    if not dataset_root or not Path(dataset_root).exists():
-        st.warning("⚠️ Veuillez sélectionner un dataset valide")
-        return
+    dataset_valid = dataset_root and Path(dataset_root).exists()
     
-    st.success(f"✅ Dataset : `{dataset_root}`")
+    if not dataset_valid:
+        st.warning("⚠️ Veuillez sélectionner un dataset valide")
+    else:
+        st.success(f"✅ Dataset : `{dataset_root}`")
     
     # Configuration
     col1, col2, col3 = st.columns(3)
@@ -143,7 +144,7 @@ def show_training_tab():
     st.markdown("---")
     
     # Lancer training
-    if st.button("🚀 Lancer Entraînement", type="primary", use_container_width=True):
+    if st.button("🚀 Lancer Entraînement", type="primary", use_container_width=True, disabled=not dataset_valid):
         with st.spinner("🔍 Découverte des clients..."):
             try:
                 client_folders = discover_client_folders(
