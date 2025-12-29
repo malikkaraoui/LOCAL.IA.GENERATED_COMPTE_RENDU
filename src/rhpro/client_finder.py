@@ -3,7 +3,7 @@ Client Finder — Recherche tolérante de dossiers clients par nom
 """
 import unicodedata
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from difflib import SequenceMatcher
 
 
@@ -228,7 +228,9 @@ def format_search_results(matches: List[Dict[str, Any]], max_results: int = 10) 
 
 def discover_client_documents(client_folder: Path) -> Dict[str, List[Path]]:
     """
-    Découvre tous les documents dans un dossier client
+    Découvre tous les documents dans un dossier client (racine uniquement, legacy).
+    
+    ⚠️ DEPRECATED : Utiliser discover_client_documents_recursive() avec max_depth=0 pour équivalent.
     
     Args:
         client_folder: Path du dossier client
@@ -257,3 +259,160 @@ def discover_client_documents(client_folder: Path) -> Dict[str, List[Path]]:
         documents['audio'].extend(client_folder.glob(f"*.{ext}"))
     
     return documents
+
+
+def discover_client_documents_recursive(
+    client_folder: Path,
+    max_depth: int = 2,
+    include_subfolders: bool = True,
+    max_files: int = 5000,
+    allowed_exts: Optional[set] = None,
+    ignore_dirs: Optional[set] = None,
+    follow_symlinks: bool = False
+) -> Dict[str, Any]:
+    """
+    Découvre tous les documents dans un dossier client avec scan récursif contrôlé.
+    
+    Args:
+        client_folder: Path du dossier client
+        max_depth: Profondeur maximale de scan (0 = racine uniquement, 1 = sous-dossiers directs, etc.)
+        include_subfolders: Si False, force max_depth=0
+        max_files: Limite maximale de fichiers scannés (évite freeze UI)
+        allowed_exts: Extensions autorisées (défaut: {'.pdf','.docx','.doc','.txt','.msg','.m4a','.mp3','.wav'})
+        ignore_dirs: Dossiers à ignorer (défaut: {'.git','__MACOSX','node_modules','.venv','venv','artifacts','output'})
+        follow_symlinks: Suivre les liens symboliques
+        
+    Returns:
+        Dict avec:
+        - 'files': Dict[str, List[Path]] avec clés 'docx', 'pdf', 'txt', 'audio', 'msg'
+        - 'stats_by_type': Dict[str, int] avec nombre de fichiers par type
+        - 'stats_by_subfolder': Dict[str, Dict[str, int]] avec stats par sous-dossier (top 10)
+        - 'total_files': int
+        - 'truncated': bool (si max_files atteint)
+        
+    Example:
+        >>> result = discover_client_documents_recursive(
+        ...     Path("/dataset/ARIFI Elodie"),
+        ...     max_depth=2,
+        ...     include_subfolders=True
+        ... )
+        >>> print(f"Total: {result['total_files']} fichiers")
+        >>> print(f"DOCX: {len(result['files']['docx'])}")
+        >>> print(f"Sous-dossiers: {list(result['stats_by_subfolder'].keys())}")
+    """
+    import os
+    from collections import defaultdict
+    
+    if not client_folder.exists():
+        raise FileNotFoundError(f"Client folder not found: {client_folder}")
+    
+    # Defaults
+    if allowed_exts is None:
+        allowed_exts = {'.pdf', '.docx', '.doc', '.txt', '.msg', '.m4a', '.mp3', '.wav', '.ogg', '.flac'}
+    
+    if ignore_dirs is None:
+        ignore_dirs = {'.git', '__MACOSX', 'node_modules', '.venv', 'venv', 'artifacts', 'output', '__pycache__'}
+    
+    # Force depth=0 si include_subfolders=False
+    if not include_subfolders:
+        max_depth = 0
+    
+    # Structures de résultats
+    files = {
+        'docx': [],
+        'pdf': [],
+        'txt': [],
+        'audio': [],
+        'msg': []
+    }
+    
+    stats_by_type = defaultdict(int)
+    stats_by_subfolder = defaultdict(lambda: defaultdict(int))
+    total_files = 0
+    truncated = False
+    
+    # Scan récursif avec os.walk
+    for dirpath, dirnames, filenames in os.walk(client_folder, followlinks=follow_symlinks):
+        # Calculer profondeur actuelle
+        rel_path = os.path.relpath(dirpath, client_folder)
+        if rel_path == '.':
+            depth = 0
+            subfolder_name = "Racine"
+        else:
+            depth = rel_path.count(os.sep) + 1
+            # Nom du premier sous-dossier (ex: "01 Dossier personnel")
+            subfolder_name = rel_path.split(os.sep)[0]
+        
+        # Arrêter la descente si profondeur max atteinte
+        if depth > max_depth:
+            dirnames[:] = []  # Empêche de descendre plus profond
+            continue
+        
+        # Filtrer les sous-dossiers à ignorer
+        dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
+        
+        # Scanner les fichiers
+        for filename in filenames:
+            # Limite max_files
+            if total_files >= max_files:
+                truncated = True
+                break
+            
+            # Ignorer fichiers temporaires Office (~$*.docx)
+            if filename.startswith('~$'):
+                continue
+            
+            # Ignorer .DS_Store
+            if filename == '.DS_Store':
+                continue
+            
+            # Vérifier extension
+            file_ext = os.path.splitext(filename)[1].lower()
+            if file_ext not in allowed_exts:
+                continue
+            
+            # Ajouter le fichier
+            file_path = Path(dirpath) / filename
+            
+            # Classer par type
+            if file_ext in {'.docx', '.doc'}:
+                files['docx'].append(file_path)
+                file_type = 'docx'
+            elif file_ext == '.pdf':
+                files['pdf'].append(file_path)
+                file_type = 'pdf'
+            elif file_ext == '.txt':
+                files['txt'].append(file_path)
+                file_type = 'txt'
+            elif file_ext == '.msg':
+                files['msg'].append(file_path)
+                file_type = 'msg'
+            elif file_ext in {'.mp3', '.wav', '.m4a', '.ogg', '.flac'}:
+                files['audio'].append(file_path)
+                file_type = 'audio'
+            else:
+                continue
+            
+            # Stats
+            stats_by_type[file_type] += 1
+            stats_by_subfolder[subfolder_name][file_type] += 1
+            total_files += 1
+        
+        if truncated:
+            break
+    
+    # Limiter stats_by_subfolder aux top 10 pour UI
+    top_subfolders = dict(sorted(
+        stats_by_subfolder.items(),
+        key=lambda x: sum(x[1].values()),
+        reverse=True
+    )[:10])
+    
+    return {
+        'files': files,
+        'stats_by_type': dict(stats_by_type),
+        'stats_by_subfolder': top_subfolders,
+        'total_files': total_files,
+        'truncated': truncated
+    }
+

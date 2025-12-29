@@ -8,7 +8,7 @@ import sys
 # Ajouter src/ au path pour les imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from rhpro.client_finder import find_client_folders, find_client_folder, format_search_results, discover_client_documents
+from rhpro.client_finder import find_client_folders, find_client_folder, format_search_results, discover_client_documents, discover_client_documents_recursive
 
 
 def show_client_report_generator_page():
@@ -23,6 +23,12 @@ def show_client_report_generator_page():
         st.session_state.selected_client_path = None
     if "client_documents" not in st.session_state:
         st.session_state.client_documents = None
+    if "scan_include_subfolders" not in st.session_state:
+        st.session_state.scan_include_subfolders = True
+    if "scan_max_depth" not in st.session_state:
+        st.session_state.scan_max_depth = 2
+    if "scan_max_files" not in st.session_state:
+        st.session_state.scan_max_files = 5000
     
     # Configuration
     st.subheader("1. Dataset RH-Pro")
@@ -139,41 +145,146 @@ def show_client_report_generator_page():
                 selected_path = options_dict[selected_display]
                 st.session_state.selected_client_path = selected_path
                 
-                # Découvrir les documents
-                try:
-                    docs = discover_client_documents(selected_path)
-                    st.session_state.client_documents = docs
+                # === Section Scan Documents avec contrôles ===
+                with st.expander("📂 Documents trouvés dans ce dossier", expanded=True):
+                    # Contrôles de scan
+                    col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([2, 2, 2, 1])
                     
-                    # Afficher les documents trouvés
-                    with st.expander("📂 Documents trouvés dans ce dossier"):
-                        col_doc1, col_doc2, col_doc3, col_doc4 = st.columns(4)
+                    with col_ctrl1:
+                        include_subfolders = st.toggle(
+                            "Inclure sous-dossiers",
+                            value=st.session_state.scan_include_subfolders,
+                            key="toggle_include_subfolders",
+                            help="Scanner récursivement les sous-dossiers (ex: 01 Dossier personnel, 03 Tests, etc.)"
+                        )
+                        st.session_state.scan_include_subfolders = include_subfolders
+                    
+                    with col_ctrl2:
+                        max_depth = st.slider(
+                            "Profondeur de scan",
+                            min_value=0,
+                            max_value=6,
+                            value=st.session_state.scan_max_depth,
+                            key="slider_max_depth",
+                            disabled=not include_subfolders,
+                            help="0 = racine uniquement, 1 = sous-dossiers directs, 2+ = plus profond"
+                        )
+                        st.session_state.scan_max_depth = max_depth
+                    
+                    with col_ctrl3:
+                        max_files = st.number_input(
+                            "Max fichiers scannés",
+                            min_value=100,
+                            max_value=20000,
+                            value=st.session_state.scan_max_files,
+                            step=500,
+                            key="input_max_files",
+                            help="Limite pour éviter de freezer l'UI sur gros dossiers"
+                        )
+                        st.session_state.scan_max_files = max_files
+                    
+                    with col_ctrl4:
+                        st.write("")  # Spacer
+                        st.write("")  # Spacer
+                        rescan_clicked = st.button("🔄 Rescanner", help="Forcer un nouveau scan (clear cache)")
+                    
+                    # Cache avec fonction dédiée
+                    @st.cache_data(show_spinner="Scan en cours...", ttl=300)
+                    def _cached_scan(path_str: str, depth: int, include_subs: bool, max_f: int):
+                        """Scan avec cache Streamlit"""
+                        return discover_client_documents_recursive(
+                            Path(path_str),
+                            max_depth=depth,
+                            include_subfolders=include_subs,
+                            max_files=max_f
+                        )
+                    
+                    # Clear cache si rescan demandé
+                    if rescan_clicked:
+                        _cached_scan.clear()
+                        st.rerun()
+                    
+                    # Découvrir les documents avec nouveau scan
+                    try:
+                        result = _cached_scan(
+                            str(selected_path),
+                            max_depth,
+                            include_subfolders,
+                            max_files
+                        )
+                        
+                        docs = result['files']
+                        stats_by_type = result['stats_by_type']
+                        stats_by_subfolder = result['stats_by_subfolder']
+                        total_files = result['total_files']
+                        truncated = result['truncated']
+                        
+                        st.session_state.client_documents = docs
+                        
+                        # Warning si truncated
+                        if truncated:
+                            st.warning(f"⚠️ Scan limité à {max_files} fichiers. Augmenter 'Max fichiers' ou réduire profondeur.")
+                        
+                        # Métriques globales
+                        st.caption(f"**Total : {total_files} fichier(s) trouvé(s)**")
+                        
+                        # Affichage par type de fichier
+                        col_doc1, col_doc2, col_doc3, col_doc4, col_doc5 = st.columns(5)
                         
                         with col_doc1:
                             st.metric("DOCX", len(docs['docx']))
                             if docs['docx']:
                                 for docx in docs['docx'][:3]:
                                     st.text(f"• {docx.name}")
+                                if len(docs['docx']) > 3:
+                                    st.caption(f"  ... +{len(docs['docx']) - 3}")
                         
                         with col_doc2:
                             st.metric("PDF", len(docs['pdf']))
                             if docs['pdf']:
                                 for pdf in docs['pdf'][:3]:
                                     st.text(f"• {pdf.name}")
+                                if len(docs['pdf']) > 3:
+                                    st.caption(f"  ... +{len(docs['pdf']) - 3}")
                         
                         with col_doc3:
                             st.metric("TXT", len(docs['txt']))
                             if docs['txt']:
                                 for txt in docs['txt'][:3]:
                                     st.text(f"• {txt.name}")
+                                if len(docs['txt']) > 3:
+                                    st.caption(f"  ... +{len(docs['txt']) - 3}")
                         
                         with col_doc4:
+                            st.metric("MSG", len(docs.get('msg', [])))
+                            if docs.get('msg'):
+                                for msg in docs['msg'][:3]:
+                                    st.text(f"• {msg.name}")
+                                if len(docs['msg']) > 3:
+                                    st.caption(f"  ... +{len(docs['msg']) - 3}")
+                        
+                        with col_doc5:
                             st.metric("Audio", len(docs['audio']))
                             if docs['audio']:
                                 for audio in docs['audio'][:3]:
                                     st.text(f"• {audio.name}")
-                
-                except Exception as e:
-                    st.error(f"Erreur lors de la découverte des documents: {e}")
+                                if len(docs['audio']) > 3:
+                                    st.caption(f"  ... +{len(docs['audio']) - 3}")
+                        
+                        # Stats par sous-dossier (si scan récursif activé)
+                        if include_subfolders and stats_by_subfolder and len(stats_by_subfolder) > 1:
+                            st.divider()
+                            st.caption("**Répartition par sous-dossier (top 5) :**")
+                            
+                            for i, (subfolder, type_counts) in enumerate(list(stats_by_subfolder.items())[:5], 1):
+                                total_in_folder = sum(type_counts.values())
+                                types_str = ", ".join([f"{count} {ftype}" for ftype, count in type_counts.items()])
+                                st.text(f"{i}. {subfolder}: {total_in_folder} fichier(s) ({types_str})")
+                    
+                    except Exception as e:
+                        st.error(f"Erreur lors de la découverte des documents: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
     
     elif dataset_root:
         st.warning(f"⚠️ Le dossier n'existe pas: {dataset_root}")
