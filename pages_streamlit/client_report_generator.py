@@ -374,12 +374,13 @@ def show_client_report_generator_page():
         
         if selected_docx:
             # Options de génération
-            col_opt1, col_opt2 = st.columns(2)
+            col_opt1, col_opt2, col_opt3 = st.columns(3)
             
             with col_opt1:
                 gate_profile = st.selectbox(
                     "Profil production gate",
-                    options=["Auto-détection", "bilan_complet", "placement_suivi", "stage"]
+                    options=["Auto-détection", "draft", "bilan_complet", "placement_suivi", "stage"],
+                    help="DRAFT: Génération autorisée même avec sections manquantes"
                 )
                 if gate_profile == "Auto-détection":
                     gate_profile = None
@@ -389,6 +390,13 @@ def show_client_report_generator_page():
                     "Formats de sortie",
                     options=["Normalized JSON", "Report JSON", "Markdown", "CSV summary"],
                     default=["Normalized JSON", "Report JSON"]
+                )
+            
+            with col_opt3:
+                force_draft = st.checkbox(
+                    "🔓 Forcer DRAFT si NO-GO",
+                    value=False,
+                    help="Génère un rapport _DRAFT.docx même si le gate est NO-GO"
                 )
             
             # Bouton génération
@@ -459,6 +467,13 @@ def show_client_report_generator_page():
                     
                     # Extraire gate (nécessaire pour l'affichage des résultats)
                     gate = report.get("production_gate", {})
+                    gate_status = gate.get('status', 'UNKNOWN')
+                    
+                    # Mode DRAFT forcé si NO-GO et force_draft=True
+                    if gate_status == "NO-GO" and force_draft:
+                        gate_status = "DRAFT (forced)"
+                        gate["status"] = "DRAFT"
+                        gate["reasons"].insert(0, "DRAFT mode forced: document generation allowed despite NO-GO")
                     
                     if "Markdown" in output_format:
                         # Générer un markdown simple
@@ -485,8 +500,15 @@ def show_client_report_generator_page():
                     col_res1, col_res2, col_res3, col_res4 = st.columns(4)
                     
                     with col_res1:
-                        gate_status = gate.get('status', 'UNKNOWN')
-                        emoji = "✅" if gate_status == "GO" else "⚠️"
+                        if gate_status in ("GO", "DRAFT"):
+                            emoji = "✅"
+                            color = "normal"
+                        elif gate_status == "DRAFT (forced)":
+                            emoji = "🔓"
+                            color = "normal"
+                        else:
+                            emoji = "⚠️"
+                            color = "inverse"
                         st.metric("Gate Status", f"{emoji} {gate_status}")
                     
                     with col_res2:
@@ -500,6 +522,26 @@ def show_client_report_generator_page():
                     with col_res4:
                         missing = len(gate.get('missing_required_effective', []))
                         st.metric("Sections manquantes", missing)
+                    
+                    # Afficher les sections manquantes si DRAFT ou NO-GO
+                    if gate_status in ("DRAFT", "DRAFT (forced)", "NO-GO"):
+                        missing_sections = gate.get('missing_required_effective', [])
+                        if missing_sections:
+                            st.warning(f"⚠️ **Sections manquantes ({len(missing_sections)})**: {', '.join(missing_sections)}")
+                        
+                        unknown_titles = report.get('unknown_titles', [])
+                        if unknown_titles:
+                            with st.expander(f"📋 Titres non mappés ({len(unknown_titles)})"):
+                                for title in unknown_titles[:10]:
+                                    st.text(f"• {title}")
+                                if len(unknown_titles) > 10:
+                                    st.text(f"... et {len(unknown_titles) - 10} autres")
+                        
+                        gate_reasons = gate.get('reasons', [])
+                        if gate_reasons and gate_status != "DRAFT":
+                            with st.expander("🔍 Détails du gate"):
+                                for reason in gate_reasons:
+                                    st.text(f"• {reason}")
                     
                     # Fichiers générés
                     st.info(f"📁 Fichiers générés dans : `{output_dir}`")

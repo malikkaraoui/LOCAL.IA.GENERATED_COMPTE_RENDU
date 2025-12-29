@@ -1,0 +1,354 @@
+{
+  "schema_version": "training_state_v1.0",
+  "run_id": "ESSAI 100_2025-12-29T13:40:28Z_606e3a",
+  "created_at": "2025-12-29T13:40:28Z",
+  "dataset": {
+    "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/ESSAI 100",
+    "dataset_id": "606e3ae0e6df",
+    "clients_scanned": 100,
+    "clients_used": 100,
+    "doc_types_stats": {
+      ".docx": 247,
+      ".msg": 64,
+      ".pdf": 525,
+      ".doc": 4
+    },
+    "gold_stats": {
+      "gold_detected_clients": 97,
+      "gold_missing_clients": 3
+    }
+  },
+  "conventions": {
+    "fallback_value": "Non renseigné",
+    "status_enum": [
+      "GO",
+      "NO_GO",
+      "DRAFT"
+    ],
+    "scores": {
+      "coverage_range": [
+        0,
+        100
+      ],
+      "quality_range": [
+        0,
+        1
+      ],
+      "confidence_range": [
+        0,
+        1
+      ]
+    }
+  },
+  "profiles": {
+    "STRICT": {
+      "coverage_min": 85,
+      "quality_min": 0.75,
+      "confidence_min": 0.7,
+      "sources_count_min": 1,
+      "profession_or_formation_required": true
+    },
+    "STANDARD": {
+      "coverage_min": 75,
+      "quality_min": 0.65,
+      "confidence_min": 0.6,
+      "sources_count_min": 1,
+      "profession_or_formation_required": true
+    },
+    "DRAFT": {
+      "coverage_min": 0,
+      "quality_min": 0.0,
+      "confidence_min": 0.0,
+      "sources_count_min": 0,
+      "profession_or_formation_required": false
+    }
+  },
+  "patterns": {
+    "section_stats": {
+      "IDENTITY": {
+        "coverage_pct": 54,
+        "clients": 54,
+        "lines": {
+          "avg": 1.1,
+          "median": 1,
+          "p90": 1
+        }
+      },
+      "SITUATION_PROFESSIONNELLE": {
+        "coverage_pct": 30,
+        "clients": 30,
+        "lines": {
+          "avg": 3.8,
+          "median": 3,
+          "p90": 7
+        }
+      },
+      "FORMATION": {
+        "coverage_pct": 22,
+        "clients": 22,
+        "lines": {
+          "avg": 6.7,
+          "median": 3,
+          "p90": 20
+        }
+      },
+      "COMPETENCES": {
+        "coverage_pct": 19,
+        "clients": 19,
+        "lines": {
+          "avg": 6.3,
+          "median": 4,
+          "p90": 11
+        }
+      },
+      "RESSOURCES_POINTS_APPUI": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "RESSOURCES_POINTS_VIGILANCE": {
+        "coverage_pct": 0,
+        "clients": 0,
+        "lines": {
+          "avg": 0,
+          "median": 0,
+          "p90": 0
+        }
+      },
+      "MOTIVATIONS_VALEURS": {
+        "coverage_pct": 10,
+        "clients": 10,
+        "lines": {
+          "avg": 1.2,
+          "median": 1,
+          "p90": 2
+        }
+      },
+      "CONTRAINTES_FREINS": {
+        "coverage_pct": 24,
+        "clients": 24,
+        "lines": {
+          "avg": 3.6,
+          "median": 2,
+          "p90": 8
+        }
+      },
+      "OBJECTIFS": {
+        "coverage_pct": 17,
+        "clients": 17,
+        "lines": {
+          "avg": 1.2,
+          "median": 1,
+          "p90": 2
+        }
+      },
+      "PISTES_METIERS": {
+        "coverage_pct": 18,
+        "clients": 18,
+        "lines": {
+          "avg": 2.4,
+          "median": 1,
+          "p90": 7
+        }
+      },
+      "PLAN_ACTION": {
+        "coverage_pct": 7,
+        "clients": 7,
+        "lines": {
+          "avg": 3.4,
+          "median": 1,
+          "p90": 7
+        }
+      },
+      "SYNTHESE_CONCLUSION": {
+        "coverage_pct": 20,
+        "clients": 20,
+        "lines": {
+          "avg": 6.1,
+          "median": 4,
+          "p90": 13
+        }
+      }
+    },
+    "field_max_lines": {
+      "NAME": 1,
+      "SURNAME": 1,
+      "NUMERO_AVS": 1,
+      "PROFESSION": 4,
+      "FORMATION": 20,
+      "Ressources_comportementales_Points_d'appui": 4,
+      "Ressources_comportementales_Points_de_vigilance": 4,
+      "IDENTITY": 1,
+      "SITUATION_PROFESSIONNELLE": 7,
+      "COMPETENCES": 11,
+      "RESSOURCES_POINTS_APPUI": 0,
+      "RESSOURCES_POINTS_VIGILANCE": 0,
+      "MOTIVATIONS_VALEURS": 2,
+      "CONTRAINTES_FREINS": 8,
+      "OBJECTIFS": 2,
+      "PISTES_METIERS": 7,
+      "PLAN_ACTION": 7,
+      "SYNTHESE_CONCLUSION": 13
+    },
+    "section_title_map": {
+      "IDENTITE": "identity",
+      "ETAT CIVIL": "identity",
+      "INFORMATIONS PERSONNELLES": "identity",
+      "DONNEES PERSONNELLES": "identity",
+      "SITUATION PROFESSIONNELLE": "situation_professionnelle",
+      "PARCOURS PROFESSIONNEL": "situation_professionnelle",
+      "EXPERIENCE PROFESSIONNELLE": "situation_professionnelle",
+      "EXPERIENCES": "situation_professionnelle",
+      "PARCOURS": "situation_professionnelle",
+      "STAGE EN LAI 15": "situation_professionnelle",
+      "LAI 15": "situation_professionnelle",
+      "CONTEXTE ET DEROULEMENT DU STAGE": "situation_professionnelle",
+      "PROFESSION": "situation_professionnelle",
+      "FORMATION": "formation",
+      "PARCOURS FORMATION": "formation",
+      "DIPLOMES": "formation",
+      "CERTIFICATIONS": "formation",
+      "CURSUS": "formation",
+      "COMPETENCES": "competences",
+      "COMPETENCES TECHNIQUES": "competences",
+      "SAVOIR FAIRE": "competences",
+      "APTITUDES": "competences",
+      "DISCIPLINE AU TRAVAIL": "competences",
+      "INTEGRATION AUPRES DES COLLABORATEURS": "competences",
+      "RYTHME ET QUANTITE DE TRAVAIL": "competences",
+      "QUALITE DU TRAVAIL FOURNI": "competences",
+      "QUALITE DU TRAVAIL": "competences",
+      "ORGANISATION PRISES D INITIATIVES AUTONOMIE": "competences",
+      "ORGANISATION": "competences",
+      "PRISES D INITIATIVES": "competences",
+      "AUTONOMIE": "competences",
+      "PRESENTATION": "competences",
+      "SELON L EVALUATION DE STAGE FINALE LES TACHES REALISEES ONT ETE LES SUIVANTES": "competences",
+      "DANS SON STAGE SES TACHES SONT LES SUIVANTES": "competences",
+      "RESSOURCES COMPORTEMENTALES POINTS D APPUI": "ressources_points_appui",
+      "POINTS D APPUI": "ressources_points_appui",
+      "FORCES": "ressources_points_appui",
+      "ATOUTS": "ressources_points_appui",
+      "RESSOURCES COMPORTEMENTALES POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "POINTS DE VIGILANCE": "ressources_points_vigilance",
+      "AXES DE VIGILANCE": "ressources_points_vigilance",
+      "VIGILANCES": "ressources_points_vigilance",
+      "MOTIVATIONS": "motivations_valeurs",
+      "VALEURS": "motivations_valeurs",
+      "INTERETS": "motivations_valeurs",
+      "CENTRES D INTERET": "motivations_valeurs",
+      "ENGAGEMENT ET PERSEVERANCE": "motivations_valeurs",
+      "TEST EVOLUTION": "motivations_valeurs",
+      "CONTRAINTES": "contraintes_freins",
+      "FREINS": "contraintes_freins",
+      "LIMITES": "contraintes_freins",
+      "LIMITATIONS": "contraintes_freins",
+      "SANTE": "contraintes_freins",
+      "INCERTITUDES & OBSTACLES": "contraintes_freins",
+      "INCERTITUDES & OBSTACLES (LIMITATIONS)": "contraintes_freins",
+      "ACTUELLEMENT LES LIMITATIONS FONCTIONNELLES RETENUES SONT LES SUIVANTES": "contraintes_freins",
+      "LES LIMITATIONS MEDICALES DE L ASSURE SONT LES SUIVANTES": "contraintes_freins",
+      "DIFFICULTEES RENCONTREES": "contraintes_freins",
+      "OBJECTIFS": "objectifs",
+      "OBJECTIF": "objectifs",
+      "PROJET": "objectifs",
+      "PROJET PROFESSIONNEL": "objectifs",
+      "RELATION AU MARCHE DE L EMPLOI": "objectifs",
+      "PISTES": "pistes_metiers",
+      "PISTES METIERS": "pistes_metiers",
+      "ORIENTATION": "pistes_metiers",
+      "PISTES D ORIENTATION": "pistes_metiers",
+      "VOCATIO": "pistes_metiers",
+      "RESULTATS DE LA DISCUSSION AVEC L'ASSURE": "pistes_metiers",
+      "RESULTATS DE LA DISCUSSION AVEC L ASSURE": "pistes_metiers",
+      "RESULTATS DE LA DISCUSSION": "pistes_metiers",
+      "PLAN D ACTION": "plan_action",
+      "ACTIONS": "plan_action",
+      "PLANIFICATION": "plan_action",
+      "ETAPES": "plan_action",
+      "SYNTHESE": "synthese_conclusion",
+      "CONCLUSION": "synthese_conclusion",
+      "BILAN": "synthese_conclusion",
+      "RECAPITULATIF": "synthese_conclusion",
+      "QUALITE GENERALE": "synthese_conclusion",
+      "EVALUATIONS": "tests",
+      "EVALUATION": "tests",
+      "TESTS METIERS": "tests",
+      "TESTS": "tests",
+      "FRANCAIS NIVEAU 2": "tests",
+      "FRANCAIS NIVEAU 3": "tests",
+      "FRANCAIS - NIVEAU 2": "tests",
+      "FRANCAIS - NIVEAU 3": "tests",
+      "FRANCAIS - NIVEAU 2/3": "tests",
+      "POSITIONNEMENT DE NIVEAU DE FRANCAIS": "tests",
+      "VITESSE DE FRAPPE EN FRANCAIS": "tests",
+      "WORD POSITIONNEMENT DE NIVEAU": "tests",
+      "WORD - POSITIONNEMENT DE NIVEAU": "tests",
+      "EXCEL POSITIONNEMENT DE NIVEAU": "tests",
+      "EXCEL - POSITIONNEMENT DE NIVEAU": "tests",
+      "POWERPOINT POSITIONNEMENT DE NIVEAU": "tests",
+      "POWERPOINT - POSITIONNEMENT DE NIVEAU": "tests",
+      "OUTLOOK 2010": "tests",
+      "OUTLOOK": "tests",
+      "POSITIONNEMENT": "tests"
+    },
+    "unknown_titles_top": {
+      "PARTICIPATION AU PROGRAMME": 16,
+      "SAIT S’ORGANISER EN FONCTION DU TRAVAIL A REALISER": 8,
+      "ELEMENTS DE LA MESURE D’OUTPLACEMENT": 8,
+      "FRANCAIS - POSITIONNEMENT DE NIVEAU": 8,
+      "OFFICE CANTONAL DES ASSURANCES SOCIALES (OCAS)": 7,
+      "PREND DES INITIATIVES": 6,
+      "CALCUL NIVEAU 2": 6,
+      "CALCUL NIVEAU 3": 6,
+      "EST AUTONOMES DANS SON TRAVAIL": 5,
+      "TRI ET CLASSEMENT": 5,
+      "TEST ADMINISTRATIF BUREAUTIQUE": 5,
+      "ETES-VOUS EN MESURE D’OFFRIR UN EMPLOI AU STAGIAIRE": 4,
+      "A L’ATTENTION DE": 4,
+      "S’ADAPTE AUX NOUVELLES SITUATIONS": 4,
+      "ANGLAIS - POSITIONNEMENT DE NIVEAU": 4,
+      "DIMENSIONS, VOLUMES ET MESURES": 4,
+      "SAISIE DE COMMANDES": 4,
+      "RESPECTE LES HORAIRES": 4,
+      "ALLEMAND - POSITIONNEMENT DE NIVEAU": 3,
+      "CALCUL NIVEAU 1": 3,
+      "COMPREHENSION DE CONSIGNES": 3,
+      "RESPECTE LES CONSIGNES AU TRAVAIL": 3,
+      "LES TACHES EFFECTUEES SONT LES SUIVANTES": 2,
+      "RECONNAIT LES PRIORITES": 2,
+      "ENTRETIEN & TRAVAUX MANUELS": 1,
+      "ARTISANAT & ARTS PLASTIQUES": 1,
+      "ACTIVITES PRIVILEGIEES": 1,
+      "FONCTIONS PRIVILEGIEES": 1,
+      "- RETOUR DE TESTS VOCATIO": 1,
+      "- RETOUR EVOLUTION": 1,
+      "STAGES LAI15 & LAI 17": 1,
+      "COMPREHESNION DES CONSIGNES, REPRESENTATION SPATIALE": 1,
+      "CORRESPONDANCE RIASEC": 1,
+      "LE CAHIER DES CHARGES ETAIT LE SUIVANT": 1,
+      "INCERTITUDES ET LIMITATIONS MEDICALES": 1,
+      "DERNIER STAGE ET SUIVI RH-PRO": 1,
+      "DEMONTAGE ET REMONTAGE DU MOUVEMENT MANUEL": 1,
+      "23 RUE DU PARC": 1,
+      "EVOLUTION / MANAGE-R / TWOB-R": 1,
+      "LIEU ET DATE : GENEVE, LE": 1,
+      "JOURNAL TASDELEN GAMZE": 1,
+      "POSITIONNEMENT DE NIVEAU WORD": 1,
+      "POSITIONNEMENT DE NIVEAU EXCEL": 1,
+      "EST AUTONOME DANS SON TRAVAIL": 1,
+      "FRANCAIS, LOGIQUE, REPRESENTATION SPATIALE ET COMPREHENSION DES CONSIGNES": 1,
+      "STAGE EN TANT QUE POLISSEUR 1": 1,
+      "STAGE EN TANT QUE POLISSEUR 2": 1,
+      "SES ACTIVITES SONT LES SUIVANTES": 1,
+      "LES TACHES QU’IL ACCOMPLIT A LA CAFETERIA COMPRENNENT": 1
+    },
+    "unknown_titles_count": 49,
+    "unknown_titles_total_occurrences": 149
+  },
+  "warnings": []
+}

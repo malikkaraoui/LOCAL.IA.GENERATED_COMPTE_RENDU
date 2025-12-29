@@ -656,8 +656,10 @@ class Normalizer:
                                    placeholders_count: int,
                                    profile_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Évalue si le document est prêt pour la production (GO / NO-GO)
+        Évalue si le document est prêt pour la production (GO / NO-GO / DRAFT)
         Utilise les seuils du profil spécifié et applique le filtrage via ignore_required_prefixes.
+        
+        Mode DRAFT: Aucun blocage, permet génération même avec sections manquantes.
         
         Args:
             missing_required: Sections requises manquantes (du ruleset global)
@@ -667,12 +669,35 @@ class Normalizer:
             profile_id: ID du profil à utiliser (défaut selon config)
             
         Returns:
-            Dict avec status GO/NO-GO, profil, signaux, critères, métriques et raisons
+            Dict avec status GO/NO-GO/DRAFT, profil, signaux, critères, métriques et raisons
         """
         # Charger la configuration du profil
         gate_config = self.ruleset.raw_data.get('production_gate', {})
         if not profile_id:
             profile_id = gate_config.get('default_profile', 'placement_suivi')
+        
+        # MODE DRAFT: Aucune validation, toujours OK
+        if profile_id == 'draft':
+            return {
+                'status': 'DRAFT',
+                'profile': 'draft',
+                'reasons': ['Draft mode: gating disabled, document generation allowed'],
+                'criteria': {
+                    'required_sections_ok': True,
+                    'required_coverage_ok': True,
+                    'unknown_titles_ok': True,
+                    'placeholders_ok': True
+                },
+                'metrics': {
+                    'required_coverage_ratio': round(required_coverage, 2),
+                    'required_coverage_ratio_effective': round(required_coverage, 2),
+                    'unknown_titles_count': unknown_titles_count,
+                    'placeholders_count': placeholders_count,
+                    'missing_required_sections_count': len(missing_required),
+                    'missing_required_sections_count_effective': len(missing_required)
+                },
+                'missing_required_effective': missing_required
+            }
         
         profiles = gate_config.get('profiles', {})
         profile = profiles.get(profile_id, profiles.get('placement_suivi', {}))

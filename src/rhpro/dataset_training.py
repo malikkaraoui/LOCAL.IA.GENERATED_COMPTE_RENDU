@@ -1508,7 +1508,7 @@ def analyze_dataset(
     # Calculer statistiques globales
     total_clients = len(result.clients)
     successful_clients = [c for c in result.clients if "error" not in c]
-    gold_detected = sum(1 for c in successful_clients if c.get("gold", {}).get("detected"))
+    gold_detected = sum(1 for c in successful_clients if (c.get("gold") or {}).get("detected"))
     pipeline_ready = sum(1 for c in successful_clients if c.get("pipeline_ready"))
     
     # Distributions

@@ -383,6 +383,16 @@ production_gate:
   default_profile: placement_suivi  # Profil tolérant par défaut
   
   profiles:
+    draft:
+      description: "Mode DRAFT: Aucune validation, génération toujours autorisée"
+      required_sections: []
+      thresholds:
+        max_missing_required: 999
+        min_required_coverage_ratio: 0.0
+        max_unknown_titles: 999
+        max_placeholders: 999
+      ignore_required_prefixes: []
+    
     bilan_complet:
       description: "Profil strict pour bilans d'orientation complets"
       required_sections:
