@@ -196,8 +196,9 @@ async def rag_audio_status(
     client_dir = Path(settings.CLIENTS_DIR).expanduser().resolve() / source_id
     ingested_dir = client_dir / "sources" / "ingested_audio"
 
-    txt = len(list(ingested_dir.glob("*.txt"))) if ingested_dir.exists() else 0
-    js = len(list(ingested_dir.glob("*.json"))) if ingested_dir.exists() else 0
+    from src.utils.file_filters import is_ignored_filename
+    txt = len([f for f in ingested_dir.glob("*.txt") if not is_ignored_filename(f)]) if ingested_dir.exists() else 0
+    js = len([f for f in ingested_dir.glob("*.json") if not is_ignored_filename(f)]) if ingested_dir.exists() else 0
 
     return {
         "source_id": source_id,
@@ -240,10 +241,13 @@ async def ingest_audio_local(
 
     # Récupérer les audio_path déjà ingérés (via manifests JSON)
     seen_audio_paths: set[str] = set()
+    from src.utils.file_filters import is_ignored_filename
     if skip_already_ingested:
         ingested_dir = client_dir / "sources" / "ingested_audio"
         if ingested_dir.exists() and ingested_dir.is_dir():
             for mf in ingested_dir.glob("*.json"):
+                if is_ignored_filename(mf):
+                    continue
                 try:
                     payload = json.loads(mf.read_text(encoding="utf-8"))
                     ap = payload.get("audio_path")
@@ -255,7 +259,9 @@ async def ingest_audio_local(
 
     audio_files: list[Path] = []
     for ext in sorted(ALLOWED_AUDIO_EXTS):
-        audio_files.extend(scan_root.rglob(f"*{ext}"))
+        for audio_file in scan_root.rglob(f"*{ext}"):
+            if not is_ignored_filename(audio_file):
+                audio_files.append(audio_file)
 
     # Exclure les fichiers dans ingested_audio (et normaliser)
     filtered: list[Path] = []

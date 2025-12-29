@@ -532,7 +532,8 @@ def generate_report_from_normalized(
     # Trouver le GOLD
     gold_path = None
     if gold_folder.exists():
-        gold_files = list(gold_folder.glob("*.docx"))
+        from src.utils.file_filters import is_ignored_filename
+        gold_files = [f for f in gold_folder.glob("*.docx") if not is_ignored_filename(f)]
         if gold_files:
             gold_path = str(gold_files[0])
     

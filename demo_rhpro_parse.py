@@ -27,7 +27,8 @@ def find_first_source_docx() -> Optional[Path]:
         return None
     
     # Chercher tous les source.docx
-    source_files = list(samples_dir.glob('**/source.docx'))
+    from src.utils.file_filters import is_ignored_filename
+    source_files = [f for f in samples_dir.glob('**/source.docx') if not is_ignored_filename(f)]
     
     if source_files:
         # Trier pour avoir un ordre déterministe (client_01, client_02, etc.)

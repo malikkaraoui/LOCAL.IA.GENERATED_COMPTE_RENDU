@@ -96,8 +96,10 @@ class RAGGenerator:
         documents = []
         self.sources_metadata = []
         
+        from src.utils.file_filters import is_ignored_filename
+        
         for file_path in sources_path.rglob("*"):
-            if file_path.is_file() and file_path.suffix in file_extensions:
+            if file_path.is_file() and file_path.suffix in file_extensions and not is_ignored_filename(file_path):
                 try:
                     # Lire le document
                     reader = SimpleDirectoryReader(
@@ -503,9 +505,12 @@ def get_chunks_preview(
     if not sources_path.exists():
         return []
     
+    from src.utils.file_filters import is_ignored_filename
+    
     # Charger quelques documents
     documents = []
-    for file_path in list(sources_path.rglob("*.docx"))[:3]:  # Max 3 fichiers
+    docx_files = [f for f in sources_path.rglob("*.docx") if not is_ignored_filename(f)][:3]  # Max 3 fichiers
+    for file_path in docx_files:
         try:
             reader = SimpleDirectoryReader(
                 input_files=[str(file_path)],

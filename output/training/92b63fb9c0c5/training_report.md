@@ -1,6 +1,6 @@
 # Training Report - 92b63fb9c0c5
 
-**Date** : 2025-12-28T19:37:34.054060
+**Date** : 2025-12-28T19:57:50.389128
 **Clients analysés** : 19
 **Scans réussis** : 19
 **Clients utilisés** : 19
@@ -36,7 +36,7 @@ Coverage basée sur **19 clients utilisés**.
 | IDENTITY | 89% | 17 | 1.2 | 2.0 |
 | MOTIVATIONS_VALEURS | 31% | 6 | 5.7 | 17.0 |
 | OBJECTIFS | 36% | 7 | 1.9 | 5.0 |
-| PISTES_METIERS | 47% | 9 | 3.9 | 15.0 |
+| PISTES_METIERS | 47% | 9 | 4.1 | 15.0 |
 | PLAN_ACTION | 21% | 4 | 3.8 | 11.0 |
 | RESSOURCES_POINTS_APPUI | 5% | 1 | 10.0 | 10.0 |
 | RESSOURCES_POINTS_VIGILANCE | 5% | 1 | 10.0 | 10.0 |
@@ -47,17 +47,17 @@ Coverage basée sur **19 clients utilisés**.
 
 ### Titres Inconnus (Top 10)
 
-- `RESULTATS DE LA DISCUSSION AVEC L’ASSURE` : 3 occurrences
-- `EVALUATIONS` : 2 occurrences
-- `RESSOURCES COMPORTEMENTALES` : 2 occurrences
-- `SOCIALES` : 2 occurrences
-- `FRANCAIS - NIVEAU 2` : 2 occurrences
-- `FRANCAIS - NIVEAU 3` : 2 occurrences
-- `VITESSE DE FRAPPE EN FRANCAIS` : 2 occurrences
-- `WORD - POSITIONNEMENT DE NIVEAU` : 2 occurrences
-- `POWERPOINT - POSITIONNEMENT DE NIVEAU` : 2 occurrences
-- `OUTLOOK 2010` : 2 occurrences
+- `LA GESTION DE LA CONCENTRATION ET DE LA COMPREHENSION ECRITE` : 1 occurrences
+- `VOCABULAIRE : B1` : 1 occurrences
+- `RELATION A LA CARRIERE` : 1 occurrences
+- `ORGANISATION PRIVILEGIEE` : 1 occurrences
+- `ACTIVITES PRIVILEGIEES` : 1 occurrences
+- `CONSCIENCIEUX & PERSEVERANT` : 1 occurrences
+- `PERSEVERANT & ENTREPRENANT` : 1 occurrences
+- `INVENTIF & CONSCIENCIEUX` : 1 occurrences
+- `ENTREPRENANT & INVENTIF` : 1 occurrences
+- `LE CAHIER DES CHARGES EST LE SUIVANT` : 1 occurrences
 
 ## 💡 Recommandations
 
-- 📝 Titres inconnus fréquents : RESULTATS DE LA DISCUSSION AVEC L’ASSURE, EVALUATIONS, RESSOURCES COMPORTEMENTALES, SOCIALES, FRANCAIS - NIVEAU 2 → Ajouter mappings dans field_specs.py
+- 📝 Titres inconnus fréquents : LA GESTION DE LA CONCENTRATION ET DE LA COMPREHENSION ECRITE, VOCABULAIRE : B1, RELATION A LA CARRIERE, ORGANISATION PRIVILEGIEE, ACTIVITES PRIVILEGIEES → Ajouter mappings dans field_specs.py

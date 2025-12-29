@@ -19,7 +19,8 @@ def _find_sample_docx():
     samples_dir = PROJECT_ROOT / 'data' / 'samples'
     if not samples_dir.exists():
         return None
-    source_files = sorted(samples_dir.glob('**/source.docx'))
+    from src.utils.file_filters import is_ignored_filename
+    source_files = sorted([f for f in samples_dir.glob('**/source.docx') if not is_ignored_filename(f)])
     return source_files[0] if source_files else None
 
 SAMPLE_DOCX_PATH = _find_sample_docx()

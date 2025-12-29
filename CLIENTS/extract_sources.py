@@ -255,9 +255,10 @@ def extract_one(path: Path, enable_soffice: bool) -> ExtractedDoc:
 
 
 def walk_files(root: Path) -> List[Path]:
+    from src.utils.file_filters import is_ignored_filename
     files: List[Path] = []
     for p in root.rglob("*"):
-        if p.is_file():
+        if p.is_file() and not is_ignored_filename(p):
             files.append(p)
     return sorted(files)
 

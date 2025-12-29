@@ -28,10 +28,13 @@ def discover_sources(root_dir: str) -> List[Path]:
     if not root.exists():
         raise FileNotFoundError(f"Root directory not found: {root_dir}")
     
+    from src.utils.file_filters import is_ignored_filename
     discovered = []
     
     # Chercher tous les source.docx
     for docx_file in root.rglob("source.docx"):
+        if is_ignored_filename(docx_file):
+            continue
         client_folder = docx_file.parent
         discovered.append(client_folder)
     

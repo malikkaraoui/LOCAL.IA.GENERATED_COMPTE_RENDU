@@ -284,8 +284,11 @@ class ReportOrchestrator:
 
             # Détecter les audios déjà ingérés (via manifests JSON)
             seen_audio_paths: set[str] = set()
+            from src.utils.file_filters import is_ignored_filename
             try:
                 for mf in ingested_dir.glob("*.json"):
+                    if is_ignored_filename(mf):
+                        continue
                     try:
                         payload = json.loads(mf.read_text(encoding="utf-8"))
                         ap = payload.get("audio_path")
@@ -303,6 +306,8 @@ class ReportOrchestrator:
             try:
                 for p in client_dir.rglob("*"):
                     if not p.is_file():
+                        continue
+                    if is_ignored_filename(p):
                         continue
                     if p.suffix.lower() not in allowed_exts:
                         continue

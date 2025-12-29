@@ -238,7 +238,9 @@ def extract_via_soffice(path: Path, soffice_bin: str) -> Result[dict]:
 
 
 def walk_files(root: Path) -> list[Path]:
-    """Liste récursivement tous les fichiers, en excluant les fichiers/dossiers cachés."""
+    """Liste récursivement tous les fichiers, en excluant les fichiers/dossiers cachés et les fichiers temporaires."""
+    from src.utils.file_filters import is_ignored_filename
+    
     def _is_hidden(path: Path) -> bool:
         """Retourne True si le fichier ou un de ses parents est caché."""
         for part in path.parts:
@@ -246,7 +248,7 @@ def walk_files(root: Path) -> list[Path]:
                 return True
         return False
 
-    return sorted([p for p in root.rglob("*") if p.is_file() and not _is_hidden(p.relative_to(root))])
+    return sorted([p for p in root.rglob("*") if p.is_file() and not _is_hidden(p.relative_to(root)) and not is_ignored_filename(p)])
 
 
 def extract_sources(

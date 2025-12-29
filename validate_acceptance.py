@@ -53,13 +53,14 @@ def validate_gold_detection(batch_name: str = "BATCH_20") -> Tuple[bool, str]:
     gold_detected = 0
     warnings_present = 0
     
+    from src.utils.file_filters import is_ignored_filename
     for client_dir in client_dirs:
         gold_dir = client_dir / "gold"
         meta_file = client_dir / "meta.json"
         
         # Vérifier si GOLD présent
         if gold_dir.exists():
-            gold_files = list(gold_dir.glob("*.docx"))
+            gold_files = [f for f in gold_dir.glob("*.docx") if not is_ignored_filename(f)]
             if gold_files:
                 gold_detected += 1
                 continue
@@ -86,7 +87,8 @@ def validate_rag_index() -> Tuple[bool, str]:
     if not output_path.exists():
         return False, "❌ Dossier output non trouvé"
     
-    debug_files = list(output_path.glob("*_debug.json"))
+    from src.utils.file_filters import is_ignored_filename
+    debug_files = [f for f in output_path.glob("*_debug.json") if not is_ignored_filename(f)]
     
     if len(debug_files) < 5:
         return False, f"❌ Seulement {len(debug_files)}/5 fichiers debug.json"
@@ -115,7 +117,8 @@ def validate_docx_generated() -> Tuple[bool, str]:
     if not output_path.exists():
         return False, "❌ Dossier output non trouvé"
     
-    docx_files = list(output_path.glob("*_generated.docx"))
+    from src.utils.file_filters import is_ignored_filename
+    docx_files = [f for f in output_path.glob("*_generated.docx") if not is_ignored_filename(f)]
     
     if len(docx_files) < 5:
         return False, f"❌ Seulement {len(docx_files)}/5 DOCX générés"
@@ -135,7 +138,8 @@ def validate_metrics() -> Tuple[bool, str]:
     if not output_path.exists():
         return False, "❌ Dossier output non trouvé"
     
-    metrics_files = list(output_path.glob("*_metrics.json"))
+    from src.utils.file_filters import is_ignored_filename
+    metrics_files = [f for f in output_path.glob("*_metrics.json") if not is_ignored_filename(f)]
     
     if len(metrics_files) < 5:
         return False, f"❌ Seulement {len(metrics_files)}/5 metrics.json"

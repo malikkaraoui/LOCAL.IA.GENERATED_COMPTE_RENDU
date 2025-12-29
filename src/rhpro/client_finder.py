@@ -5,6 +5,30 @@ import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 from difflib import SequenceMatcher
+from src.utils.file_filters import is_ignored_filename
+import re
+import re
+
+
+def contains_keyword(text: str, keywords: List[str]) -> bool:
+    """
+    Vérifie si un texte contient un des mots-clés (case-insensitive).
+    
+    Args:
+        text: Texte à vérifier
+        keywords: Liste de mots-clés à rechercher
+        
+    Returns:
+        True si au moins un mot-clé est trouvé
+        
+    Example:
+        >>> contains_keyword("02 Devis", ["devis"])
+        True
+        >>> contains_keyword("Rapport final", ["devis"])
+        False
+    """
+    text_lower = text.lower()
+    return any(keyword.lower() in text_lower for keyword in keywords)
 
 
 def normalize_text(text: str) -> str:
@@ -248,15 +272,17 @@ def discover_client_documents(client_folder: Path) -> Dict[str, List[Path]]:
         raise FileNotFoundError(f"Client folder not found: {client_folder}")
     
     documents = {
-        'docx': list(client_folder.glob("*.docx")),
-        'pdf': list(client_folder.glob("*.pdf")),
-        'txt': list(client_folder.glob("*.txt")),
+        'docx': [f for f in client_folder.glob("*.docx") if not is_ignored_filename(f)],
+        'pdf': [f for f in client_folder.glob("*.pdf") if not is_ignored_filename(f)],
+        'txt': [f for f in client_folder.glob("*.txt") if not is_ignored_filename(f)],
         'audio': []
     }
     
     # Audio formats
     for ext in ['mp3', 'wav', 'm4a', 'ogg', 'flac']:
-        documents['audio'].extend(client_folder.glob(f"*.{ext}"))
+        for audio_file in client_folder.glob(f"*.{ext}"):
+            if not is_ignored_filename(audio_file):
+                documents['audio'].append(audio_file)
     
     return documents
 
@@ -268,6 +294,8 @@ def discover_client_documents_recursive(
     max_files: int = 5000,
     allowed_exts: Optional[set] = None,
     ignore_dirs: Optional[set] = None,
+    exclude_dir_keywords: Optional[List[str]] = None,
+    exclude_file_keywords: Optional[List[str]] = None,
     follow_symlinks: bool = False
 ) -> Dict[str, Any]:
     """
@@ -280,6 +308,8 @@ def discover_client_documents_recursive(
         max_files: Limite maximale de fichiers scannés (évite freeze UI)
         allowed_exts: Extensions autorisées (défaut: {'.pdf','.docx','.doc','.txt','.msg','.m4a','.mp3','.wav'})
         ignore_dirs: Dossiers à ignorer (défaut: {'.git','__MACOSX','node_modules','.venv','venv','artifacts','output'})
+        exclude_dir_keywords: Mots-clés pour exclure des dossiers (défaut: ['devis'])
+        exclude_file_keywords: Mots-clés pour exclure des fichiers (défaut: ['devis'])
         follow_symlinks: Suivre les liens symboliques
         
     Returns:
@@ -289,16 +319,19 @@ def discover_client_documents_recursive(
         - 'stats_by_subfolder': Dict[str, Dict[str, int]] avec stats par sous-dossier (top 10)
         - 'total_files': int
         - 'truncated': bool (si max_files atteint)
+        - 'excluded_dirs': List[str] dossiers exclus
+        - 'excluded_files': int nombre de fichiers exclus par keyword
         
     Example:
         >>> result = discover_client_documents_recursive(
         ...     Path("/dataset/ARIFI Elodie"),
         ...     max_depth=2,
-        ...     include_subfolders=True
+        ...     include_subfolders=True,
+        ...     exclude_dir_keywords=['devis']
         ... )
         >>> print(f"Total: {result['total_files']} fichiers")
         >>> print(f"DOCX: {len(result['files']['docx'])}")
-        >>> print(f"Sous-dossiers: {list(result['stats_by_subfolder'].keys())}")
+        >>> print(f"Exclus: {result['excluded_dirs']}")
     """
     import os
     from collections import defaultdict
@@ -312,6 +345,12 @@ def discover_client_documents_recursive(
     
     if ignore_dirs is None:
         ignore_dirs = {'.git', '__MACOSX', 'node_modules', '.venv', 'venv', 'artifacts', 'output', '__pycache__'}
+    
+    if exclude_dir_keywords is None:
+        exclude_dir_keywords = ['devis']
+    
+    if exclude_file_keywords is None:
+        exclude_file_keywords = ['devis']
     
     # Force depth=0 si include_subfolders=False
     if not include_subfolders:
@@ -330,6 +369,8 @@ def discover_client_documents_recursive(
     stats_by_subfolder = defaultdict(lambda: defaultdict(int))
     total_files = 0
     truncated = False
+    excluded_dirs = []
+    excluded_files_count = 0
     
     # Scan récursif avec os.walk
     for dirpath, dirnames, filenames in os.walk(client_folder, followlinks=follow_symlinks):
@@ -348,8 +389,16 @@ def discover_client_documents_recursive(
             dirnames[:] = []  # Empêche de descendre plus profond
             continue
         
-        # Filtrer les sous-dossiers à ignorer
+        # Filtrer les sous-dossiers à ignorer (ignore_dirs standard)
         dirnames[:] = [d for d in dirnames if d not in ignore_dirs]
+        
+        # Filtrer les sous-dossiers par keywords (ex: devis)
+        original_dirnames = dirnames[:]
+        dirnames[:] = [d for d in dirnames if not contains_keyword(d, exclude_dir_keywords)]
+        
+        # Tracker les dossiers exclus
+        for excluded_dir in set(original_dirnames) - set(dirnames):
+            excluded_dirs.append(os.path.join(rel_path if rel_path != '.' else '', excluded_dir))
         
         # Scanner les fichiers
         for filename in filenames:
@@ -358,12 +407,13 @@ def discover_client_documents_recursive(
                 truncated = True
                 break
             
-            # Ignorer fichiers temporaires Office (~$*.docx)
-            if filename.startswith('~$'):
+            # Filtrer fichiers temporaires Office et fichiers système
+            if is_ignored_filename(filename):
                 continue
             
-            # Ignorer .DS_Store
-            if filename == '.DS_Store':
+            # Filtrer fichiers par keywords (ex: devis)
+            if contains_keyword(filename, exclude_file_keywords):
+                excluded_files_count += 1
                 continue
             
             # Vérifier extension
@@ -413,6 +463,149 @@ def discover_client_documents_recursive(
         'stats_by_type': dict(stats_by_type),
         'stats_by_subfolder': top_subfolders,
         'total_files': total_files,
-        'truncated': truncated
+        'truncated': truncated,
+        'excluded_dirs': excluded_dirs,
+        'excluded_files_count': excluded_files_count
     }
 
+
+def select_best_source_docx(
+    docx_paths: List[Path],
+    profile: str = "bilan_complet"
+) -> Tuple[Optional[Path], str]:
+    """
+    Sélectionne automatiquement le meilleur DOCX source pour l'extraction RH-Pro.
+    
+    Stratégie (Option B - Patch 4):
+    - Rejette les docs administratifs/évaluation stage (contrat, devis, facture, attestation, evaluation, stage, certificat)
+    - Privilégie les docs RH-Pro structurants (bilan, rapport, orientation, synthese, final, lai, bilan final, bilan d'orientation)
+    - Analyse rapide des headings pour détecter la structure RH-Pro
+    - Fallback sur le doc le plus long (hors blacklist)
+    - Si profile=bilan_complet: interdire docs évaluation/stage/contrat comme source structurante
+    
+    Args:
+        docx_paths: Liste de chemins vers des fichiers DOCX
+        profile: Profil gate ('bilan_complet', 'placement_suivi', etc.)
+        
+    Returns:
+        Tuple (best_docx_path, selection_mode):
+        - best_docx_path: Path du meilleur DOCX ou None si aucun candidat
+        - selection_mode: "AUTO_PRIORITY" | "AUTO_FALLBACK" | "NONE"
+        
+    Example:
+        >>> docx_files = [Path("Contrat.docx"), Path("RH-Pro Bilan final.docx")]
+        >>> best, mode = select_best_source_docx(docx_files, profile="bilan_complet")
+        >>> print(best.name, mode)
+        RH-Pro Bilan final.docx AUTO_PRIORITY
+    """
+    if not docx_paths:
+        return None, "NONE"
+    
+    # Patch 4 Option B: Mots-clés à rejeter comme source structurante
+    # (mais gardés pour RAG si nécessaire)
+    REJECT_KEYWORDS = [
+        'contrat', 'convention', 'devis', 'facture', 'attestation',
+        'convocation', 'invitation', 'cv', 'curriculum', 'certificat',
+        # Patch 4: rejeter aussi evaluation/stage pour bilan_complet
+        'evaluation', 'évaluation', 'stage'
+    ]
+    
+    # Patch 2: Mots-clés à privilégier (boost) - specs exactes
+    BOOST_KEYWORDS = [
+        'bilan', 'rapport', 'orientation', 'synthese', 'synthèse',
+        'final', 'lai',
+        # Keywords composés (boost supplémentaire)
+        'bilan final', 'bilan d\'orientation', 'bilan orientation',
+        'rh-pro', 'rhpro'
+    ]
+    
+    # Patch 2: Mots-clés à privilégier (boost) - specs exactes
+    BOOST_KEYWORDS = [
+        'bilan', 'rapport', 'orientation', 'synthese', 'synthèse',
+        'final', 'lai',
+        # Keywords composés (boost supplémentaire)
+        'bilan final', 'bilan d\'orientation', 'bilan orientation',
+        'rh-pro', 'rhpro'
+    ]
+    
+    # Anchors RH-Pro connus (pour détection de structure)
+    RHPRO_ANCHORS = [
+        'identity', 'profession_formation', 'orientation_formation',
+        'competences', 'projet', 'preconisations', 'conclusion'
+    ]
+    
+    candidates = []
+    
+    for docx_path in docx_paths:
+        filename = docx_path.name.lower()
+        score = 0.0
+        
+        # Patch 4 Option B: Rejet strict pour bilan_complet
+        # evaluation/stage/contrat/devis ne doivent PAS être source structurante
+        if any(keyword in filename for keyword in REJECT_KEYWORDS):
+            continue  # Skip complètement (mais restera en RAG)
+        
+        # Patch 2: Bonus pour keywords composés d'abord (scoring prioritaire)
+        composite_keywords = ['bilan final', 'bilan d\'orientation', 'bilan orientation']
+        for composite in composite_keywords:
+            if composite in filename:
+                score += 20.0  # Gros boost pour keywords composés
+        
+        # Bonus pour mots-clés simples
+        for keyword in BOOST_KEYWORDS:
+            if keyword in filename:
+                score += 10.0
+        
+        # Analyse rapide de la structure (headings)
+        try:
+            from docx import Document
+            doc = Document(str(docx_path))
+            
+            # Compter les headings
+            heading_count = sum(1 for para in doc.paragraphs 
+                              if para.style.name.startswith('Heading'))
+            score += min(heading_count / 10.0, 5.0)  # Max 5 points
+            
+            # Détecter anchors RH-Pro dans le texte
+            full_text = '\n'.join(para.text.lower() for para in doc.paragraphs[:100])  # Premiers 100 paras
+            anchor_matches = sum(1 for anchor in RHPRO_ANCHORS if anchor in full_text)
+            score += anchor_matches * 3.0
+            
+            # Bonus taille (nb paragraphes)
+            para_count = len(doc.paragraphs)
+            if para_count > 80:
+                score += 5.0
+            elif para_count > 50:
+                score += 3.0
+            
+        except Exception:
+            # Si erreur de lecture, pas bloquant
+            pass
+        
+        candidates.append((docx_path, score))
+    
+    if not candidates:
+        # Fallback: prendre le plus long DOCX (hors blacklist)
+        fallback_candidates = []
+        for docx_path in docx_paths:
+            filename = docx_path.name.lower()
+            if any(keyword in filename for keyword in REJECT_KEYWORDS):
+                continue
+            try:
+                size = docx_path.stat().st_size
+                fallback_candidates.append((docx_path, size))
+            except Exception:
+                continue
+        
+        if fallback_candidates:
+            fallback_candidates.sort(key=lambda x: x[1], reverse=True)
+            return fallback_candidates[0][0], "AUTO_FALLBACK"
+        else:
+            return None, "NONE"
+    
+    # Trier par score décroissant
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    best_docx, best_score = candidates[0]
+    
+    mode = "AUTO_PRIORITY" if best_score > 5.0 else "AUTO_FALLBACK"
+    return best_docx, mode

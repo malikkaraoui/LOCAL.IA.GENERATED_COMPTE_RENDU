@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import re
+from src.utils.file_filters import is_ignored_filename
 
 
 # Sous-dossiers attendus dans la structure RH-Pro
@@ -155,7 +156,7 @@ def find_gold_document(client_folder: Path) -> Optional[Dict[str, Any]]:
     rapport_folder = find_folder(client_folder, EXPECTED_FOLDERS["06_rapport"])
     if rapport_folder:
         for file_path in rapport_folder.rglob("*"):
-            if file_path.is_file() and file_path.suffix in GOLD_EXTENSIONS:
+            if file_path.is_file() and file_path.suffix in GOLD_EXTENSIONS and not is_ignored_filename(file_path):
                 score = score_gold_candidate(file_path)
                 candidates.append({
                     "path": str(file_path),
@@ -168,7 +169,7 @@ def find_gold_document(client_folder: Path) -> Optional[Dict[str, Any]]:
     # 2. Fallback : scanner tout le dossier client
     if not candidates:
         for file_path in client_folder.rglob("*"):
-            if file_path.is_file() and file_path.suffix in GOLD_EXTENSIONS:
+            if file_path.is_file() and file_path.suffix in GOLD_EXTENSIONS and not is_ignored_filename(file_path):
                 score = score_gold_candidate(file_path)
                 if score > 0.1:  # Seuil minimum
                     candidates.append({
@@ -182,7 +183,7 @@ def find_gold_document(client_folder: Path) -> Optional[Dict[str, Any]]:
     # 3. Si toujours rien, prendre le docx le plus récent
     if not candidates:
         all_docx = [f for f in client_folder.rglob("*") 
-                    if f.is_file() and f.suffix in GOLD_EXTENSIONS]
+                    if f.is_file() and f.suffix in GOLD_EXTENSIONS and not is_ignored_filename(f)]
         if all_docx:
             most_recent = max(all_docx, key=lambda f: f.stat().st_mtime)
             return {
@@ -239,7 +240,7 @@ def find_rag_sources(client_folder: Path, index_msg: bool = False) -> List[Dict[
         folder = find_folder(client_folder, folder_variants)
         if folder:
             for file_path in folder.rglob("*"):
-                if file_path.is_file() and file_path.suffix in extensions_to_index:
+                if file_path.is_file() and file_path.suffix in extensions_to_index and not is_ignored_filename(file_path):
                     sources.append({
                         "path": str(file_path),
                         "category": category,
@@ -250,7 +251,7 @@ def find_rag_sources(client_folder: Path, index_msg: bool = False) -> List[Dict[
     
     # Scanner la racine (uniquement fichiers directs, pas récursif)
     for file_path in client_folder.iterdir():
-        if file_path.is_file() and file_path.suffix in extensions_to_index:
+        if file_path.is_file() and file_path.suffix in extensions_to_index and not is_ignored_filename(file_path):
             # Exclure si c'est le gold déjà détecté
             sources.append({
                 "path": str(file_path),

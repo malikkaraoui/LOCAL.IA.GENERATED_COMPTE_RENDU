@@ -68,7 +68,8 @@ def demo_msg_extraction(msg_file: Path):
 
 def find_msg_files(directory: Path, max_files: int = 5):
     """Trouve les fichiers .msg dans un dossier"""
-    msg_files = list(directory.rglob("*.msg"))
+    from src.utils.file_filters import is_ignored_filename
+    msg_files = [f for f in directory.rglob("*.msg") if not is_ignored_filename(f)]
     return msg_files[:max_files]
 
 def main():

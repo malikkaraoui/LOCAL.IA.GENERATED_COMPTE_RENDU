@@ -79,7 +79,10 @@ def trouver_dossier_client(nom_client: str):
     meilleur_path = None
     meilleur_nom_dossier = None
 
+    from src.utils.file_filters import is_ignored_filename
     for entry in os.listdir(DOSSIERS_CLIENTS_ROOT):
+        if is_ignored_filename(entry):
+            continue
         full_path = os.path.join(DOSSIERS_CLIENTS_ROOT, entry)
         if not os.path.isdir(full_path):
             continue
@@ -174,9 +177,13 @@ def lire_dossier_client(dossier_sources):
     Parcourt le dossier 'sources' du client et lit tous les fichiers
     TXT / PDF / DOCX pour constituer une liste de (nom_fichier, texte).
     """
+    from src.utils.file_filters import is_ignored_filename
     documents = []
     for root, _, files in os.walk(dossier_sources):
         for fname in files:
+            # Filtrer fichiers temporaires et système
+            if is_ignored_filename(fname):
+                continue
             # on ignore les scripts Python au cas où
             if fname.endswith(".py"):
                 continue

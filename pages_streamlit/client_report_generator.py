@@ -8,7 +8,14 @@ import sys
 # Ajouter src/ au path pour les imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from rhpro.client_finder import find_client_folders, find_client_folder, format_search_results, discover_client_documents, discover_client_documents_recursive
+from rhpro.client_finder import (
+    find_client_folders,
+    find_client_folder,
+    format_search_results,
+    discover_client_documents,
+    discover_client_documents_recursive,
+    select_best_source_docx
+)
 
 
 def show_client_report_generator_page():
@@ -23,12 +30,14 @@ def show_client_report_generator_page():
         st.session_state.selected_client_path = None
     if "client_documents" not in st.session_state:
         st.session_state.client_documents = None
-    if "scan_include_subfolders" not in st.session_state:
-        st.session_state.scan_include_subfolders = True
-    if "scan_max_depth" not in st.session_state:
-        st.session_state.scan_max_depth = 2
     if "scan_max_files" not in st.session_state:
         st.session_state.scan_max_files = 5000
+    if "exclude_devis_dirs" not in st.session_state:
+        st.session_state.exclude_devis_dirs = True
+    if "exclude_devis_files" not in st.session_state:
+        st.session_state.exclude_devis_files = True
+    if "auto_select_docx" not in st.session_state:
+        st.session_state.auto_select_docx = True
     
     # Configuration
     st.subheader("1. Dataset RH-Pro")
@@ -147,31 +156,10 @@ def show_client_report_generator_page():
                 
                 # === Section Scan Documents avec contrôles ===
                 with st.expander("📂 Documents trouvés dans ce dossier", expanded=True):
-                    # Contrôles de scan
-                    col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([2, 2, 2, 1])
+                    # Contrôles de scan simplifiés (scan récursif complet automatique)
+                    col_ctrl1, col_ctrl2 = st.columns([3, 1])
                     
                     with col_ctrl1:
-                        include_subfolders = st.toggle(
-                            "Inclure sous-dossiers",
-                            value=st.session_state.scan_include_subfolders,
-                            key="toggle_include_subfolders",
-                            help="Scanner récursivement les sous-dossiers (ex: 01 Dossier personnel, 03 Tests, etc.)"
-                        )
-                        st.session_state.scan_include_subfolders = include_subfolders
-                    
-                    with col_ctrl2:
-                        max_depth = st.slider(
-                            "Profondeur de scan",
-                            min_value=0,
-                            max_value=6,
-                            value=st.session_state.scan_max_depth,
-                            key="slider_max_depth",
-                            disabled=not include_subfolders,
-                            help="0 = racine uniquement, 1 = sous-dossiers directs, 2+ = plus profond"
-                        )
-                        st.session_state.scan_max_depth = max_depth
-                    
-                    with col_ctrl3:
                         max_files = st.number_input(
                             "Max fichiers scannés",
                             min_value=100,
@@ -183,20 +171,48 @@ def show_client_report_generator_page():
                         )
                         st.session_state.scan_max_files = max_files
                     
-                    with col_ctrl4:
+                    with col_ctrl2:
                         st.write("")  # Spacer
                         st.write("")  # Spacer
                         rescan_clicked = st.button("🔄 Rescanner", help="Forcer un nouveau scan (clear cache)")
                     
-                    # Cache avec fonction dédiée
-                    @st.cache_data(show_spinner="Scan en cours...", ttl=300)
-                    def _cached_scan(path_str: str, depth: int, include_subs: bool, max_f: int):
-                        """Scan avec cache Streamlit"""
+                    # Info: Scan automatique complet
+                    st.info("🔍 Scan récursif complet automatique : tout le dossier client est scanné (sauf exclusions ci-dessous)")
+                    
+                    # Options d'exclusion
+                    col_excl1, col_excl2 = st.columns(2)
+                    
+                    with col_excl1:
+                        exclude_devis_dirs = st.checkbox(
+                            "🚫 Exclure dossier 'Devis'",
+                            value=st.session_state.exclude_devis_dirs,
+                            key="checkbox_exclude_devis_dirs",
+                            help="Exclure automatiquement les dossiers contenant 'devis' (ex: 02 Devis, Devis RH-Pro, etc.)"
+                        )
+                        st.session_state.exclude_devis_dirs = exclude_devis_dirs
+                    
+                    with col_excl2:
+                        exclude_devis_files = st.checkbox(
+                            "🚫 Exclure fichiers 'Devis'",
+                            value=st.session_state.exclude_devis_files,
+                            key="checkbox_exclude_devis_files",
+                            help="Exclure automatiquement les fichiers contenant 'devis' dans le nom"
+                        )
+                        st.session_state.exclude_devis_files = exclude_devis_files
+                    
+                    # Cache avec fonction dédiée (scan récursif complet automatique)
+                    @st.cache_data(show_spinner="Scan récursif complet en cours...", ttl=300)
+                    def _cached_scan(path_str: str, max_f: int, excl_dirs: bool, excl_files: bool):
+                        """Scan récursif complet avec cache Streamlit (profondeur illimitée)"""
+                        exclude_dir_kw = ['devis'] if excl_dirs else []
+                        exclude_file_kw = ['devis'] if excl_files else []
                         return discover_client_documents_recursive(
                             Path(path_str),
-                            max_depth=depth,
-                            include_subfolders=include_subs,
-                            max_files=max_f
+                            max_depth=10,  # Profondeur élevée pour scan complet
+                            include_subfolders=True,  # Toujours récursif
+                            max_files=max_f,
+                            exclude_dir_keywords=exclude_dir_kw,
+                            exclude_file_keywords=exclude_file_kw
                         )
                     
                     # Clear cache si rescan demandé
@@ -208,9 +224,9 @@ def show_client_report_generator_page():
                     try:
                         result = _cached_scan(
                             str(selected_path),
-                            max_depth,
-                            include_subfolders,
-                            max_files
+                            max_files,
+                            exclude_devis_dirs,
+                            exclude_devis_files
                         )
                         
                         docs = result['files']
@@ -218,8 +234,19 @@ def show_client_report_generator_page():
                         stats_by_subfolder = result['stats_by_subfolder']
                         total_files = result['total_files']
                         truncated = result['truncated']
+                        excluded_dirs = result.get('excluded_dirs', [])
+                        excluded_files_count = result.get('excluded_files_count', 0)
                         
                         st.session_state.client_documents = docs
+                        
+                        # Info sur les exclusions
+                        if excluded_dirs or excluded_files_count > 0:
+                            excl_info = []
+                            if excluded_dirs:
+                                excl_info.append(f"{len(excluded_dirs)} dossier(s) exclu(s)")
+                            if excluded_files_count > 0:
+                                excl_info.append(f"{excluded_files_count} fichier(s) exclu(s)")
+                            st.info(f"🚫 Exclusions: {', '.join(excl_info)}")
                         
                         # Warning si truncated
                         if truncated:
@@ -271,8 +298,8 @@ def show_client_report_generator_page():
                                 if len(docs['audio']) > 3:
                                     st.caption(f"  ... +{len(docs['audio']) - 3}")
                         
-                        # Stats par sous-dossier (si scan récursif activé)
-                        if include_subfolders and stats_by_subfolder and len(stats_by_subfolder) > 1:
+                        # Stats par sous-dossier (affichage automatique)
+                        if stats_by_subfolder and len(stats_by_subfolder) > 1:
                             st.divider()
                             st.caption("**Répartition par sous-dossier (top 5) :**")
                             
@@ -299,20 +326,51 @@ def show_client_report_generator_page():
         
         st.info(f"📁 Client sélectionné : **{client_path.name}**")
         
-        # Sélection du document source si plusieurs
-        if len(docs['docx']) > 1:
-            selected_docx_name = st.selectbox(
-                "Document DOCX source",
-                options=[d.name for d in docs['docx']],
-                help="Choisir le document à parser"
-            )
-            selected_docx = [d for d in docs['docx'] if d.name == selected_docx_name][0]
+        # Sélection du document source
+        selected_docx = None
+        auto_select_mode = "NONE"
+        
+        if len(docs['docx']) == 0:
+            st.error("❌ Aucun fichier DOCX trouvé dans ce dossier")
         elif len(docs['docx']) == 1:
             selected_docx = docs['docx'][0]
-            st.text(f"Document source : {selected_docx.name}")
+            st.text(f"📄 Document source : {selected_docx.name}")
         else:
-            st.error("❌ Aucun fichier DOCX trouvé dans ce dossier")
-            selected_docx = None
+            # Plusieurs DOCX : proposer AUTO ou MANUEL
+            docx_selection_mode = st.radio(
+                "Mode de sélection du DOCX source",
+                options=["AUTO (recommandé)", "MANUEL"],
+                horizontal=True,
+                help="AUTO sélectionne automatiquement le meilleur document RH-Pro (bilan, évaluation, rapport) en excluant les documents administratifs (contrat, devis, etc.)"
+            )
+            
+            if docx_selection_mode == "AUTO (recommandé)":
+                # Sélection AUTO
+                best_docx, auto_select_mode = select_best_source_docx(docs['docx'])
+                
+                if best_docx:
+                    selected_docx = best_docx
+                    mode_emoji = "🎯" if auto_select_mode == "AUTO_PRIORITY" else "⚠️"
+                    st.success(f"{mode_emoji} AUTO a sélectionné : **{selected_docx.name}** ({auto_select_mode})")
+                    
+                    # Afficher les alternatives
+                    with st.expander("Voir les autres DOCX disponibles"):
+                        for doc in docs['docx']:
+                            emoji = "✅" if doc == selected_docx else "⚪"
+                            st.text(f"{emoji} {doc.name}")
+                else:
+                    st.warning("⚠️ AUTO n'a trouvé aucun DOCX valide. Basculer en mode MANUEL.")
+                    docx_selection_mode = "MANUEL"
+            
+            if docx_selection_mode == "MANUEL":
+                # Sélection manuelle
+                selected_docx_name = st.selectbox(
+                    "Document DOCX source",
+                    options=[d.name for d in docs['docx']],
+                    help="Choisir le document à parser"
+                )
+                selected_docx = [d for d in docs['docx'] if d.name == selected_docx_name][0]
+                auto_select_mode = "MANUAL"
         
         if selected_docx:
             # Options de génération
@@ -361,6 +419,23 @@ def show_client_report_generator_page():
                     normalized = result["normalized"]
                     report = result["report"]
                     
+                    # Enrichir le report avec les infos de sélection
+                    if "diagnostic" not in report:
+                        report["diagnostic"] = {}
+                    report["diagnostic"]["source_docx_selected"] = str(selected_docx)
+                    report["diagnostic"]["source_docx_mode"] = auto_select_mode
+                    report["diagnostic"]["rag_sources_count"] = {
+                        "docx": len(docs['docx']),
+                        "pdf": len(docs['pdf']),
+                        "txt": len(docs['txt']),
+                        "msg": len(docs.get('msg', [])),
+                        "audio": len(docs['audio'])
+                    }
+                    if 'excluded_dirs' in result:
+                        report["diagnostic"]["excluded_dirs"] = result['excluded_dirs']
+                    if 'excluded_files_count' in result:
+                        report["diagnostic"]["excluded_files_count"] = result['excluded_files_count']
+                    
                     # Préparer dossier de sortie
                     output_dir = Path.cwd() / "out" / "individual" / client_path.name
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -376,6 +451,9 @@ def show_client_report_generator_page():
                         with open(output_dir / "report.json", "w", encoding="utf-8") as f:
                             json.dump(report, f, ensure_ascii=False, indent=2)
                     
+                    # Extraire gate (nécessaire pour l'affichage des résultats)
+                    gate = report.get("production_gate", {})
+                    
                     if "Markdown" in output_format:
                         # Générer un markdown simple
                         md_lines = []
@@ -383,7 +461,6 @@ def show_client_report_generator_page():
                         md_lines.append(f"**Document**: {selected_docx.name}\n")
                         md_lines.append(f"**Report type**: {report_type}\n\n")
                         
-                        gate = report.get("production_gate", {})
                         md_lines.append(f"## Production Gate\n")
                         md_lines.append(f"- **Status**: {gate.get('status', 'UNKNOWN')}\n")
                         md_lines.append(f"- **Profile**: {gate.get('profile', 'unknown')}\n")
