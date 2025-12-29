@@ -406,11 +406,17 @@ def show_client_report_generator_page():
                     # Ruleset
                     ruleset_path = Path.cwd() / "config" / "rulesets" / "rhpro_v1.yaml"
                     
-                    # Parser
+                    # Construire la liste des rag_sources (PATCH 1)
+                    rag_sources = []
+                    for doc_list in [docs['docx'], docs['pdf'], docs['txt']]:
+                        rag_sources.extend([str(doc) for doc in doc_list])
+                    
+                    # Parser avec rag_sources pour extraction identity globale
                     result = parse_bilan_docx_to_normalized(
                         str(selected_docx),
                         str(ruleset_path),
-                        gate_profile_override=gate_profile
+                        gate_profile_override=gate_profile,
+                        rag_sources=rag_sources
                     )
                     
                     progress_bar.progress(70)
