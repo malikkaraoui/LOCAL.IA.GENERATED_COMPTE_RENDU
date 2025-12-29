@@ -501,31 +501,33 @@ def select_best_source_docx(
     if not docx_paths:
         return None, "NONE"
     
-    # Patch 4 Option B: Mots-clés à rejeter comme source structurante
+    # Patch 4 + PATCH 9: Mots-clés à rejeter comme source structurante
     # (mais gardés pour RAG si nécessaire)
     REJECT_KEYWORDS = [
         'contrat', 'convention', 'devis', 'facture', 'attestation',
         'convocation', 'invitation', 'cv', 'curriculum', 'certificat',
         # Patch 4: rejeter aussi evaluation/stage pour bilan_complet
-        'evaluation', 'évaluation', 'stage'
+        # PATCH 9: ajouter journal
+        'evaluation', 'évaluation', 'stage', 'journal'
     ]
     
-    # Patch 2: Mots-clés à privilégier (boost) - specs exactes
-    BOOST_KEYWORDS = [
-        'bilan', 'rapport', 'orientation', 'synthese', 'synthèse',
-        'final', 'lai',
-        # Keywords composés (boost supplémentaire)
-        'bilan final', 'bilan d\'orientation', 'bilan orientation',
-        'rh-pro', 'rhpro'
+    # Patch 2 + PATCH 9: Keywords composés par ordre de priorité
+    # Priorité MAX : vrais bilans/rapports finaux
+    COMPOSITE_KEYWORDS_HIGH = [
+        'bilan final', 'rapport final', 'bilan général', 'bilan general',
+        'bilan d\'orientation', 'bilan orientation', 'synthèse finale',
+        'synthese finale'
     ]
     
-    # Patch 2: Mots-clés à privilégier (boost) - specs exactes
+    # Priorité MOYENNE : rapports RH-Pro génériques
+    COMPOSITE_KEYWORDS_MEDIUM = [
+        'rapport rh-pro', 'rapport rhpro'
+    ]
+    
+    # Patch 2: Mots-clés à privilégier (boost bas)
     BOOST_KEYWORDS = [
         'bilan', 'rapport', 'orientation', 'synthese', 'synthèse',
-        'final', 'lai',
-        # Keywords composés (boost supplémentaire)
-        'bilan final', 'bilan d\'orientation', 'bilan orientation',
-        'rh-pro', 'rhpro'
+        'final', 'lai', 'rh-pro', 'rhpro'
     ]
     
     # Anchors RH-Pro connus (pour détection de structure)
@@ -540,43 +542,63 @@ def select_best_source_docx(
         filename = docx_path.name.lower()
         score = 0.0
         
-        # Patch 4 Option B: Rejet strict pour bilan_complet
-        # evaluation/stage/contrat/devis ne doivent PAS être source structurante
+        # Patch 4 + PATCH 9: Rejet strict pour bilan_complet
+        # evaluation/stage/contrat/devis/journal ne doivent PAS être source structurante
         if any(keyword in filename for keyword in REJECT_KEYWORDS):
             continue  # Skip complètement (mais restera en RAG)
         
-        # Patch 2: Bonus pour keywords composés d'abord (scoring prioritaire)
-        composite_keywords = ['bilan final', 'bilan d\'orientation', 'bilan orientation']
-        for composite in composite_keywords:
+        # PATCH 9: Priorité HAUTE pour vrais rapports finaux
+        high_composite_match = False
+        for composite in COMPOSITE_KEYWORDS_HIGH:
             if composite in filename:
-                score += 20.0  # Gros boost pour keywords composés
+                score += 50.0  # Boost MAX pour bilan final, rapport final, etc.
+                high_composite_match = True
+                break
         
-        # Bonus pour mots-clés simples
-        for keyword in BOOST_KEYWORDS:
-            if keyword in filename:
-                score += 10.0
+        # PATCH 9: Priorité MOYENNE pour rapports RH-Pro génériques
+        if not high_composite_match:
+            for composite in COMPOSITE_KEYWORDS_MEDIUM:
+                if composite in filename:
+                    score += 30.0  # Boost moyen
+                    break
         
-        # Analyse rapide de la structure (headings)
+        # Bonus pour mots-clés simples (seulement si pas de composite match HIGH)
+        if not high_composite_match:
+            for keyword in BOOST_KEYWORDS:
+                if keyword in filename:
+                    score += 8.0  # Réduit de 10 à 8
+        
+        # Analyse rapide de la structure (headings) - poids réduit
         try:
             from docx import Document
             doc = Document(str(docx_path))
             
-            # Compter les headings
+            # Compter les headings (poids réduit si composite HIGH match)
             heading_count = sum(1 for para in doc.paragraphs 
                               if para.style.name.startswith('Heading'))
-            score += min(heading_count / 10.0, 5.0)  # Max 5 points
+            structure_bonus = min(heading_count / 10.0, 3.0)  # Max 3 points (réduit de 5)
+            if high_composite_match:
+                structure_bonus *= 0.5  # Diviser par 2 si déjà HIGH priority
+            score += structure_bonus
             
-            # Détecter anchors RH-Pro dans le texte
+            # Détecter anchors RH-Pro dans le texte (poids réduit)
             full_text = '\n'.join(para.text.lower() for para in doc.paragraphs[:100])  # Premiers 100 paras
             anchor_matches = sum(1 for anchor in RHPRO_ANCHORS if anchor in full_text)
-            score += anchor_matches * 3.0
+            anchor_bonus = anchor_matches * 2.0  # Réduit de 3.0 à 2.0
+            if high_composite_match:
+                anchor_bonus *= 0.5  # Diviser par 2 si déjà HIGH priority
+            score += anchor_bonus
             
-            # Bonus taille (nb paragraphes)
+            # Bonus taille (nb paragraphes) - poids réduit
             para_count = len(doc.paragraphs)
+            size_bonus = 0.0
             if para_count > 80:
-                score += 5.0
+                size_bonus = 3.0  # Réduit de 5
             elif para_count > 50:
-                score += 3.0
+                size_bonus = 2.0  # Réduit de 3
+            if high_composite_match:
+                size_bonus *= 0.5
+            score += size_bonus
             
         except Exception:
             # Si erreur de lecture, pas bloquant

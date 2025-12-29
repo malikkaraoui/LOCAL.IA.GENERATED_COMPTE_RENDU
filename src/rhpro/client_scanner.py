@@ -20,17 +20,44 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import re
+import unicodedata
 from src.utils.file_filters import is_ignored_filename
 
 
-# Sous-dossiers attendus dans la structure RH-Pro
+# PATCH 10: Nouvelle architecture de détection des sous-dossiers
+# Mapping canonique préfixe → clé interne
+CANON_BY_PREFIX = {
+    "01": "01_personnel",
+    "02": "02_cv",
+    "03": "03_tests",
+    "04": "04_stages",
+    "05": "05_mesures_ai",
+    "06": "06_rapport",
+    "07": "07_suivi",
+}
+
+# Fallback par mots-clés si préfixe numérique introuvable
+KEYWORDS_FALLBACK = {
+    "01_personnel": ["personnel", "dossier personnel", "infos personnelles"],
+    "02_cv": ["cv", "curriculum"],
+    "03_tests": ["tests", "bilans", "positionnement", "riasec", "vocatio"],
+    "04_stages": ["stages", "stage", "lai15", "lai 15", "lai17", "lai 17"],
+    "05_mesures_ai": ["mesures", "ai", "outplacement", "ocas"],
+    "06_rapport": ["rapport", "rapport final", "bilan final", "final"],
+    "07_suivi": ["suivi", "entretiens"],
+}
+
+# Dossiers requis pour pipeline complet
+REQUIRED_CANON = ["01_personnel", "06_rapport"]
+
+# Ancienne structure gardée pour compatibilité (deprecated)
 EXPECTED_FOLDERS = {
-    "01_personnel": ["01 Dossier personnel", "01", "Dossier personnel"],
+    "01_personnel": ["01 Dossier personnel", "01", "Dossier personnel", "01 Personnel"],
     "02_cv": ["02 CV", "02", "CV"],
-    "03_tests": ["03 Tests et bilans", "03", "Tests"],
-    "04_stages": ["04 Stages", "04", "Stages"],
-    "05_mesures": ["05 Mesures AI", "05", "Mesures"],
-    "06_rapport": ["06 Rapport final", "06", "Rapport final", "Rapports"],
+    "03_tests": ["03 Tests et bilans", "03", "Tests", "03 Tests", "Tests et bilans"],
+    "04_stages": ["04 Stages", "04", "Stages", "04 Stage"],
+    "05_mesures": ["05 Mesures AI", "05", "Mesures", "05 Mesure AI", "Mesures AI"],
+    "06_rapport": ["06 Rapport final", "06", "Rapport final", "Rapports", "06 Rapports", "Rapport"],
     "07_suivi": ["07 Suivi", "07", "Suivi"],
 }
 
@@ -39,7 +66,19 @@ DOCUMENT_EXTENSIONS = {".docx", ".pdf", ".txt", ".msg", ".doc"}
 GOLD_EXTENSIONS = {".docx", ".doc"}
 
 # Mots-clés pour détection GOLD (rapport final)
-GOLD_KEYWORDS = [
+# PATCH 9: Prioriser vrais rapports finaux (pas journal/evaluation stage)
+GOLD_KEYWORDS_HIGH_PRIORITY = [
+    "bilan final",
+    "rapport final",
+    "bilan général",
+    "bilan d'orientation",
+    "bilan orientation",
+    "synthèse finale",
+    "rapport rh-pro",
+    "rapport rhpro",
+]
+
+GOLD_KEYWORDS_MEDIUM_PRIORITY = [
     "rapport",
     "bilan",
     "orientation",
@@ -47,9 +86,96 @@ GOLD_KEYWORDS = [
     "synthèse",
     "final",
     "conclusion",
-    "evaluation",
-    "évaluation",
 ]
+
+# PATCH 9: Exclusions strictes pour bilan_complet
+GOLD_EXCLUDE_PATTERNS = [
+    "journal",
+    "evaluation de stage",
+    "évaluation de stage",
+    "evaluation stage",
+    "test",
+    "contrat",
+    "devis",
+    "facture",
+    "attestation",
+    "certificat",
+    "cv",
+]
+
+
+def _norm(s: str) -> str:
+    """
+    Normalisation unicode robuste pour matching flexible.
+    
+    PATCH 10: Supprime accents, ponctuation, et normalise espaces.
+    
+    Args:
+        s: Chaîne à normaliser
+        
+    Returns:
+        Chaîne normalisée (ascii, lowercase, espaces simples)
+    """
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", " ", s).strip()
+    return s
+
+
+def resolve_client_subfolders(client_root: Path) -> Dict[str, Path]:
+    """
+    PATCH 10: Détection intelligente des sous-dossiers clients.
+    
+    Stratégie en 2 passes :
+    1. Match par préfixe numérique (01*, 06*, etc.) → prioritaire
+    2. Fallback par mots-clés si préfixe non trouvé
+    
+    Args:
+        client_root: Racine du dossier client
+        
+    Returns:
+        Mapping {canonical_key: real_folder_path}
+        ex: {"01_personnel": Path(".../01 Dossier personnel")}
+        
+    Examples:
+        >>> resolve_client_subfolders(Path("/clients/DOE John"))
+        {
+            "01_personnel": Path(".../01 Dossier personnel"),
+            "06_rapport": Path(".../06 Rapport final"),
+            "03_tests": Path(".../03 Tests et bilans")
+        }
+    """
+    found = {}
+    
+    if not client_root.exists() or not client_root.is_dir():
+        return found
+    
+    subdirs = [p for p in client_root.iterdir() if p.is_dir() and not p.name.startswith('.')]
+    
+    # PASS 1: Match par préfixe numérique
+    for d in subdirs:
+        m = re.match(r"^\s*(\d{1,2})\b", d.name)
+        if not m:
+            continue
+        
+        prefix = m.group(1).zfill(2)  # "1" → "01"
+        canon = CANON_BY_PREFIX.get(prefix)
+        
+        if canon and canon not in found:
+            found[canon] = d
+    
+    # PASS 2: Fallback par mots-clés (seulement si pas trouvé)
+    for canon, keywords in KEYWORDS_FALLBACK.items():
+        if canon in found:
+            continue
+        
+        for d in subdirs:
+            dn = _norm(d.name)
+            if any(_norm(k) in dn for k in keywords):
+                found[canon] = d
+                break
+    
+    return found
 
 
 def normalize_folder_name(folder_name: str) -> str:
@@ -79,6 +205,8 @@ def find_folder(base_path: Path, folder_variants: List[str]) -> Optional[Path]:
     """
     Trouve un sous-dossier parmi plusieurs variantes possibles.
     
+    PATCH 10: Matching flexible avec patterns regex en fallback.
+    
     Args:
         base_path: Chemin de base
         folder_variants: Liste des noms possibles
@@ -92,37 +220,74 @@ def find_folder(base_path: Path, folder_variants: List[str]) -> Optional[Path]:
     # Normaliser les variantes
     normalized_variants = [normalize_folder_name(v) for v in folder_variants]
     
-    # Chercher dans les enfants directs
+    # Chercher dans les enfants directs (exact match)
     for child in base_path.iterdir():
         if child.is_dir():
             normalized_name = normalize_folder_name(child.name)
             if normalized_name in normalized_variants:
                 return child
     
+    # PATCH 10: Fallback avec patterns regex pour matching plus flexible
+    # Extraire le préfixe numérique de la première variante (ex: "01" de "01 Dossier personnel")
+    first_variant = folder_variants[0] if folder_variants else ""
+    prefix_match = re.match(r'^(\d+)', first_variant)
+    if prefix_match:
+        prefix = prefix_match.group(1)
+        # Chercher un dossier qui commence par ce préfixe
+        for child in base_path.iterdir():
+            if child.is_dir() and child.name.startswith(prefix):
+                # Vérifier que c'est bien un dossier pertinent (pas juste "01" dans autre chose)
+                normalized_child = normalize_folder_name(child.name)
+                # Si le nom contient au moins un mot-clé de la variante, c'est probablement bon
+                keywords = set()
+                for variant in folder_variants:
+                    # Extraire les mots significatifs (pas les chiffres seuls)
+                    words = [w.lower() for w in re.findall(r'\b[a-z]{3,}\b', variant, re.IGNORECASE)]
+                    keywords.update(words)
+                
+                if keywords:  # Si on a des mots-clés à chercher
+                    child_words = set(re.findall(r'\b[a-z]{3,}\b', normalized_child, re.IGNORECASE))
+                    if keywords & child_words:  # Intersection non vide
+                        return child
+                else:  # Si pas de mots-clés (ex: variante "01"), accepter le dossier
+                    return child
+    
     return None
 
 
-def score_gold_candidate(file_path: Path) -> float:
+def score_gold_candidate(file_path: Path, profile: str = "bilan_complet") -> float:
     """
     Calcule un score de probabilité qu'un fichier soit le GOLD.
     
+    PATCH 9: Exclut journal/evaluation stage, priorise vrais rapports finaux.
+    
     Args:
         file_path: Chemin du fichier
+        profile: Profil de validation (défaut: bilan_complet)
         
     Returns:
-        Score entre 0.0 et 1.0
+        Score entre 0.0 et 1.0 (0.0 si exclu)
     """
     score = 0.0
     filename = file_path.name.lower()
+    
+    # PATCH 9: Exclusions strictes AVANT scoring
+    if any(pattern in filename for pattern in GOLD_EXCLUDE_PATTERNS):
+        return 0.0  # Exclusion totale
     
     # Bonus si dans le bon dossier (06 Rapport final)
     parent_name = normalize_folder_name(file_path.parent.name)
     if "rapport" in parent_name or "06" in parent_name:
         score += 0.3
     
-    # Bonus pour mots-clés dans le nom
-    keyword_matches = sum(1 for kw in GOLD_KEYWORDS if kw in filename)
-    score += min(keyword_matches * 0.15, 0.45)
+    # PATCH 9: Priorité haute pour keywords composés
+    high_priority_matches = sum(1 for kw in GOLD_KEYWORDS_HIGH_PRIORITY if kw in filename)
+    if high_priority_matches > 0:
+        score += 0.5  # Gros boost
+    
+    # Priorité moyenne pour keywords simples
+    medium_priority_matches = sum(1 for kw in GOLD_KEYWORDS_MEDIUM_PRIORITY if kw in filename)
+    score += min(medium_priority_matches * 0.1, 0.3)
     
     # Bonus pour extension prioritaire
     if file_path.suffix == ".docx":
@@ -266,7 +431,7 @@ def find_rag_sources(client_folder: Path, index_msg: bool = False) -> List[Dict[
 
 def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict[str, Any]:
     """
-    Analyse complète d'un dossier client.
+    PATCH 10: Analyse complète d'un dossier client avec détection flexible.
     
     Args:
         client_folder_path: Chemin vers le dossier client
@@ -278,13 +443,12 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict
         - client_path: Chemin absolu
         - gold: Info sur le document GOLD ou None
         - rag_sources: Liste des sources RAG
-        - folder_structure: Dossiers détectés
-        - warnings: Liste des alertes
-        - pipeline_ready: bool
+        - folder_structure: Dossiers détectés (paths)
+        - folder_mapping: {canonical: real_name} pour affichage UI
+        - warnings: Liste des alertes (non-bloquantes)
+        - pipeline_ready: bool (mode dégradé toujours ready)
         - stats: Statistiques
-        - msg_files_count: Nombre de .msg détectés (si index_msg=False)
-        
-    CORRECTIF A: Support .msg avec option index_msg
+        - msg_files_count: Nombre de .msg détectés
     """
     client_folder = Path(client_folder_path).resolve()
     
@@ -294,11 +458,20 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict
     if not client_folder.is_dir():
         raise NotADirectoryError(f"Pas un dossier : {client_folder}")
     
-    # Détecter la structure
+    # PATCH 10: Détecter la structure avec nouvelle logique
+    resolved = resolve_client_subfolders(client_folder)
+    
+    # Construire folder_structure (paths) et folder_mapping (noms réels)
     folder_structure = {}
-    for key, variants in EXPECTED_FOLDERS.items():
-        found = find_folder(client_folder, variants)
-        folder_structure[key] = str(found) if found else None
+    folder_mapping = {}
+    
+    for canon in CANON_BY_PREFIX.values():
+        if canon in resolved:
+            folder_structure[canon] = str(resolved[canon])
+            folder_mapping[canon] = resolved[canon].name
+        else:
+            folder_structure[canon] = None
+            folder_mapping[canon] = None
     
     # Détecter GOLD
     gold = find_gold_document(client_folder)
@@ -315,32 +488,33 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict
         gold_path = gold["path"]
         rag_sources = [s for s in rag_sources if s["path"] != gold_path]
     
-    # Générer warnings
+    # PATCH 10: Warnings moins bloquants pour mode d'entraînement "brut"
     warnings = []
     
     if not gold:
-        warnings.append("❌ Aucun document GOLD détecté")
+        warnings.append("⚠️  Aucun document GOLD détecté (mode dégradé)")
     elif gold["score"] < 0.5:
         warnings.append(f"⚠️  Confiance GOLD faible ({gold['score']:.2f})")
     
     if not rag_sources:
-        warnings.append("❌ Aucune source RAG trouvée")
+        warnings.append("⚠️  Aucune source RAG trouvée (mode dégradé)")
     elif len(rag_sources) < 3:
-        warnings.append(f"⚠️  Peu de sources RAG ({len(rag_sources)})")
+        warnings.append(f"ℹ️  Peu de sources RAG ({len(rag_sources)})")
     
-    missing_folders = [key for key, path in folder_structure.items() 
-                      if path is None and key in ["01_personnel", "06_rapport"]]
-    if missing_folders:
-        warnings.append(f"⚠️  Dossiers manquants : {', '.join(missing_folders)}")
+    # PATCH 10: Afficher les dossiers manquants mais ne pas bloquer
+    missing_required = [canon for canon in REQUIRED_CANON if canon not in resolved]
+    if missing_required:
+        missing_display = [f"{c} (cherché)" for c in missing_required]
+        warnings.append(f"ℹ️  Dossiers requis introuvables : {', '.join(missing_display)}")
     
-    # Les .msg sont indexés par défaut maintenant
+    # PATCH 10: Afficher le mapping trouvé (pour debug/validation)
+    found_display = [f"{k} → '{folder_mapping[k]}'" for k, v in folder_mapping.items() if v]
+    if found_display:
+        warnings.append(f"✅ Dossiers détectés : {', '.join(found_display[:3])}...")  # Limit pour lisibilité
     
-    # Pipeline ready ?
-    pipeline_ready = (
-        gold is not None and
-        len(rag_sources) > 0 and
-        gold["score"] >= 0.3
-    )
+    # PATCH 10: Pipeline considéré "ready" même avec warnings
+    # Mode d'entraînement "brut" : on veut un pipeline moins bloquant
+    pipeline_ready = True  # Toujours prêt en mode dégradé
     
     # Stats par extension
     extensions_count = {}
@@ -358,6 +532,7 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict
         "gold": gold,
         "rag_sources": rag_sources,
         "folder_structure": folder_structure,
+        "folder_mapping": folder_mapping,  # PATCH 10: Nouveau champ pour UI
         "warnings": warnings,
         "pipeline_ready": pipeline_ready,
         "stats": {
@@ -368,7 +543,7 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = False) -> Dict
             "total_size_mb": round(total_size / 1024 / 1024, 2),
             "folders_detected": sum(1 for v in folder_structure.values() if v is not None),
             "folders_missing": sum(1 for v in folder_structure.values() if v is None),
-            "msg_files_count": msg_files_count,  # ✅ CORRECTIF A
+            "msg_files_count": msg_files_count,
         },
         "scan_timestamp": datetime.now().isoformat(),
     }

@@ -52,19 +52,26 @@ class RAGGenerator:
             training_state: État de training optionnel (patterns appris)
         """
         if not LLAMA_INDEX_AVAILABLE:
-            raise ImportError(
-                "LlamaIndex non disponible. Installez : pip install llama-index"
+            import warnings
+            warnings.warn(
+                "⚠️ LlamaIndex non disponible. Mode dégradé activé. "
+                "Pour activer le RAG avancé : pip install llama-index",
+                RuntimeWarning
             )
+            self.degraded_mode = True
+        else:
+            self.degraded_mode = False
         
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.training_state = training_state
         
-        # Configuration LlamaIndex
-        Settings.embed_model = OpenAIEmbedding(model=embedding_model)
-        Settings.llm = OpenAI(model=llm_model, temperature=temperature)
-        Settings.chunk_size = chunk_size
-        Settings.chunk_overlap = chunk_overlap
+        # Configuration LlamaIndex (seulement si disponible)
+        if not self.degraded_mode:
+            Settings.embed_model = OpenAIEmbedding(model=embedding_model)
+            Settings.llm = OpenAI(model=llm_model, temperature=temperature)
+            Settings.chunk_size = chunk_size
+            Settings.chunk_overlap = chunk_overlap
         
         self.index = None
         self.sources_metadata = []
@@ -84,6 +91,19 @@ class RAGGenerator:
         Returns:
             Dict avec métadonnées de l'indexation
         """
+        if self.degraded_mode:
+            import warnings
+            warnings.warn(
+                "⚠️ Mode dégradé : indexation RAG désactivée (LlamaIndex non disponible)",
+                RuntimeWarning
+            )
+            return {
+                "status": "degraded",
+                "sources_count": 0,
+                "chunks_count": 0,
+                "message": "LlamaIndex non disponible - mode dégradé"
+            }
+        
         sources_path = Path(sources_folder)
         
         if not sources_path.exists():
@@ -180,6 +200,29 @@ class RAGGenerator:
         Returns:
             Dict avec les champs remplis et les métadonnées
         """
+        if self.degraded_mode:
+            import warnings
+            warnings.warn(
+                "⚠️ Mode dégradé : génération RAG désactivée (LlamaIndex non disponible)",
+                RuntimeWarning
+            )
+            # Retourner des champs vides avec fallback "Non renseigné"
+            filled_fields = {field: "Non renseigné" for field in template_fields}
+            debug_info = {
+                field: {
+                    "value": "Non renseigné",
+                    "error": "LlamaIndex non disponible - mode dégradé",
+                    "degraded_mode": True
+                }
+                for field in template_fields
+            }
+            return {
+                "fields": filled_fields,
+                "debug": debug_info,
+                "status": "degraded",
+                "timestamp": datetime.now().isoformat()
+            }
+        
         if self.index is None:
             raise ValueError("Index RAG non construit. Appelez build_index_from_sources() d'abord.")
         
@@ -500,6 +543,14 @@ def get_chunks_preview(
     Returns:
         Liste de chunks avec métadonnées
     """
+    if not LLAMA_INDEX_AVAILABLE:
+        import warnings
+        warnings.warn(
+            "⚠️ Mode dégradé : aperçu chunks désactivé (LlamaIndex non disponible)",
+            RuntimeWarning
+        )
+        return []
+    
     sources_path = Path(sources_folder)
     
     if not sources_path.exists():
