@@ -13,7 +13,8 @@ from .normalizer import normalize_segments
 
 def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str, 
                                    gate_profile_override: str = None,
-                                   rag_sources: list = None) -> Dict[str, Any]:
+                                   rag_sources: list = None,
+                                   client_name: str = None) -> Dict[str, Any]:
     """
     Parse un document DOCX RH-Pro et retourne un dictionnaire normalisé
     
@@ -21,7 +22,8 @@ def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str,
         docx_path: Chemin vers le fichier DOCX
         ruleset_path: Chemin vers le ruleset YAML
         gate_profile_override: Si fourni, force ce profil pour le production gate
-        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 1)
+        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 6)
+        client_name: Nom du client (pour fallback identity depuis folder name)
     
     Returns:
         dict avec clés:
@@ -31,7 +33,8 @@ def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str,
     Example:
         >>> result = parse_bilan_docx_to_normalized(
         ...     'bilan.docx',
-        ...     'config/rulesets/rhpro_v1.yaml'
+        ...     'config/rulesets/rhpro_v1.yaml',
+        ...     client_name='SCHMIDT Mélanie'
         ... )
         >>> print(result['report']['coverage_ratio'])
         0.85
@@ -72,10 +75,11 @@ def parse_bilan_docx_to_normalized(docx_path: str, ruleset_path: str,
     # 4. Mapper les titres aux sections canoniques
     segments = map_segments_to_sections(segments, ruleset)
     
-    # 5. Normaliser (construire le dict final) avec rag_sources pour PATCH 1
+    # 5. Normaliser (construire le dict final) avec rag_sources + client_name pour PATCH 6 + Quick Win
     result = normalize_segments(segments, ruleset, 
                                 gate_profile_override=gate_profile_override,
-                                rag_sources=rag_sources)
+                                rag_sources=rag_sources,
+                                client_name=client_name)
     
     return result
 
@@ -84,7 +88,8 @@ def parse_bilan_from_paths(
     docx_path: str,
     ruleset_path: str = None,
     gate_profile_override: str = None,
-    rag_sources: list = None
+    rag_sources: list = None,
+    client_name: str = None
 ) -> Dict[str, Any]:
     """
     Variante avec ruleset par défaut
@@ -93,7 +98,8 @@ def parse_bilan_from_paths(
         docx_path: Chemin vers le fichier DOCX
         ruleset_path: Chemin vers le ruleset (optionnel, utilise rhpro_v1.yaml par défaut)
         gate_profile_override: Si fourni, force ce profil pour le production gate
-        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 1)
+        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 6)
+        client_name: Nom du client (pour fallback identity depuis folder name)
     
     Returns:
         dict avec 'normalized' et 'report'
@@ -105,4 +111,5 @@ def parse_bilan_from_paths(
     
     return parse_bilan_docx_to_normalized(docx_path, ruleset_path, 
                                          gate_profile_override=gate_profile_override,
-                                         rag_sources=rag_sources)
+                                         rag_sources=rag_sources,
+                                         client_name=client_name)

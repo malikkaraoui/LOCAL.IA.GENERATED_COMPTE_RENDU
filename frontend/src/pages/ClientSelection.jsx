@@ -38,6 +38,7 @@ function ClientSelection() {
   const [llmModel, setLlmModel] = useState('mistral:latest');
   const [llmCustom, setLlmCustom] = useState('');
   const [useCustomModel, setUseCustomModel] = useState(false);
+  const [maxChars, setMaxChars] = useState(500);
   const [availableModels, setAvailableModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [llmRestarting, setLlmRestarting] = useState(false);
@@ -327,6 +328,9 @@ function ClientSelection() {
 
       const finalModel = useCustomModel ? llmCustom : llmModel;
       
+      // Calculer le multiplicateur basé sur la longueur max choisie (base = 500)
+      const maxCharsMultiplier = maxChars / 500;
+      
       const response = await reportsAPI.createReport(
         selectedClient,
         null, // source_file
@@ -350,6 +354,7 @@ function ClientSelection() {
           topk: topK,
           temperature,
           top_p: topP,
+          max_chars_multiplier: maxCharsMultiplier,
           include_filters: includeFilters,
           exclude_filters: excludeFilters,
           force_reextract: forceReextract,
@@ -801,6 +806,26 @@ function ClientSelection() {
               </div>
             </div>
           )}
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>
+                📏 Longueur max paragraphe
+                <span style={{ marginLeft: 8, fontSize: '0.85em', opacity: 0.7 }}>
+                  (évite les "..." de troncature)
+                </span>
+              </label>
+              <select
+                value={maxChars}
+                onChange={(e) => setMaxChars(Number(e.target.value))}
+                title="Longueur maximale des paragraphes générés par le LLM"
+              >
+                <option value={500}>500 caractères (défaut)</option>
+                <option value={1000}>1000 caractères (2x plus long)</option>
+                <option value={2000}>2000 caractères (4x plus long)</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -53,6 +53,7 @@ class ReportGenerationParams:
     temperature: float = 0.2
     topk: int = 10
     top_p: float = 0.9
+    max_chars_multiplier: float = 1.0
     
     # Extraction
     extract_method: str = "auto"
@@ -562,6 +563,7 @@ class ReportOrchestrator:
             temperature=self.params.temperature,
             topk=self.params.topk,
             top_p=self.params.top_p,
+            max_chars_multiplier=self.params.max_chars_multiplier,
             fields=fields,
             deterministic_values=deterministic,
             include_filters=self.params.include_filters or [],

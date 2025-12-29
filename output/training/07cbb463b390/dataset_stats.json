@@ -1,0 +1,31 @@
+{
+  "total_clients": 100,
+  "successful_scans": 100,
+  "errors": 0,
+  "errors_top": [],
+  "clients_used": 93,
+  "clients_no_sources": 7,
+  "gold_detected": 97,
+  "gold_detection_rate": 0.97,
+  "pipeline_ready": 100,
+  "pipeline_ready_rate": 1.0,
+  "sources_stats": {
+    "mean": 8.44,
+    "median": 6.0,
+    "min": 0,
+    "max": 33,
+    "p10": 1,
+    "p90": 20
+  },
+  "extensions_distribution": {
+    ".docx": 247,
+    ".msg": 64,
+    ".pdf": 529,
+    ".doc": 4
+  },
+  "gold_strategies": {
+    "most_recent_fallback": 17,
+    "recursive_scan": 78,
+    "06_rapport_final": 2
+  }
+}

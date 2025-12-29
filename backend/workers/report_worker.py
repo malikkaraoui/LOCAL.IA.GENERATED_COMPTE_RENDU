@@ -39,6 +39,7 @@ def process_report_job(
     temperature: float = 0.2,
     topk: int = 10,
     top_p: float = 0.9,
+    max_chars_multiplier: float = 1.0,
     # Options
     include_filters: list = None,
     exclude_filters: list = None,
@@ -139,6 +140,7 @@ def process_report_job(
             temperature=temperature,
             topk=topk,
             top_p=top_p,
+            max_chars_multiplier=max_chars_multiplier,
             extract_method=extract_method,
             source_file=source_file,
             enable_soffice=enable_soffice,

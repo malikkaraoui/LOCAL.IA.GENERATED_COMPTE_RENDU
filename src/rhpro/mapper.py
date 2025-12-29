@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 
 from .segmenter import Segment
 from .ruleset_loader import RulesetLoader
+from .title_rules import match_title_rule  # PATCH: Fallback regex
 
 
 # Liste des patterns de titres à ignorer (titres de document générique)
@@ -53,7 +54,11 @@ class TitleMapper:
     def _find_best_match(self, title: str) -> Optional[Dict[str, Any]]:
         """
         Trouve la meilleure correspondance pour un titre
-        Retourne: {'section_id': str, 'confidence': float} ou None
+        Retourne: {'section_id': str, 'confidence': float, 'method': str} ou None
+        
+        Ordre de résolution :
+        1. Méthodes configurées (exact, contains, regex, fuzzy)
+        2. Fallback regex (title_rules.py) - NOUVEAU
         """
         # Tester chaque méthode dans l'ordre défini
         for method in self.method_order:
@@ -70,6 +75,17 @@ class TitleMapper:
             
             if result:
                 return result
+        
+        # PATCH: Fallback regex si aucune méthode n'a matché
+        # Normaliser le titre avant d'appliquer les règles (remove accents, etc.)
+        title_normalized = self._normalize_title_robust(title)
+        section_id = match_title_rule(title_normalized, debug=False)
+        if section_id:
+            return {
+                'section_id': section_id,
+                'confidence': 0.80,  # Confiance moyenne pour fallback regex
+                'method': 'title_rule'
+            }
         
         return None
     

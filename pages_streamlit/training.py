@@ -341,20 +341,28 @@ def show_batch_mode():
     
     st.success(f"✅ Batch sélectionné : `{Path(batch_root).name}`")
     
-    # Bouton pour scanner le batch
-    if st.button("🔍 Scanner le batch", type="primary"):
-        with st.spinner("Scan en cours..."):
-            try:
-                batch_analysis = scan_batch_clients(
-                    batch_path=batch_root,
-                    limit=None,
-                    min_pipeline_score=0.3,
-                )
-                st.session_state["batch_analysis"] = batch_analysis
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Erreur scan batch : {e}")
-                return
+    # Bouton pour scanner/re-scanner le batch (toujours visible)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        scan_button_label = "🔍 Scanner le batch" if "batch_analysis" not in st.session_state else "🔄 Re-scanner le batch"
+        if st.button(scan_button_label, type="primary", use_container_width=True):
+            with st.spinner("Scan en cours..."):
+                try:
+                    batch_analysis = scan_batch_clients(
+                        batch_path=batch_root,
+                        limit=None,
+                        min_pipeline_score=0.3,
+                    )
+                    st.session_state["batch_analysis"] = batch_analysis
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Erreur scan batch : {e}")
+                    return
+    
+    with col2:
+        if "batch_analysis" in st.session_state and st.button("🗑️ Effacer", use_container_width=True):
+            del st.session_state["batch_analysis"]
+            st.rerun()
     
     # Afficher les résultats du scan
     if "batch_analysis" not in st.session_state:

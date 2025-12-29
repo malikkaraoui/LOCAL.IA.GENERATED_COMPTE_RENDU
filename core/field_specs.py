@@ -158,8 +158,8 @@ def _register_specs() -> dict[str, FieldSpec]:
             field_type="narrative",
             query=_slug_to_sentence(key),
             instructions=instr,
-            max_chars=500,
-            max_lines=4,
+            max_chars=3000,
+            max_lines=15,
             require_sources=False,
             skip_llm_if_no_sources=False,
         )
@@ -170,8 +170,8 @@ def _register_specs() -> dict[str, FieldSpec]:
             field_type="list",
             query=_slug_to_sentence(key),
             instructions=_default_instructions(key, "list"),
-            max_chars=400,
-            max_lines=4,
+            max_chars=2000,
+            max_lines=10,
             require_sources=False,
             skip_llm_if_no_sources=False,
         )
@@ -226,8 +226,8 @@ def _register_specs() -> dict[str, FieldSpec]:
             field_type="short" if key == "NUMERO_AVS" else "narrative",
             query=_slug_to_sentence(key),
             instructions=instr or _default_instructions(key, "short"),
-            max_chars=50 if key == "NUMERO_AVS" else 500,
-            max_lines=1 if key == "NUMERO_AVS" else 4,
+            max_chars=50 if key == "NUMERO_AVS" else 3000,
+            max_lines=1 if key == "NUMERO_AVS" else 15,
             require_sources=True,
             skip_llm_if_no_sources=True,
         )
@@ -238,8 +238,8 @@ def _register_specs() -> dict[str, FieldSpec]:
         field_type="narrative",
         query="Champ du rapport",
         instructions=_default_instructions("champ", "narrative"),
-        max_chars=400,
-        max_lines=4,
+        max_chars=2000,
+        max_lines=10,
     )
 
     return specs
@@ -272,3 +272,49 @@ def get_field_spec(key: str) -> FieldSpec:
 def normalize_allowed_value(value: str) -> str:
     text = unicodedata.normalize("NFKD", value or "").strip().lower()
     return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
+def apply_max_chars_multiplier(spec: FieldSpec, multiplier: float) -> FieldSpec:
+    """
+    Applique un multiplicateur aux limites max_chars et max_lines d'un FieldSpec.
+    
+    Args:
+        spec: Spécification d'origine
+        multiplier: Facteur multiplicatif (0.5 = moitié, 2.0 = double, etc.)
+        
+    Returns:
+        Nouveau FieldSpec avec limites ajustées
+        
+    Examples:
+        >>> spec = FieldSpec(key="TEST", max_chars=500, max_lines=4, ...)
+        >>> new_spec = apply_max_chars_multiplier(spec, 2.0)
+        >>> new_spec.max_chars
+        1000
+        >>> new_spec.max_lines
+        8
+    """
+    if multiplier == 1.0:
+        return spec
+    
+    new_max_chars = int(spec.max_chars * multiplier) if spec.max_chars else 0
+    new_max_lines = int(spec.max_lines * multiplier) if spec.max_lines else 0
+    
+    # Éviter des valeurs trop petites (mais garder 0 si c'était 0 à l'origine)
+    # Note: on vérifie APRÈS int() car 1 * 0.1 = 0.1 → int() = 0
+    if spec.max_chars > 0 and new_max_chars < 50:
+        new_max_chars = 50
+    if spec.max_lines > 0 and new_max_lines < 1:
+        new_max_lines = 1
+    
+    return FieldSpec(
+        key=spec.key,
+        field_type=spec.field_type,
+        query=spec.query,
+        instructions=spec.instructions,
+        max_chars=new_max_chars,
+        max_lines=new_max_lines,
+        require_sources=spec.require_sources,
+        skip_llm_if_no_sources=spec.skip_llm_if_no_sources,
+        allowed_values=spec.allowed_values,
+        deterministic_source=spec.deterministic_source,
+    )

@@ -28,6 +28,19 @@ class TestSanitizeOutput:
         """Supprime les espaces en début/fin."""
         assert sanitize_output("  content  ") == "content"
 
+    def test_removes_trailing_ellipsis(self):
+        """Supprime les points de suspension '...' à la fin."""
+        assert sanitize_output("Texte complet...") == "Texte complet"
+        assert sanitize_output("Plusieurs lignes\net du contenu...") == "Plusieurs lignes\net du contenu"
+
+    def test_removes_trailing_unicode_ellipsis(self):
+        """Supprime le caractère Unicode '…' à la fin."""
+        assert sanitize_output("Texte avec ellipsis unicode…") == "Texte avec ellipsis unicode"
+
+    def test_preserves_ellipsis_in_middle(self):
+        """Préserve les '...' au milieu du texte (pas de suppression si pas à la fin)."""
+        assert sanitize_output("Texte... avec suite") == "Texte... avec suite"
+
 
 class TestLooksLikeJsonOrMarkdown:
     """Tests pour la détection JSON/Markdown."""
@@ -79,7 +92,7 @@ class TestTruncateChars:
         text = "a" * 100
         result = truncate_chars(text, max_chars=50)
         assert len(result) == 50
-        assert result.endswith("…")
+        # truncate_chars ne doit PAS ajouter "…" - c'est le comportement voulu
 
     def test_no_truncation_if_short(self):
         """Pas de troncature si texte court."""

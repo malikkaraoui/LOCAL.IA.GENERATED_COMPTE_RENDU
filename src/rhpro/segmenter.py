@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 
 from .docx_structure import Paragraph
 from .ruleset_loader import RulesetLoader
+from .dataset_training import META_HEADERS_NORM, _normalize_title_for_meta
 
 
 @dataclass
@@ -40,13 +41,22 @@ class Segmenter:
             heading_info = self._detect_heading(para)
             
             if heading_info:
-                # Nouveau titre détecté
+                # ✅ PRIORITÉ 3: Vérifier si c'est un meta header à ignorer
+                normalized_title = self._normalize_title(para.text)
+                normalized_for_meta = _normalize_title_for_meta(normalized_title)
+                
+                if normalized_for_meta in META_HEADERS_NORM:
+                    # Meta header administratif → ignorer, ne pas créer de segment
+                    # Le contenu suivant sera attaché au segment précédent ou ignoré
+                    continue
+                
+                # Nouveau titre détecté (non-meta)
                 if current_segment:
                     segments.append(current_segment)
                 
                 current_segment = Segment(
                     raw_title=para.text,
-                    normalized_title=self._normalize_title(para.text),
+                    normalized_title=normalized_title,
                     level=heading_info['level']
                 )
             else:

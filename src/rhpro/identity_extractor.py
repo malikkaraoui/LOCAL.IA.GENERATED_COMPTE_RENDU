@@ -327,3 +327,93 @@ def is_identity_line(text: str) -> bool:
         return True
     
     return False
+
+
+def extract_identity_from_folder_name(folder_name: str) -> Dict[str, str]:
+    """
+    Extrait l'identité depuis le nom du dossier client.
+    
+    QUICK WIN: Fallback pour récupérer name/surname quand aucune autre source disponible.
+    
+    Patterns supportés:
+    - "SCHMIDT Mélanie" → surname: SCHMIDT, name: Mélanie
+    - "CAMPOS DA COSTA Paula" → surname: CAMPOS DA COSTA, name: Paula
+    - "Jean DUPONT" → name: Jean, surname: DUPONT
+    - "Dupont-Martin Sophie" → surname: Dupont-Martin, name: Sophie
+    
+    Convention: 
+    - Mots en MAJUSCULES = nom de famille (peut être multi-mots)
+    - Premier mot en casse mixte après majuscules = prénom
+    - Si pas de majuscules claires, dernier mot = nom
+    
+    Args:
+        folder_name: Nom du dossier client (ex: "SCHMIDT Mélanie")
+        
+    Returns:
+        Dict avec clés: avs (vide), name, surname, full_name
+        
+    Examples:
+        >>> extract_identity_from_folder_name("SCHMIDT Mélanie")
+        {'avs': '', 'name': 'Mélanie', 'surname': 'SCHMIDT', 'full_name': 'SCHMIDT Mélanie'}
+        
+        >>> extract_identity_from_folder_name("CAMPOS DA COSTA Paula")
+        {'avs': '', 'name': 'Paula', 'surname': 'CAMPOS DA COSTA', 'full_name': 'CAMPOS DA COSTA Paula'}
+    """
+    result = {"avs": "", "name": "", "surname": "", "full_name": ""}
+    
+    # Nettoyer le nom du dossier
+    # Retirer préfixes numériques (ex: "001_SCHMIDT Mélanie")
+    folder_clean = re.sub(r'^\d+[_\-\s]*', '', folder_name).strip()
+    
+    # Retirer extensions et caractères spéciaux
+    folder_clean = re.sub(r'\.(docx?|pdf|txt)$', '', folder_clean, flags=re.IGNORECASE)
+    folder_clean = folder_clean.replace('_', ' ').replace('-', ' ')
+    
+    if not folder_clean:
+        return result
+    
+    result['full_name'] = folder_clean
+    
+    # Séparer en mots
+    words = folder_clean.split()
+    
+    if len(words) == 0:
+        return result
+    
+    # Pattern 1: Identifier les mots en MAJUSCULES (nom de famille)
+    uppercase_words = []
+    other_words = []
+    
+    for word in words:
+        # Un mot est considéré comme "majuscule" si au moins 50% des lettres sont en maj
+        if word and sum(1 for c in word if c.isupper()) >= len(word) * 0.5:
+            uppercase_words.append(word)
+        else:
+            other_words.append(word)
+    
+    # Cas 1: Mots en MAJUSCULES trouvés → nom de famille
+    if uppercase_words:
+        result['surname'] = ' '.join(uppercase_words)
+        
+        # Prénom = reste des mots (après les majuscules dans l'ordre original)
+        # Reconstruire l'ordre
+        surname_start_idx = words.index(uppercase_words[0])
+        surname_end_idx = words.index(uppercase_words[-1])
+        
+        # Prénoms = mots après le nom
+        if surname_end_idx + 1 < len(words):
+            result['name'] = ' '.join(words[surname_end_idx + 1:])
+        # Ou prénoms avant (moins courant)
+        elif surname_start_idx > 0:
+            result['name'] = ' '.join(words[:surname_start_idx])
+    
+    # Cas 2: Pas de majuscules claires → convention dernier mot = nom
+    elif len(words) >= 2:
+        result['surname'] = words[-1]
+        result['name'] = ' '.join(words[:-1])
+    
+    # Cas 3: Un seul mot → nom de famille uniquement
+    elif len(words) == 1:
+        result['surname'] = words[0]
+    
+    return result

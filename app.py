@@ -328,6 +328,7 @@ def build_config(
     topk: int,
     temperature: float,
     top_p: float,
+    max_chars_multiplier: float,
     include_filters: str,
     exclude_filters: str,
     name: str,
@@ -363,6 +364,7 @@ def build_config(
         topk=topk,
         temperature=temperature,
         top_p=top_p,
+        max_chars_multiplier=max_chars_multiplier,
         include_filters=[s.strip() for s in include_filters.split(",") if s.strip()],
         exclude_filters=[s.strip() for s in exclude_filters.split(",") if s.strip()],
         name=name,
@@ -606,6 +608,16 @@ with st.expander("⚙️ Options avancées (RAG & sortie)", expanded=False):
     topk = tuning_cols[0].slider("Top-K passages", min_value=3, max_value=20, value=10)
     temperature = tuning_cols[1].slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
     top_p = tuning_cols[2].slider("Top-p", min_value=0.1, max_value=1.0, value=0.9, step=0.05)
+
+    # PATCH 11: Contrôle de longueur des textes générés
+    st.markdown("**Longueur des textes générés**")
+    max_chars_value = st.selectbox(
+        "Longueur max paragraphe",
+        options=[500, 1000, 2000],
+        index=0,
+        help="Longueur maximale des paragraphes générés par le LLM (500 = défaut, évite les '...' de troncature)"
+    )
+    max_chars_multiplier = max_chars_value / 500  # Convertir en multiplicateur
 
     filter_cols = st.columns(2)
     include_filters = filter_cols[0].text_input("Inclure chemins (,)", value="")
@@ -855,6 +867,7 @@ config_kwargs = dict(
     topk=topk,
     temperature=temperature,
     top_p=top_p,
+    max_chars_multiplier=max_chars_multiplier,
     include_filters=include_filters,
     exclude_filters=exclude_filters,
     name=name,
@@ -887,6 +900,7 @@ run_all_clicked = st.button(
 if st.session_state.config_obj:
     st.session_state.config_obj.host = llm_host
     st.session_state.config_obj.model = model
+    st.session_state.config_obj.max_chars_multiplier = max_chars_multiplier
     st.session_state.config_obj.location_city = location_city
     st.session_state.config_obj.auto_location_date = auto_location_date
     st.session_state.config_obj.location_date_manual = manual_location_date

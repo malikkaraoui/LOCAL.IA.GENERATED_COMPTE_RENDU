@@ -131,6 +131,7 @@ def build_config(
     topk: int,
     temperature: float,
     top_p: float,
+    max_chars_multiplier: float,
     include_filters: str,
     exclude_filters: str,
     name: str,
@@ -156,6 +157,7 @@ def build_config(
         topk=topk,
         temperature=temperature,
         top_p=top_p,
+        max_chars_multiplier=max_chars_multiplier,
         include_filters=[s.strip() for s in include_filters.split(",") if s.strip()],
         exclude_filters=[s.strip() for s in exclude_filters.split(",") if s.strip()],
         name=name,
@@ -255,6 +257,16 @@ with cols[1]:
     topk = st.slider("Top-K passages", min_value=3, max_value=20, value=10)
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
     top_p = st.slider("Top-p", min_value=0.1, max_value=1.0, value=0.9, step=0.05)
+    
+    # PATCH 11: Contrôle de longueur des textes générés
+    max_chars_value = st.selectbox(
+        "📏 Longueur max paragraphe",
+        options=[500, 1000, 2000],
+        index=0,
+        help="Longueur maximale des paragraphes générés (500 = défaut, évite les '...' de troncature)"
+    )
+    max_chars_multiplier = max_chars_value / 500  # Convertir en multiplicateur
+    
     include_filters = st.text_input("Inclure chemins (séparés par ,)", value="")
     exclude_filters = st.text_input("Exclure chemins (séparés par ,)", value="")
     force_reextract = st.checkbox("Forcer la ré-extraction", value=False)
@@ -278,6 +290,7 @@ if extract_clicked:
         template_path=template_path,
         output_dir_input=output_dir_input,
         model=model,
+        max_chars_multiplier=max_chars_multiplier,
         topk=topk,
         temperature=temperature,
         top_p=top_p,

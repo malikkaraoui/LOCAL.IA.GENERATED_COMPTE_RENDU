@@ -34,6 +34,7 @@ class PipelineConfig:
     topk: int = 10
     temperature: float = 0.2
     top_p: float = 0.9
+    max_chars_multiplier: float = 1.0  # PATCH 11: Multiplicateur longueur textes
     include_filters: list[str] = field(default_factory=list)
     exclude_filters: list[str] = field(default_factory=list)
     fields: Optional[list[dict[str, Any]]] = None
@@ -242,6 +243,7 @@ class RapportOrchestrator:
             topk=config.topk,
             temperature=config.temperature,
             top_p=config.top_p,
+            max_chars_multiplier=config.max_chars_multiplier,
             exclude_filters=config.exclude_filters,
             include_filters=config.include_filters,
             debug_dir=debug_dir,

@@ -9,11 +9,12 @@ from .segmenter import Segment
 from .ruleset_loader import RulesetLoader
 from .inline_extractor import InlineExtractor
 from .identity_extractor import (
-    extract_identity_from_corpus, 
     extract_identity_from_files,
     merge_identity_results,
-    is_identity_line
+    is_identity_line,
+    extract_identity_from_folder_name
 )
+from .dataset_training import META_HEADERS_NORM, _normalize_title_for_meta
 
 
 class Normalizer:
@@ -28,14 +29,15 @@ class Normalizer:
         self.provenance: Dict[str, Dict[str, Any]] = {}  # Track provenance
         self.gate_profile_override: Optional[str] = None  # Override manuel du profil
     
-    def normalize(self, segments: List[Segment], gate_profile_override: Optional[str] = None, rag_sources: Optional[List[str]] = None) -> Dict[str, Any]:
+    def normalize(self, segments: List[Segment], gate_profile_override: Optional[str] = None, rag_sources: Optional[List[str]] = None, client_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Construit le dict normalisé
         
         Args:
             segments: Segments à normaliser
             gate_profile_override: Si fourni, force ce profil au lieu de l'auto-détection
-            rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 1)
+            rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 6)
+            client_name: Nom du client (pour fallback identity depuis folder name)
             
         Retourne: {'normalized': dict, 'report': dict, 'provenance': dict}
         """
@@ -60,7 +62,7 @@ class Normalizer:
         # Post-traitement : extraire les sous-sections inline si nécessaire
         self._extract_inline_subsections(normalized, segments)
         
-        # PATCH 1: Extraction identity globale depuis tous les sources (si identity vide)
+        # PATCH 6: Extraction identity globale depuis tous les sources (si identity vide)
         if rag_sources and not self._is_identity_filled(normalized):
             global_identity = extract_identity_from_files(rag_sources)
             if global_identity:
@@ -70,6 +72,16 @@ class Normalizer:
                     global_identity
                 )
                 self.inline_warnings.append("Identity extracted from RAG sources (global scan)")
+        
+        # QUICK WIN: Fallback identity depuis nom du dossier client
+        if client_name and not self._is_identity_filled(normalized):
+            folder_identity = extract_identity_from_folder_name(client_name)
+            if folder_identity.get('name') or folder_identity.get('surname'):
+                normalized['identity'] = merge_identity_results(
+                    normalized.get('identity', {}),
+                    folder_identity
+                )
+                self.inline_warnings.append(f"Identity inferred from folder name: {client_name}")
         
         # Générer le rapport
         report = self._generate_report(deduplicated, normalized)
@@ -372,7 +384,15 @@ class Normalizer:
                 })
             else:
                 # PATCH 2: Ne pas ajouter aux unknown_titles si c'est une ligne d'identité
-                if not is_identity_line(segment.normalized_title):
+                # ✅ PRIORITÉ 3: Ne pas ajouter aux unknown_titles si c'est un meta header
+                title_norm = _normalize_title_for_meta(segment.normalized_title)
+                
+                if title_norm in META_HEADERS_NORM:
+                    # Meta header administratif ignoré
+                    self.inline_warnings.append(
+                        f"Meta header ignored: '{segment.normalized_title[:60]}...'"
+                    )
+                elif not is_identity_line(segment.normalized_title):
                     unknown_titles.append(segment.normalized_title)
                 else:
                     # Optionnel: logger pour debug
@@ -883,7 +903,8 @@ class Normalizer:
 
 def normalize_segments(segments: List[Segment], ruleset: RulesetLoader, 
                       gate_profile_override: Optional[str] = None,
-                      rag_sources: Optional[List[str]] = None) -> Dict[str, Any]:
+                      rag_sources: Optional[List[str]] = None,
+                      client_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Helper function pour normaliser les segments
     
@@ -891,7 +912,8 @@ def normalize_segments(segments: List[Segment], ruleset: RulesetLoader,
         segments: Segments à normaliser
         ruleset: Ruleset chargé
         gate_profile_override: Si fourni, force ce profil pour le production gate
-        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 1)
+        rag_sources: Liste des fichiers sources pour extraction identity globale (PATCH 6)
+        client_name: Nom du client (pour fallback identity depuis folder name)
     """
     normalizer = Normalizer(ruleset)
-    return normalizer.normalize(segments, gate_profile_override=gate_profile_override, rag_sources=rag_sources)
+    return normalizer.normalize(segments, gate_profile_override=gate_profile_override, rag_sources=rag_sources, client_name=client_name)

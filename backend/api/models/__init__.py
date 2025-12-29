@@ -47,6 +47,7 @@ class ReportCreateRequest(BaseModel):
     temperature: Optional[float] = Field(0.2, ge=0, le=1, description="Température LLM")
     topk: Optional[int] = Field(10, description="Top-K passages")
     top_p: Optional[float] = Field(0.9, description="Top-p")
+    max_chars_multiplier: Optional[float] = Field(1.0, ge=0.5, le=8.0, description="Multiplicateur de longueur max (0.5x à 8x)")
     
     # Filtres
     include_filters: Optional[str] = Field(None, description="Chemins à inclure (CSV)")

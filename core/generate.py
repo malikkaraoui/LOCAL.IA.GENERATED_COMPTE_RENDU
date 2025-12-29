@@ -63,7 +63,11 @@ def ollama_generate(
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": temperature, "top_p": top_p},
+            "options": {
+                "temperature": temperature,
+                "top_p": top_p,
+                "num_predict": 4096,  # Tokens max générés (défaut=128 est trop court!)
+            },
         }
         data = json.dumps(payload).encode("utf-8")
         req = request.Request(url, data=data, headers={"Content-Type": "application/json"})
@@ -139,6 +143,15 @@ def sanitize_output(text: str) -> str:
     text = text.replace("```", " ")
     text = text.replace("\u200b", " ")
     text = re.sub(r"(?i)^json[:\s]+", "", text.strip())
+    
+    # Supprimer les points de suspension "..." que le LLM pourrait ajouter à la fin
+    # pour indiquer une troncature (interdits par les instructions mais parfois présents)
+    text = text.strip()
+    if text.endswith("..."):
+        text = text[:-3].rstrip()
+    if text.endswith("…"):  # Version Unicode du caractère points de suspension
+        text = text[:-1].rstrip()
+    
     return text.strip()
 
 
@@ -179,10 +192,50 @@ def truncate_lines(text: str, max_lines: int) -> str:
     return "\n".join(lines)
 
 
-def truncate_chars(text: str, max_chars: int) -> str:
-    if max_chars and len(text) > max_chars:
-        return text[: max_chars - 1].rstrip() + "…"
-    return text
+def truncate_chars(text: str, max_chars: int, smart: bool = True) -> str:
+    """
+    Tronque le texte à max_chars caractères.
+    
+    Args:
+        text: Texte à tronquer
+        max_chars: Limite de caractères (0 = pas de limite)
+        smart: Si True, coupe à la fin d'une phrase (. ou ;) plutôt qu'au milieu d'un mot
+        
+    Returns:
+        Texte tronqué SANS "..." ajouté automatiquement
+        
+    Examples:
+        >>> truncate_chars("Hello world. How are you?", 15, smart=False)
+        'Hello world. Ho'
+        >>> truncate_chars("Hello world. How are you?", 15, smart=True)
+        'Hello world.'
+    """
+    if not max_chars or len(text) <= max_chars:
+        return text.rstrip()  # Toujours strip trailing spaces
+    
+    if not smart:
+        # Troncature brutale
+        return text[:max_chars].rstrip()
+    
+    # Troncature intelligente : chercher le dernier . ou ; avant la limite
+    truncated = text[:max_chars]
+    
+    # Chercher le dernier séparateur de phrase
+    last_period = truncated.rfind('.')
+    last_semicolon = truncated.rfind(';')
+    last_separator = max(last_period, last_semicolon)
+    
+    if last_separator > max_chars * 0.5:  # Au moins 50% de la limite utilisée
+        # Couper après le séparateur
+        return truncated[:last_separator + 1].rstrip()
+    else:
+        # Pas de séparateur trouvé ou trop court : chercher le dernier espace
+        last_space = truncated.rfind(' ')
+        if last_space > max_chars * 0.7:  # Au moins 70% de la limite
+            return truncated[:last_space].rstrip()
+        else:
+            # Dernier recours : troncature brutale
+            return truncated.rstrip()
 
 
 def validate_allowed_value(text: str, allowed: Optional[list[str]]) -> tuple[str, Optional[str]]:
@@ -207,11 +260,13 @@ def build_prompt(spec: FieldSpec, instruction: str, context_blocks: list[dict[st
         "Tu n'utilises jamais JSON ni Markdown.",
         "Interdit d'écrire des placeholders ({{...}}, {...}, XX, NAME, surname).",
         "Interdit d'écrire 'source 1', 'source 2' ou '(source X)' dans la réponse.",
+        "Interdit d'ajouter des points de suspension '...' pour indiquer que tu as tronqué le texte.",
+        "Écris TOUT le contenu nécessaire en entier, sans jamais tronquer ni résumer avec '...'.",
         "Ne répète jamais un titre/label déjà présent dans le template : fournis uniquement le contenu sous le titre.",
         "Ponctuation : pas de '::'. Un seul ':' maximum par ligne.",
         "Si l'information n'existe pas dans les sources : écris __VIDE__.",
     ]
-    format_rule = "Réponds en 1 ligne." if spec.max_lines == 1 else "Maximum 4 lignes courtes."
+    format_rule = "Réponds en 1 ligne." if spec.max_lines == 1 else f"Maximum {spec.max_lines} lignes. Écris tout le contenu sans abréviation ni '...'."
     lines.append(format_rule)
     if spec.allowed_values:
         allowed = ", ".join(spec.allowed_values)
@@ -270,6 +325,8 @@ def generate_fields(
     # Résilience
     continue_on_llm_error: bool = True,
     llm_timeout_retries: int = 1,
+    # PATCH 11: Contrôle longueur texte
+    max_chars_multiplier: float = 1.0,
 ) -> dict[str, Any]:
     fields = fields or DEFAULT_FIELDS
     deterministic_lookup = {k.upper(): v for k, v in (deterministic_values or {}).items()}
@@ -286,6 +343,12 @@ def generate_fields(
     for field in fields:
         key = field["key"]
         spec = get_field_spec(key)
+        
+        # PATCH 11: Appliquer le multiplicateur aux limites
+        if max_chars_multiplier != 1.0:
+            from core.field_specs import apply_max_chars_multiplier
+            spec = apply_max_chars_multiplier(spec, max_chars_multiplier)
+        
         query = field.get("query") or spec.query
         instruction = field.get("instructions") or spec.instructions
         if progress_callback:
@@ -450,6 +513,8 @@ def generate_fields(
                         + "\n\nAUTO-CONTROLE OBLIGATOIRE AVANT RÉPONSE :"
                         + "\n- Interdit d'écrire des placeholders: {{...}}, {...}, XX, NAME, surname"
                         + "\n- Interdit d'écrire 'source 1/2' ou '(source X)'"
+                        + "\n- Interdit d'ajouter des points de suspension '...' pour tronquer"
+                        + "\n- Écris TOUT le contenu en entier sans abréger"
                         + "\n- Interdit d'écrire des titres/labels déjà présents dans le template"
                         + "\n- Ponctuation: pas de '::' et un seul ':' maximum par ligne"
                         + "\nSi une info manque: écris __VIDE__."

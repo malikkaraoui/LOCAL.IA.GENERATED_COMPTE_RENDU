@@ -187,8 +187,8 @@ class TestApplyMaxLines:
         # Doit avoir max_lines
         assert len(result_lines) == 3
         
-        # La dernière ligne ne doit pas être excessivement longue
-        assert len(result_lines[2]) <= 210  # 200 + "..."
+        # La dernière ligne ne doit pas être excessivement longue (2000 + "...")
+        assert len(result_lines[2]) <= 2010
 
 
 class TestIntegrationMicroFixV3:

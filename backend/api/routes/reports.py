@@ -227,6 +227,7 @@ async def create_report(request: ReportCreateRequest):
         temperature=request.temperature if request.temperature is not None else 0.2,
         topk=request.topk if request.topk is not None else 10,
         top_p=request.top_p if request.top_p is not None else 0.9,
+        max_chars_multiplier=request.max_chars_multiplier if request.max_chars_multiplier is not None else 1.0,
         # Filters
         include_filters=include_filters,
         exclude_filters=exclude_filters,

@@ -414,17 +414,21 @@ def show_client_report_generator_page():
                     # Ruleset
                     ruleset_path = Path.cwd() / "config" / "rulesets" / "rhpro_v1.yaml"
                     
-                    # Construire la liste des rag_sources (PATCH 1)
+                    # Construire la liste des rag_sources (PATCH 6)
                     rag_sources = []
                     for doc_list in [docs['docx'], docs['pdf'], docs['txt']]:
                         rag_sources.extend([str(doc) for doc in doc_list])
                     
-                    # Parser avec rag_sources pour extraction identity globale
+                    # Nom du client depuis le dossier (QUICK WIN: fallback identity)
+                    client_name = client_path.name
+                    
+                    # Parser avec rag_sources + client_name pour extraction identity globale + fallback
                     result = parse_bilan_docx_to_normalized(
                         str(selected_docx),
                         str(ruleset_path),
                         gate_profile_override=gate_profile,
-                        rag_sources=rag_sources
+                        rag_sources=rag_sources,
+                        client_name=client_name
                     )
                     
                     progress_bar.progress(70)

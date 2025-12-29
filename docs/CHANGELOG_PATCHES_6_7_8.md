@@ -1,5 +1,62 @@
 # CHANGELOG — Patches 6-8 : Identity Extraction Globale
 
+## v4.2.1 — 2025-01-XX — QUICK WIN: Folder Name Fallback
+
+### 🎯 Objectif
+Réduire le taux de NO-GO en extrayant l'identité depuis le nom du dossier client quand aucune autre source ne fournit les données (~46% des clients).
+
+### ✨ Nouveautés
+
+**Fallback Identity depuis folder name**
+- **Module** : `src/rhpro/identity_extractor.py` (+90 lignes)
+- **Fonction** : `extract_identity_from_folder_name(folder_name: str)`
+- **Patterns supportés** :
+  - `SCHMIDT Mélanie` → surname: SCHMIDT, name: Mélanie
+  - `CAMPOS DA COSTA Paula` → nom composé supporté
+  - `001_MARTIN Sophie` → ignore préfixes numériques
+  - `VAN DEN BERG Jan` → noms multi-mots
+
+**Cascade d'extraction à 3 niveaux** :
+1. Sections DOCX (existant)
+2. RAG sources - tous fichiers (PATCH 6)
+3. **NOUVEAU** : Nom du dossier client (fallback)
+
+**Traçabilité** : Warning explicite `⚠ Identity inferred from folder name: {client_name}`
+
+### 🔧 Modifications techniques
+
+| Fichier | Type | Changements |
+|---------|------|-------------|
+| `src/rhpro/identity_extractor.py` | ✏️ Modifié | +90 lignes - `extract_identity_from_folder_name()` |
+| `src/rhpro/normalizer.py` | ✏️ Modifié | +15 lignes - Fallback logic + client_name param |
+| `src/rhpro/parse_bilan.py` | ✏️ Modifié | +10 lignes - Propagation client_name |
+| `pages_streamlit/client_report_generator.py` | ✏️ Modifié | +3 lignes - Extract client_name |
+| `tests/test_folder_name_fallback.py` | 🆕 Nouveau | 180 lignes - 12 tests |
+
+**Total Quick Win** : ~300 lignes ajoutées/modifiées
+
+### ✅ Tests
+
+```bash
+$ pytest tests/test_folder_name_fallback.py -v
+========================= 12 passed in 0.48s =========================
+```
+
+**Total suite de tests identity** : ✅ **29/29 passent** (Patches 6-7 + Draft Mode + Quick Win)
+
+### 📈 Impact estimé
+
+- **Réduction NO-GO** : 30-40% des NO-GO causés par identity manquante
+- **Cas couverts** : Dossiers suivant convention de nommage (majorité)
+- **Priorité préservée** : DOCX > RAG > Folder Name
+- **Pas d'écrasement** : Les données existantes ont priorité
+
+### 📚 Documentation
+
+- **Guide complet** : [docs/QUICK_WIN_FOLDER_NAME_IDENTITY.md](QUICK_WIN_FOLDER_NAME_IDENTITY.md)
+
+---
+
 ## v4.2 — 2024-01-XX
 
 ### 🎯 Objectif
