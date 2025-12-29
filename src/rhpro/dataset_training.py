@@ -17,11 +17,43 @@ from difflib import SequenceMatcher
 
 from .client_scanner import scan_client_folder
 from .validation_profiles import validate_report, ValidationProfile
+from .gold_diagnostics import diagnose_gold_missing, write_diagnostics_jsonl, write_diagnostics_summary
 
 
 # ============================================================================
 # Sections canoniques RH-Pro V1
 # ============================================================================
+
+# META HEADERS — titres administratifs à ignorer (ne comptent pas comme unknown_titles)
+# ✅ PRIORITÉ 3: Normalisation identique à celle utilisée pour section_title_map
+META_HEADERS_RAW = {
+    "PARTICIPATION AU PROGRAMME",
+}
+
+# Fonction de normalisation pour les titres (identique à celle du mapper/normalizer)
+def _normalize_title_for_meta(title: str) -> str:
+    """Normalise un titre de la même manière que section_title_map et unknown_titles"""
+    if not title:
+        return ""
+    # Supprimer ponctuation finale (: … etc), strip, uppercase
+    normalized = title.strip().rstrip(':…').strip().upper()
+    # Remplacer accents (NFD decomposition)
+    normalized = unicodedata.normalize('NFD', normalized)
+    normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    return normalized
+
+# FIX ESSAI 100: Ajouter titres méta récurrents à ignorer (AC2)
+META_HEADERS_RAW_ADDITIONS = [
+    "PARTICIPATION AU PROGRAMME",
+    "A L'ATTENTION DE",
+    "LIEU ET DATE",
+]
+
+# Fusionner avec les méta headers existants
+ALL_META_HEADERS = list(META_HEADERS_RAW) + META_HEADERS_RAW_ADDITIONS
+
+# Pré-calculer les meta headers normalisés
+META_HEADERS_NORM = {_normalize_title_for_meta(h) for h in ALL_META_HEADERS}
 
 CANONICAL_SECTIONS = {
     "identity": "Identité",
@@ -191,6 +223,19 @@ SEED_SECTION_TITLE_MAP = {
     "OUTLOOK 2010": "tests",
     "OUTLOOK": "tests",
     "POSITIONNEMENT": "tests",
+    # FIX ESSAI 100: Ajouter top titres inconnus (AC2)
+    "FRANCAIS - POSITIONNEMENT DE NIVEAU": "tests",
+    "ANGLAIS - POSITIONNEMENT DE NIVEAU": "tests",
+    "ALLEMAND - POSITIONNEMENT DE NIVEAU": "tests",
+    "CALCUL NIVEAU 1": "tests",
+    "CALCUL NIVEAU 2": "tests",
+    "CALCUL NIVEAU 3": "tests",
+    "CALCUL NIVEAU 2/3": "tests",
+    "TRI ET CLASSEMENT": "tests",
+    "TEST ADMINISTRATIF BUREAUTIQUE": "tests",
+    "DIMENSIONS, VOLUMES ET MESURES": "tests",
+    "DIMENSIONS VOLUMES ET MESURES": "tests",
+    "SAISIE DE COMMANDES": "tests",
 }
 
 
@@ -510,6 +555,11 @@ def normalize_title(title: str) -> str:
     - compacter tirets/puces
     - conserver chiffres
     
+    FIX ESSAI 100 (AC3): Normalisation durcie pour matcher variantes :
+    - Guillemets typographiques (" ") → " 
+    - Tirets longs (– —) → -
+    - Virgules → espace
+    
     Exemple:
         "Ressources comportementales : Points d'appui" 
         → "RESSOURCES COMPORTEMENTALES POINTS D APPUI"
@@ -524,15 +574,24 @@ def normalize_title(title: str) -> str:
     text = unicodedata.normalize('NFD', text)
     text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
     
+    # FIX ESSAI 100: Remplacer guillemets typographiques par guillemets droits
+    text = text.replace('"', '"').replace('"', '"').replace('«', '"').replace('»', '"')
+    
     # Remplacer apostrophes courbes et droites par espace
     text = text.replace(''', ' ').replace(''', ' ').replace("'", ' ')
     
-    # Remplacer tirets multiples/puces par espace
-    text = re.sub(r'[-–—•]', ' ', text)
+    # FIX ESSAI 100: Remplacer tirets longs (– —) par tiret classique
+    text = re.sub(r'[–—]', '-', text)
     
-    # Enlever ponctuation faible
+    # Remplacer tirets multiples/puces par espace
+    text = re.sub(r'[-•]', ' ', text)
+    
+    # FIX ESSAI 100: Remplacer virgules et points-virgules par espace
+    text = text.replace(',', ' ').replace(';', ' ')
+    
+    # Enlever ponctuation faible en fin
     text = re.sub(r'[:;.,]+$', '', text)
-    text = re.sub(r'[:;.,]', ' ', text)
+    text = re.sub(r'[:.,]', ' ', text)
     
     # Collapse espaces
     text = re.sub(r'\s+', ' ', text).strip()
@@ -762,8 +821,8 @@ def apply_max_lines(text: str, max_lines: int) -> str:
     remaining = lines[max_lines - 1:]
     # Limiter la fusion pour éviter une ligne trop longue
     merged = ' ; '.join(remaining)
-    if len(merged) > 200:  # Limite arbitraire
-        merged = merged[:197] + '...'
+    if len(merged) > 2000:  # Augmenté de 200 à 2000 pour correspondre au max_chars
+        merged = merged[:1997] + '...'
     
     kept_lines.append(merged)
     
@@ -1187,9 +1246,12 @@ class DatasetTrainingResult:
         self.patterns: Dict[str, Any] = {}
         self.recommendations: List[str] = []
         self.timestamp = datetime.now().isoformat()
+        # ✅ PRIORITÉ 5: Diagnostics GOLD missing
+        self.gold_missing_diagnostics_path: Optional[str] = None
+        self.gold_missing_count: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        base = {
             "dataset_id": self.dataset_id,
             "clients": self.clients,
             "stats": self.stats,
@@ -1197,6 +1259,13 @@ class DatasetTrainingResult:
             "recommendations": self.recommendations,
             "timestamp": self.timestamp,
         }
+        # ✅ PRIORITÉ 5: Ajouter diagnostics si présents
+        if self.gold_missing_count > 0:
+            base["gold_missing_diagnostics"] = {
+                "count": self.gold_missing_count,
+                "diagnostics_file": self.gold_missing_diagnostics_path,
+            }
+        return base
 
 
 def discover_client_folders(
@@ -1345,6 +1414,9 @@ def analyze_dataset(
     quality_scores = []
     no_go_reasons = Counter()
     
+    # ✅ PRIORITÉ 5: Collecteur de diagnostics GOLD missing
+    gold_missing_diagnostics = []
+    
     # Analyser chaque client
     for i, client_folder in enumerate(client_folders, 1):
         try:
@@ -1355,6 +1427,13 @@ def analyze_dataset(
             
             # ✅ ROBUSTESSE: Extraire avec .get() pour éviter KeyError
             rag_sources = scan_result.get("rag_sources") or []
+            
+            # ✅ PRIORITÉ 5: Diagnostic GOLD missing si non détecté
+            gold_from_scan = scan_result.get("gold")
+            if not gold_from_scan:
+                print(f"    🔍 [GOLD MISSING] Diagnostic en cours...")
+                diag = diagnose_gold_missing(client_folder, gold_from_scan)
+                gold_missing_diagnostics.append(diag)
             
             # Extraire inventaire sources
             sources_by_type = {}
@@ -1518,11 +1597,40 @@ def analyze_dataset(
     error_clients = [c for c in result.clients if "error" in c]
     errors_top = Counter([c.get("error_type", "UnknownError") for c in error_clients]).most_common(5)
     
+    # ✅ PRIORITÉ 4: Calculer clients_used et clients_no_sources AVANT de construire result.stats
+    clients_used_list = [c for c in successful_clients if c.get('sources_count', 0) > 0]
+    clients_used = len(clients_used_list)
+    clients_no_sources = len(successful_clients) - clients_used
+    
+    # ✅ PRIORITÉ 5: Écrire les diagnostics GOLD missing si présents
+    if gold_missing_diagnostics:
+        print(f"\n📝 Écriture des diagnostics GOLD missing ({len(gold_missing_diagnostics)} clients)...")
+        
+        # Créer le dossier de sortie
+        out_path = Path(out_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+        
+        # Écrire JSONL (machine-readable)
+        jsonl_path = out_path / "gold_missing_debug.jsonl"
+        write_diagnostics_jsonl(gold_missing_diagnostics, jsonl_path)
+        print(f"  ✅ JSONL: {jsonl_path}")
+        
+        # Écrire Markdown (human-readable)
+        md_path = out_path / "gold_missing_debug.md"
+        write_diagnostics_summary(gold_missing_diagnostics, md_path)
+        print(f"  ✅ Markdown: {md_path}")
+        
+        # Ajouter au résultat pour traçabilité
+        result.gold_missing_diagnostics_path = str(jsonl_path)
+        result.gold_missing_count = len(gold_missing_diagnostics)
+    
     result.stats = {
         "total_clients": total_clients,
         "successful_scans": len(successful_clients),
         "errors": total_clients - len(successful_clients),
         "errors_top": errors_top,  # ✅ Top 5 types d'erreurs
+        "clients_used": clients_used,  # ✅ PRIORITÉ 4: Clients avec sources > 0
+        "clients_no_sources": clients_no_sources,  # ✅ PRIORITÉ 4: Clients sans sources
         "gold_detected": gold_detected,
         "gold_detection_rate": gold_detected / len(successful_clients) if successful_clients else 0,
         "pipeline_ready": pipeline_ready,
@@ -1550,7 +1658,7 @@ def analyze_dataset(
     
     # Stats par section canonique (basées sur les CLIENTS, pas les documents)
     sections_stats = {}
-    clients_used = len(successful_clients)  # ou pipeline_ready si préféré
+    # Note: clients_used et clients_no_sources déjà calculés plus haut
     
     for canonical in CANONICAL_SECTIONS.keys():
         n_clients = len(section_clients.get(canonical, set()))
@@ -1629,6 +1737,15 @@ def analyze_dataset(
         result.recommendations.append(
             "⚠️ Moins de 50% de GOLD détectés : améliorer la détection (stratégies + patterns)"
         )
+    
+    # FIX ESSAI 100 (AC3): Avertir si beaucoup de clients sans sources
+    if clients_no_sources > 0:
+        sources_zero_pct = clients_no_sources / len(successful_clients) * 100 if successful_clients else 0
+        if sources_zero_pct > 10:
+            result.recommendations.append(
+                f"⚠️ {clients_no_sources} clients ({sources_zero_pct:.0f}%) ont sources_count=0 "
+                f"→ Non utilisables pour training strict/standard (min sources=1)"
+            )
     
     if unknown_titles:
         top_unknown = unknown_titles.most_common(5)
@@ -1977,7 +2094,10 @@ def _build_training_state(result: DatasetTrainingResult) -> Dict[str, Any]:
         "PROFESSION": 4,
         "FORMATION": 10,
         "Ressources_comportementales_Points_d'appui": 4,
-        "Ressources_comportementales_Points_de_vigilance": 4
+        "Ressources_comportementales_Points_de_vigilance": 4,
+        # FIX ESSAI 100: Sections canoniques RESSOURCES_* ne doivent pas être 0
+        "RESSOURCES_POINTS_APPUI": 6,
+        "RESSOURCES_POINTS_VIGILANCE": 6
     }
     
     if "sections_stats" in result.patterns:
@@ -2238,7 +2358,9 @@ def _generate_training_report_md(result: DatasetTrainingResult) -> str:
         f"**Date** : {result.timestamp}",
         f"**Clients analysés** : {result.stats['total_clients']}",
         f"**Scans réussis** : {result.stats['successful_scans']}",
-        f"**Clients utilisés** : {result.stats['successful_scans']}",  # ✅ clients_used explicite
+        # FIX ESSAI 100 (AC3): Distinguer clients utilisables (sources>=1) vs sources=0
+        f"**Clients utilisables (sources≥1)** : {result.stats['clients_used']} ({result.stats['clients_used']/result.stats['successful_scans']*100:.0f}%)" if result.stats.get('successful_scans', 0) > 0 else f"**Clients utilisables (sources≥1)** : {result.stats['clients_used']}",
+        f"**Clients sans sources (sources=0)** : {result.stats['clients_no_sources']}",
         f"",
         f"## 📊 Statistiques Globales",
         f"",
