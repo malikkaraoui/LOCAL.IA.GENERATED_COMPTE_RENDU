@@ -1,22 +1,22 @@
 {
   "schema_version": "training_state_v1.0",
-  "run_id": "3. TERMINER_2025-12-29T15:16:24Z_294f1c",
-  "created_at": "2025-12-29T15:16:24Z",
+  "run_id": "3. TERMINER_2025-12-29T17:45:22Z_294f1c",
+  "created_at": "2025-12-29T17:45:22Z",
   "dataset": {
     "root_path": "/Users/malik/Documents/RH PRO BASE DONNEE/3. TERMINER",
     "dataset_id": "294f1c1d16c9",
-    "clients_scanned": 552,
-    "clients_used": 552,
+    "clients_scanned": 571,
+    "clients_used": 571,
     "doc_types_stats": {
-      ".pdf": 2560,
-      ".docx": 1290,
-      ".msg": 293,
-      ".doc": 32,
+      ".pdf": 2612,
+      ".docx": 1309,
+      ".msg": 296,
+      ".doc": 33,
       ".txt": 5
     },
     "gold_stats": {
-      "gold_detected_clients": 543,
-      "gold_missing_clients": 9
+      "gold_detected_clients": 561,
+      "gold_missing_clients": 10
     }
   },
   "conventions": {
@@ -67,8 +67,8 @@
   "patterns": {
     "section_stats": {
       "IDENTITY": {
-        "coverage_pct": 60,
-        "clients": 334,
+        "coverage_pct": 65,
+        "clients": 342,
         "lines": {
           "avg": 1.1,
           "median": 1,
@@ -76,8 +76,8 @@
         }
       },
       "SITUATION_PROFESSIONNELLE": {
-        "coverage_pct": 32,
-        "clients": 177,
+        "coverage_pct": 34,
+        "clients": 179,
         "lines": {
           "avg": 4.7,
           "median": 3,
@@ -85,8 +85,8 @@
         }
       },
       "FORMATION": {
-        "coverage_pct": 30,
-        "clients": 168,
+        "coverage_pct": 32,
+        "clients": 170,
         "lines": {
           "avg": 5.9,
           "median": 3,
@@ -94,10 +94,10 @@
         }
       },
       "COMPETENCES": {
-        "coverage_pct": 16,
-        "clients": 86,
+        "coverage_pct": 17,
+        "clients": 88,
         "lines": {
-          "avg": 8.0,
+          "avg": 7.9,
           "median": 4,
           "p90": 15
         }
@@ -121,7 +121,7 @@
         }
       },
       "MOTIVATIONS_VALEURS": {
-        "coverage_pct": 10,
+        "coverage_pct": 11,
         "clients": 56,
         "lines": {
           "avg": 3.9,
@@ -130,7 +130,7 @@
         }
       },
       "CONTRAINTES_FREINS": {
-        "coverage_pct": 30,
+        "coverage_pct": 31,
         "clients": 163,
         "lines": {
           "avg": 3.1,
@@ -139,8 +139,8 @@
         }
       },
       "OBJECTIFS": {
-        "coverage_pct": 14,
-        "clients": 76,
+        "coverage_pct": 15,
+        "clients": 77,
         "lines": {
           "avg": 1.9,
           "median": 1,
@@ -148,17 +148,17 @@
         }
       },
       "PISTES_METIERS": {
-        "coverage_pct": 26,
-        "clients": 143,
+        "coverage_pct": 28,
+        "clients": 145,
         "lines": {
-          "avg": 7.3,
+          "avg": 7.2,
           "median": 2,
           "p90": 9
         }
       },
       "PLAN_ACTION": {
         "coverage_pct": 10,
-        "clients": 54,
+        "clients": 55,
         "lines": {
           "avg": 2.5,
           "median": 1,
@@ -166,7 +166,7 @@
         }
       },
       "SYNTHESE_CONCLUSION": {
-        "coverage_pct": 27,
+        "coverage_pct": 29,
         "clients": 151,
         "lines": {
           "avg": 5.2,
@@ -183,11 +183,11 @@
       "FORMATION": 20,
       "Ressources_comportementales_Points_d'appui": 4,
       "Ressources_comportementales_Points_de_vigilance": 4,
+      "RESSOURCES_POINTS_APPUI": 10,
+      "RESSOURCES_POINTS_VIGILANCE": 10,
       "IDENTITY": 1,
       "SITUATION_PROFESSIONNELLE": 9,
       "COMPETENCES": 15,
-      "RESSOURCES_POINTS_APPUI": 10,
-      "RESSOURCES_POINTS_VIGILANCE": 10,
       "MOTIVATIONS_VALEURS": 9,
       "CONTRAINTES_FREINS": 6,
       "OBJECTIFS": 4,
@@ -295,25 +295,27 @@
       "POWERPOINT - POSITIONNEMENT DE NIVEAU": "tests",
       "OUTLOOK 2010": "tests",
       "OUTLOOK": "tests",
-      "POSITIONNEMENT": "tests"
+      "POSITIONNEMENT": "tests",
+      "FRANCAIS - POSITIONNEMENT DE NIVEAU": "tests",
+      "ANGLAIS - POSITIONNEMENT DE NIVEAU": "tests",
+      "ALLEMAND - POSITIONNEMENT DE NIVEAU": "tests",
+      "CALCUL NIVEAU 1": "tests",
+      "CALCUL NIVEAU 2": "tests",
+      "CALCUL NIVEAU 3": "tests",
+      "CALCUL NIVEAU 2/3": "tests",
+      "TRI ET CLASSEMENT": "tests",
+      "TEST ADMINISTRATIF BUREAUTIQUE": "tests",
+      "DIMENSIONS, VOLUMES ET MESURES": "tests",
+      "DIMENSIONS VOLUMES ET MESURES": "tests",
+      "SAISIE DE COMMANDES": "tests"
     },
     "unknown_titles_top": {
-      "PARTICIPATION AU PROGRAMME": 81,
-      "FRANCAIS - POSITIONNEMENT DE NIVEAU": 46,
-      "CALCUL NIVEAU 2": 35,
-      "CALCUL NIVEAU 3": 35,
-      "TRI ET CLASSEMENT": 33,
-      "ANGLAIS - POSITIONNEMENT DE NIVEAU": 31,
-      "TEST ADMINISTRATIF BUREAUTIQUE": 30,
-      "SAISIE DE COMMANDES": 29,
-      "DIMENSIONS, VOLUMES ET MESURES": 27,
-      "ALLEMAND - POSITIONNEMENT DE NIVEAU": 26,
-      "CALCUL NIVEAU 1": 26,
-      "COMPREHENSION DE CONSIGNES": 26,
-      "ELEMENTS DE LA MESURE D’OUTPLACEMENT": 15,
-      "OFFICE CANTONAL DES ASSURANCES SOCIALES (OCAS)": 14,
+      "PARTICIPATION AU PROGRAMME": 86,
+      "COMPREHENSION DE CONSIGNES": 27,
+      "ELEMENTS DE LA MESURE D’OUTPLACEMENT": 16,
+      "OFFICE CANTONAL DES ASSURANCES SOCIALES (OCAS)": 15,
+      "A L’ATTENTION DE": 9,
       "LOGISTIQUE & TRANSPORT": 9,
-      "A L’ATTENTION DE": 8,
       "RELATION A LA CARRIERE": 7,
       "ENTRETIEN & TRAVAUX MANUELS": 7,
       "STRATEGIES COMPORTEMENTALES": 7,
@@ -347,10 +349,20 @@
       "ARTISANAT & ARTS PLASTIQUES": 2,
       "- RETOUR EVOLUTION": 2,
       "STAGES LAI15 & LAI 17": 2,
-      "CORRESPONDANCE RIASEC": 2
+      "CORRESPONDANCE RIASEC": 2,
+      "DOSSIER & PRESENTATION": 2,
+      "POSITIONNEMENT DE NIVEAU - WORD": 2,
+      "POSITIONNEMENT DE NIVEAU - EXCEL": 2,
+      "DURANT CE STAGE, IL A EU POUR ACTIVITES": 2,
+      "SES TACHES PRINCIPALES ONT ETE LES SUIVANTES": 2,
+      "CONDITIONS DE SUCCES": 2,
+      "RAPPORT DE STAGE - DECOUVERTE DE L’HORLOGERIE": 2,
+      "DEROULEMENT DE LA DECOUVERTE": 2,
+      "MOTIVATEURS PRINCIPAUX": 2,
+      "REPRESENTATION SPATIALE": 2
     },
-    "unknown_titles_count": 256,
-    "unknown_titles_total_occurrences": 815
+    "unknown_titles_count": 245,
+    "unknown_titles_total_occurrences": 505
   },
   "warnings": []
 }

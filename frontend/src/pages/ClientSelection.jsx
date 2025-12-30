@@ -35,7 +35,7 @@ function ClientSelection() {
 
   // LLM
   const [llmHost, setLlmHost] = useState('http://localhost:11434');
-  const [llmModel, setLlmModel] = useState('mistral:latest');
+  const [llmModel, setLlmModel] = useState('llama3.1:8b');
   const [llmCustom, setLlmCustom] = useState('');
   const [useCustomModel, setUseCustomModel] = useState(false);
   const [maxChars, setMaxChars] = useState(500);
@@ -85,6 +85,7 @@ function ClientSelection() {
       const detail = err?.response?.data?.detail || err?.message;
       setLlmModelsError(detail || "Erreur lors du chargement des modèles");
       setAvailableModels([
+        { name: 'qwen3-next:latest', available: false },
         { name: 'mistral:latest', available: false },
         { name: 'llama3.1:8b', available: false },
         { name: 'qwen3-vl:2b', available: false },
@@ -349,6 +350,17 @@ function ClientSelection() {
           template_name: effectiveTemplateName || undefined,
           template_path: effectiveTemplateName ? undefined : templatePath,
           output_dir: outputDir,
+          // ✅ Objet LLM unifié (rétrocompatibilité maintenue via champs legacy)
+          llm: {
+            provider: 'ollama',
+            base_url: llmHost,
+            model: finalModel,
+            temperature,
+            max_tokens: 4096,
+            top_p: topP,
+            timeout: 900.0
+          },
+          // Legacy params (pour rétrocompatibilité si llm n'est pas traité)
           llm_host: llmHost,
           llm_model: finalModel,
           topk: topK,
@@ -407,6 +419,9 @@ function ClientSelection() {
                   <option key={client} value={client}>{client}</option>
                 ))}
               </select>
+              <small className="hint" style={{ marginTop: '8px', display: 'block', opacity: 0.8 }}>
+                📄 Formats RAG supportés: PDF, DOCX, TXT, <strong>MSG (Outlook)</strong>, M4A, MP3, WAV
+              </small>
             </div>
           </div>
 

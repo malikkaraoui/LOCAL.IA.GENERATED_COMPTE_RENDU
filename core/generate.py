@@ -14,6 +14,10 @@ from .context import build_index
 from .errors import Result, GenerationError, OllamaError
 from .field_specs import FieldSpec, get_field_spec, normalize_allowed_value
 from .logger import get_logger
+from .llm_router import LLMConfig, call_llm  # ✅ Nouveau router LLM unifié
+
+# SCHEMA V2: imports conditionnels (lazy loading pour éviter circular imports)
+USE_SCHEMA_V2 = True  # ✅ Schema V2 ACTIVÉ avec instructions détaillées
 
 LOG = get_logger("core.generate")
 
@@ -42,8 +46,14 @@ def ollama_generate(
     temperature: float, 
     top_p: float,
     timeout: float = 300.0,
+    *,
+    llm_config: Optional[LLMConfig] = None,
+    field_name: Optional[str] = None,
 ) -> Result[str]:
     """Génère une réponse via l'API Ollama.
+    
+    LEGACY WRAPPER: Utilise le nouveau router LLM si llm_config fourni,
+    sinon utilise les anciens paramètres pour rétrocompatibilité.
     
     Args:
         model: Nom du modèle Ollama
@@ -52,49 +62,40 @@ def ollama_generate(
         temperature: Température (0-1)
         top_p: Paramètre top_p (0-1)
         timeout: Timeout en secondes (défaut 300)
+        llm_config: Config LLM moderne (prioritaire si fourni)
+        field_name: Nom du champ (pour logs)
         
     Returns:
         Result[str]: Succès avec la réponse générée ou échec avec OllamaError
     """
-    try:
-        LOG.info("Requête Ollama: model=%s, temp=%.2f, top_p=%.2f", model, temperature, top_p)
-        url = host.rstrip("/") + "/api/generate"
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "top_p": top_p,
-                "num_predict": 4096,  # Tokens max générés (défaut=128 est trop court!)
-            },
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = request.Request(url, data=data, headers={"Content-Type": "application/json"})
-        
-        with request.urlopen(req, timeout=timeout) as resp:
-            out = json.loads(resp.read().decode("utf-8"))
-        
-        response = out.get("response", "")
-        LOG.debug("Réponse Ollama: %d caractères", len(response))
-        return Result.ok(response)
-        
-    except (URLError, HTTPError) as exc:
-        error = OllamaError(f"Échec connexion Ollama {host}: {exc}")
-        LOG.error("Erreur connexion Ollama: %s", exc)
-        return Result.fail(error)
-    except TimeoutError as exc:
-        error = OllamaError(f"Timeout Ollama après {timeout}s: {exc}")
-        LOG.error("Timeout Ollama: %s", exc)
-        return Result.fail(error)
-    except Exception as exc:
-        error = OllamaError(f"Erreur Ollama: {exc}")
-        LOG.error("Erreur Ollama: %s", exc)
-        return Result.fail(error)
+    # ✅ Nouveau chemin: utiliser le router LLM unifié
+    if llm_config:
+        result = call_llm(llm_config, prompt, field_name=field_name)
+        if result.success:
+            return Result.ok(result.value.text)
+        else:
+            return Result.fail(result.error)
+    
+    # ⚠️ Ancien chemin (legacy): créer une config à la volée
+    legacy_config = LLMConfig.from_legacy(
+        model=model,
+        host=host,
+        temperature=temperature,
+        top_p=top_p,
+        timeout=timeout,
+    )
+    
+    result = call_llm(legacy_config, prompt, field_name=field_name)
+    if result.success:
+        return Result.ok(result.value.text)
+    else:
+        return Result.fail(result.error)
 
 
 def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.0) -> Result[str]:
     """Vérifie la disponibilité du serveur Ollama et du modèle.
+    
+    LEGACY WRAPPER: Utilise check_ollama_health du nouveau router.
     
     Args:
         host: URL du serveur Ollama
@@ -104,39 +105,30 @@ def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.
     Returns:
         Result[str]: Succès avec message de statut ou échec avec OllamaError
     """
-    LOG.info("Évérification serveur Ollama: %s", host)
-    base = host.rstrip("/")
+    from .llm_router import check_ollama_health
     
-    try:
-        with request.urlopen(base + "/api/version", timeout=timeout) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-        version = payload.get("version") or payload.get("name") or "inconnue"
-        message = f"Serveur accessible ({version})"
-        LOG.info("Serveur Ollama OK: %s", version)
-    except Exception as exc:
-        error = OllamaError(f"Serveur injoignable : {exc}")
-        LOG.error("Échec connexion serveur Ollama: %s", exc)
-        return Result.fail(error)
-
-    if not model:
-        return Result.ok(message)
-
-    try:
-        with request.urlopen(base + "/api/tags", timeout=timeout) as resp:
-            tags_payload = json.loads(resp.read().decode("utf-8"))
-        models = tags_payload.get("models", []) if isinstance(tags_payload, dict) else []
-        names = {m.get("name") for m in models if isinstance(m, dict)}
-        if model in names:
-            full_message = message + f" — modèle '{model}' disponible"
+    LOG.info("Vérification serveur Ollama: %s", host)
+    
+    result = check_ollama_health(base_url=host, model=model, timeout=timeout)
+    
+    if not result.success:
+        return result
+    
+    data = result.value
+    version = data.get("version", "unknown")
+    message = f"Serveur accessible ({version})"
+    
+    if model:
+        model_available = data.get("model_available")
+        if model_available:
+            message += f" — modèle '{model}' disponible"
             LOG.info("Modèle '%s' disponible", model)
-            return Result.ok(full_message)
-        error = OllamaError(message + f" — modèle '{model}' introuvable")
-        LOG.warning("Modèle '%s' introuvable", model)
-        return Result.fail(error)
-    except Exception as exc:
-        error = OllamaError(message + f" — vérification du modèle impossible : {exc}")
-        LOG.error("Échec vérification modèle: %s", exc)
-        return Result.fail(error)
+        else:
+            error = OllamaError(message + f" — modèle '{model}' introuvable")
+            LOG.warning("Modèle '%s' introuvable", model)
+            return Result.fail(error)
+    
+    return Result.ok(message)
 
 
 def sanitize_output(text: str) -> str:
@@ -238,6 +230,91 @@ def truncate_chars(text: str, max_chars: int, smart: bool = True) -> str:
             return truncated.rstrip()
 
 
+def extract_bullet_points(text: str) -> list[str]:
+    """Extrait les bullet points d'un texte.
+    
+    Args:
+        text: Texte contenant des bullet points
+        
+    Returns:
+        Liste des items extraits
+        
+    Examples:
+        >>> extract_bullet_points("- Item 1\n- Item 2")
+        ['Item 1', 'Item 2']
+    """
+    # Regex: chercher lignes commençant par - ou • ou *
+    items = re.findall(r'^\s*[-•*]\s+(.+)$', text, re.MULTILINE)
+    return [item.strip() for item in items if item.strip()]
+
+
+def validate_list_v2(text: str, max_items: int = 4, max_chars: int = 2000) -> str:
+    """Valide et tronque une liste selon les règles V2.
+    
+    Args:
+        text: Texte contenant une liste
+        max_items: Nombre max d'items (défaut 4)
+        max_chars: Limite de caractères (défaut 2000)
+        
+    Returns:
+        Liste validée et tronquée
+        
+    Examples:
+        >>> validate_list_v2("- A\n- B\n- C\n- D\n- E", max_items=4)
+        '- A\n- B\n- C\n- D'
+    """
+    # 1. Tronquer caractères d'abord
+    if len(text) > max_chars:
+        text = truncate_chars(text, max_chars, smart=True)
+    
+    # 2. Extraire items
+    items = extract_bullet_points(text)
+    
+    # 3. Tronquer items si nécessaire
+    if len(items) > max_items:
+        items = items[:max_items]
+    
+    # 4. Reformater
+    if items:
+        return '\n'.join([f"- {item}" for item in items])
+    
+    # Pas de bullet points trouvés: retourner texte original tronqué
+    return text
+
+
+def extract_enum_field_v2(context_blocks: list[dict[str, Any]], field_key: str, allowed_values: list[str]) -> str:
+    """Extrait un champ enum sans LLM (extraction_policy=extract_only).
+    
+    Args:
+        context_blocks: Blocs de contexte
+        field_key: Clé du champ
+        allowed_values: Valeurs autorisées
+        
+    Returns:
+        Valeur extraite ou "Non évalué"
+        
+    Examples:
+        >>> extract_enum_field_v2([{"text": "Niveau B2"}], "FRANCAIS_POSITIONNEMENT_DE_NIVEAU", ["A1", "B2", "Non évalué"])
+        'B2'
+    """
+    # Import lazy pour V2
+    from .enum_extractors_v2 import extract_enum_from_context, validate_enum_value
+    
+    if not context_blocks:
+        return "Non évalué"
+    
+    # Concaténer tous les contextes
+    full_context = "\n".join(ctx["text"] for ctx in context_blocks)
+    
+    # Extraire avec enum_extractors_v2
+    extracted = extract_enum_from_context(full_context, field_key)
+    
+    # Valider strict (pas de fuzzy matching)
+    validated = validate_enum_value(extracted, allowed_values, strict=True)
+    
+    return validated
+
+
 def validate_allowed_value(text: str, allowed: Optional[list[str]]) -> tuple[str, Optional[str]]:
     if not allowed:
         return text, None
@@ -253,7 +330,7 @@ def _looks_like_timeout(error_message: str) -> bool:
     return "timeout" in msg or "timed out" in msg
 
 
-def build_prompt(spec: FieldSpec, instruction: str, context_blocks: list[dict[str, Any]]) -> str:
+def build_prompt(spec, instruction: str, context_blocks: list[dict[str, Any]]) -> str:
     lines: list[str] = [
         "Tu es un assistant RH.",
         "Tu réponds uniquement en français.",
@@ -266,11 +343,28 @@ def build_prompt(spec: FieldSpec, instruction: str, context_blocks: list[dict[st
         "Ponctuation : pas de '::'. Un seul ':' maximum par ligne.",
         "Si l'information n'existe pas dans les sources : écris __VIDE__.",
     ]
-    format_rule = "Réponds en 1 ligne." if spec.max_lines == 1 else f"Maximum {spec.max_lines} lignes. Écris tout le contenu sans abréviation ni '...'."
+    
+    # V2: field_type pour instructions adaptées
+    max_lines = getattr(spec, 'max_lines', 0)
+    field_type = getattr(spec, 'field_type', None)
+    
+    if max_lines == 1:
+        format_rule = "Réponds en 1 ligne."
+    elif field_type == "list":
+        format_rule = "Format liste: maximum 4 items. Écris UNIQUEMENT 2 à 4 items sous forme de bullet points (- item)."
+    elif max_lines:
+        format_rule = f"Maximum {max_lines} lignes. Écris tout le contenu sans abréviation ni '...'."
+    else:
+        format_rule = "Écris tout le contenu sans abréviation ni '...'."
+    
     lines.append(format_rule)
-    if spec.allowed_values:
-        allowed = ", ".join(spec.allowed_values)
-        lines.append(f"Choisis uniquement parmi : {allowed}.")
+    
+    # allowed_values (V1) ou enum_values (V2)
+    allowed = getattr(spec, 'allowed_values', None) or getattr(spec, 'enum_values', None)
+    if allowed:
+        allowed_str = ", ".join(allowed)
+        lines.append(f"Choisis uniquement parmi : {allowed_str}.")
+    
     lines.append("")
     lines.append(f"Champ : {spec.key}")
     lines.append(f"Consigne : {instruction}")
@@ -327,7 +421,26 @@ def generate_fields(
     llm_timeout_retries: int = 1,
     # PATCH 11: Contrôle longueur texte
     max_chars_multiplier: float = 1.0,
+    # ✅ NOUVEAU: Config LLM unifiée (prioritaire)
+    llm_config: Optional[LLMConfig] = None,
 ) -> dict[str, Any]:
+    # ✅ Créer une config LLM unifiée (depuis llm_config ou legacy params)
+    if not llm_config:
+        llm_config = LLMConfig.from_legacy(
+            model=model,
+            host=host,
+            temperature=temperature,
+            top_p=top_p,
+            timeout=900.0,  # Timeout par défaut augmenté pour qwen3-next
+        )
+    
+    LOG.info(
+        "🚀 GENERATE_FIELDS: provider=%s model=%s base_url=%s",
+        llm_config.provider,
+        llm_config.model,
+        llm_config.base_url,
+    )
+    
     fields = fields or DEFAULT_FIELDS
     deterministic_lookup = {k.upper(): v for k, v in (deterministic_values or {}).items()}
     chunks, index = build_index(
@@ -342,12 +455,18 @@ def generate_fields(
     answers: dict[str, Any] = {}
     for field in fields:
         key = field["key"]
-        spec = get_field_spec(key)
         
-        # PATCH 11: Appliquer le multiplicateur aux limites
-        if max_chars_multiplier != 1.0:
-            from core.field_specs import apply_max_chars_multiplier
-            spec = apply_max_chars_multiplier(spec, max_chars_multiplier)
+        # Schema V2 ou V1
+        if USE_SCHEMA_V2:
+            from .field_specs_v2 import get_field_spec_v2
+            spec = get_field_spec_v2(key)
+            # V2: pas de multiplicateur (limites strictes)
+        else:
+            spec = get_field_spec(key)
+            # PATCH 11: Appliquer le multiplicateur aux limites (V1 seulement)
+            if max_chars_multiplier != 1.0:
+                from core.field_specs import apply_max_chars_multiplier
+                spec = apply_max_chars_multiplier(spec, max_chars_multiplier)
         
         query = field.get("query") or spec.query
         instruction = field.get("instructions") or spec.instructions
@@ -380,6 +499,40 @@ def generate_fields(
             cleaned_value = (deterministic_lookup.get(key.upper()) or "").strip()
             if not cleaned_value:
                 missing_info.append("DETERMINISTIC_EMPTY")
+        
+        # SCHEMA V2: extraction_policy = "extract_only" (champs enum)
+        elif USE_SCHEMA_V2 and hasattr(spec, 'extraction_policy') and spec.extraction_policy == "extract_only":
+            # Enum: extraction sans LLM
+            if not context_blocks:
+                cleaned_value = "Non évalué"
+                missing_info.append("NO_CONTEXT")
+            else:
+                cleaned_value = extract_enum_field_v2(context_blocks, key, spec.enum_values or [])
+                
+                if cleaned_value == "Non évalué":
+                    missing_info.append("NO_ENUM_FOUND")
+                
+                if status_callback:
+                    status_callback(f"EXTRACT_V2 [{key}] extraction enum : {cleaned_value}")
+                if progress_callback:
+                    progress_callback(key, "extract_v2", f"Extrait : {cleaned_value}")
+        
+        # PATCH v1.1 (AC4): POSITIONNEMENT DE NIVEAU → extraction directe (pas de LLM)
+        elif key.upper().startswith("POSITIONNEMENT") and "NIVEAU" in key.upper():
+            from src.rhpro.positionnement_extractor import extract_positionnement_level
+            
+            # Extraire niveau depuis le contexte (tous les chunks concaténés)
+            full_context = "\n".join(ctx["text"] for ctx in context_blocks)
+            cleaned_value = extract_positionnement_level(full_context)
+            
+            if cleaned_value == "Non renseigné" or not cleaned_value:
+                missing_info.append("NO_POSITIONNEMENT_FOUND")
+            
+            if status_callback:
+                status_callback(f"EXTRACT [{key}] extraction directe : {cleaned_value}")
+            if progress_callback:
+                progress_callback(key, "extract", f"Extrait : {cleaned_value}")
+        
         else:
             if spec.skip_llm_if_no_sources and not context_blocks:
                 missing_info.append("NO_CONTEXT")
@@ -392,7 +545,11 @@ def generate_fields(
                         f"LLM [{key}] envoi du prompt ({len(context_blocks)} sources, {len(prompt)} caractères)…"
                     )
                 
-                llm_result = ollama_generate(model, prompt, host, temperature, top_p)
+                llm_result = ollama_generate(
+                    model, prompt, host, temperature, top_p,
+                    llm_config=llm_config,
+                    field_name=key,
+                )
                 if not llm_result.success:
                     error_msg = str(llm_result.error)
                     is_timeout = _looks_like_timeout(error_msg)
@@ -420,6 +577,8 @@ def generate_fields(
                                 host,
                                 temperature=0.0,
                                 top_p=top_p,
+                                llm_config=llm_config,
+                                field_name=key,
                             )
                             if llm_result2.success:
                                 llm_result = llm_result2
@@ -543,7 +702,14 @@ def generate_fields(
                     cleaned_value = ""
                 cleaned_value = truncate_lines(cleaned_value, spec.max_lines)
                 cleaned_value = truncate_chars(cleaned_value, spec.max_chars)
-                cleaned_value, invalid_reason = validate_allowed_value(cleaned_value, spec.allowed_values)
+                
+                # SCHEMA V2: Validation spécifique pour listes (max 4 items)
+                if USE_SCHEMA_V2 and hasattr(spec, 'field_type') and spec.field_type == "list":
+                    cleaned_value = validate_list_v2(cleaned_value, max_items=4, max_chars=spec.max_chars)
+                
+                # Validation allowed_values (V1) ou enum_values (V2)
+                allowed = getattr(spec, 'allowed_values', None) or getattr(spec, 'enum_values', None)
+                cleaned_value, invalid_reason = validate_allowed_value(cleaned_value, allowed)
                 if invalid_reason:
                     missing_info.append(invalid_reason)
                     cleaned_value = ""

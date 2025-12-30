@@ -1,9 +1,10 @@
 # Training Report - 07cbb463b390
 
-**Date** : 2025-12-29T17:13:35.697176
+**Date** : 2025-12-29T19:12:22.745267
 **Clients analysés** : 100
 **Scans réussis** : 100
-**Clients utilisés** : 100
+**Clients utilisables (sources≥1)** : 93 (93%)
+**Clients sans sources (sources=0)** : 7
 
 ## 📊 Statistiques Globales
 
@@ -47,17 +48,17 @@ Coverage basée sur **100 clients utilisés**.
 
 ### Titres Inconnus (Top 10)
 
-- `PARTICIPATION AU PROGRAMME` : 17 occurrences
-- `FRANCAIS - POSITIONNEMENT DE NIVEAU` : 9 occurrences
-- `CALCUL NIVEAU 2` : 7 occurrences
-- `CALCUL NIVEAU 3` : 7 occurrences
-- `TRI ET CLASSEMENT` : 6 occurrences
-- `TEST ADMINISTRATIF BUREAUTIQUE` : 6 occurrences
-- `ANGLAIS - POSITIONNEMENT DE NIVEAU` : 5 occurrences
-- `DIMENSIONS, VOLUMES ET MESURES` : 5 occurrences
-- `SAISIE DE COMMANDES` : 5 occurrences
-- `ALLEMAND - POSITIONNEMENT DE NIVEAU` : 4 occurrences
+- `COMPREHENSION DE CONSIGNES` : 4 occurrences
+- `OFFICE CANTONAL DES ASSURANCES SOCIALES (OCAS)` : 3 occurrences
+- `ELEMENTS DE LA MESURE D’OUTPLACEMENT` : 3 occurrences
+- `ENTRETIEN & TRAVAUX MANUELS` : 2 occurrences
+- `RESPECTE LES HORAIRES` : 2 occurrences
+- `RESPECTE LES CONSIGNES AU TRAVAIL` : 2 occurrences
+- `LES TACHES EFFECTUEES SONT LES SUIVANTES` : 2 occurrences
+- `PREND DES INITIATIVES` : 2 occurrences
+- `RECONNAIT LES PRIORITES` : 2 occurrences
+- `S’ADAPTE AUX NOUVELLES SITUATIONS` : 2 occurrences
 
 ## 💡 Recommandations
 
-- 📝 Titres inconnus fréquents : PARTICIPATION AU PROGRAMME, FRANCAIS - POSITIONNEMENT DE NIVEAU, CALCUL NIVEAU 2, CALCUL NIVEAU 3, TRI ET CLASSEMENT → Ajouter mappings dans field_specs.py
+- 📝 Titres inconnus fréquents : COMPREHENSION DE CONSIGNES, OFFICE CANTONAL DES ASSURANCES SOCIALES (OCAS), ELEMENTS DE LA MESURE D’OUTPLACEMENT, ENTRETIEN & TRAVAUX MANUELS, RESPECTE LES HORAIRES → Ajouter mappings dans field_specs.py

@@ -91,6 +91,20 @@ function Progress() {
     const sumPicked = picked.reduce((acc, kv) => acc + kv.value, 0);
     const otherCount = Math.max(0, total - sumPicked);
 
+    // Labels clairs pour chaque type
+    const getLabel = (ext) => {
+      const labels = {
+        '.pdf': 'pdf',
+        '.docx': 'docx',
+        '.txt': 'txt',
+        '.msg': 'msg (Outlook)', // ✅ Clarification
+        '.m4a': 'm4a',
+        '.mp3': 'mp3',
+        '.wav': 'wav'
+      };
+      return labels[ext] || ext;
+    };
+
     return (
       <div className="logs-container">
         <h3>Sources détectées</h3>
@@ -105,7 +119,7 @@ function Progress() {
         <div className="sources-grid">
           {picked.map((kv) => (
             <div key={kv.key} className="sources-pill">
-              <span>{kv.key}</span>
+              <span>{getLabel(kv.key)}</span>
               <strong>{kv.value}</strong>
             </div>
           ))}

@@ -35,11 +35,13 @@ def process_report_job(
     auto_location_date: bool = True,
     # LLM
     llm_host: str = "http://localhost:11434",
-    llm_model: str = "mistral:latest",
+    llm_model: str = "qwen3-next:latest",
     temperature: float = 0.2,
     topk: int = 10,
     top_p: float = 0.9,
     max_chars_multiplier: float = 1.0,
+    # ✅ NOUVEAU: Config LLM unifiée (prioritaire si fourni)
+    llm: Optional[Dict[str, Any]] = None,
     # Options
     include_filters: list = None,
     exclude_filters: list = None,
@@ -82,6 +84,25 @@ def process_report_job(
     from rq import get_current_job
     job = get_current_job()
     job_id = job.id if job else "unknown"
+    
+    # ✅ Créer LLMConfig depuis l'objet llm si fourni
+    from core.llm_router import LLMConfig
+    llm_config = None
+    
+    if llm:
+        llm_config = LLMConfig(
+            provider=llm.get("provider", "ollama"),
+            base_url=llm.get("base_url") or llm_host,
+            model=llm.get("model") or llm_model,
+            temperature=llm.get("temperature", temperature),
+            max_tokens=llm.get("max_tokens", 4096),
+            top_p=llm.get("top_p", top_p),
+            timeout=llm.get("timeout", 900.0),
+        )
+        logger.info(
+            f"✅ LLM Config from API: provider={llm_config.provider} model={llm_config.model}",
+            extra={"job_id": job_id}
+        )
     
     logger.info(f"Starting report job", extra={
         "job_id": job_id,
@@ -141,6 +162,7 @@ def process_report_job(
             topk=topk,
             top_p=top_p,
             max_chars_multiplier=max_chars_multiplier,
+            llm_config=llm_config,  # ✅ Passer la config unifiée
             extract_method=extract_method,
             source_file=source_file,
             enable_soffice=enable_soffice,

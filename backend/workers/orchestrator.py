@@ -49,11 +49,13 @@ class ReportGenerationParams:
     
     # LLM
     llm_host: str = "http://localhost:11434"
-    llm_model: str = "mistral:latest"
+    llm_model: str = "qwen3-next:latest"
     temperature: float = 0.2
     topk: int = 10
     top_p: float = 0.9
     max_chars_multiplier: float = 1.0
+    # ✅ NOUVEAU: Config LLM unifiée (prioritaire)
+    llm_config: Optional[Any] = None  # Type: core.llm_router.LLMConfig
     
     # Extraction
     extract_method: str = "auto"
@@ -569,6 +571,7 @@ class ReportOrchestrator:
             include_filters=self.params.include_filters or [],
             exclude_filters=self.params.exclude_filters or [],
             debug_dir=self.temp_dir / "debug",
+            llm_config=self.params.llm_config,  # ✅ Passer la config unifiée
             status_callback=lambda msg: self._log_progress("GENERATING", msg, None),
             progress_callback=lambda k, stg, m: self._update_field_progress(k, stg, m),
         )

@@ -253,7 +253,7 @@ with cols[1]:
     name = st.text_input("Prénom", value="")
     surname = st.text_input("Nom", value="")
     civility = st.selectbox("Civilité", ["Monsieur", "Madame", "Autre"], index=0)
-    model = st.text_input("Modèle Ollama", value="mistral:latest")
+    model = st.text_input("Modèle Ollama", value="qwen3-next:latest")
     topk = st.slider("Top-K passages", min_value=3, max_value=20, value=10)
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.2, step=0.05)
     top_p = st.slider("Top-p", min_value=0.1, max_value=1.0, value=0.9, step=0.05)

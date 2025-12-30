@@ -220,7 +220,8 @@ def update_docx_header(
                 )
                 image_replacements.update(img_map)
             except MissingLogoPlaceholderError as exc:
-                raise ValueError(str(exc))
+                # Logo footer optionnel : warning au lieu d'erreur
+                logger.warning("Logo footer ignoré: %s", exc)
 
             # Idem pour le footer.
             target_footers = footers[:1] if (footers and not replace_logo_in_all_footers) else footers

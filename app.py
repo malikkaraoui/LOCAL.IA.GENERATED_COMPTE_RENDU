@@ -55,7 +55,7 @@ SESSION_DEFAULTS = {
     "auto_location_date": True,
     "location_date": "",
     "avs_number": "",
-    "llm_model_choice": "mistral:latest",
+    "llm_model_choice": "qwen3-next:latest",
     "llm_model_custom": "",
 }
 for key, val in SESSION_DEFAULTS.items():
@@ -102,7 +102,8 @@ FIELD_STAGE_ICONS = {
 FIELD_STUCK_THRESHOLD = 90  # seconds
 
 LLM_PRESETS = [
-    "mistral:latest",
+    "qwen3-next:latest",
+    "mistral:latest", 
     "llama3.1:8b",
     "qwen3-vl:2b",
 ]

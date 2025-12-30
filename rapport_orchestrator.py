@@ -29,7 +29,7 @@ class PipelineConfig:
     client_dir: Path
     template_path: Path
     output_dir: Path = Path("out")
-    model: str = "mistral:latest"
+    model: str = "qwen3-next:latest"
     host: str = "http://localhost:11434"
     topk: int = 10
     temperature: float = 0.2

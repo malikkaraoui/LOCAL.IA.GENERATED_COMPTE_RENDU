@@ -106,7 +106,7 @@ async def restart_ollama(req: OllamaRestartRequest) -> Dict[str, Any]:
                 "keep_alive": 0,
                 "options": {"num_predict": 1},
             }
-            resp = requests.post(f"{base}/api/generate", json=payload, timeout=30)
+            resp = requests.post(f"{base}/api/generate", json=payload, timeout=600)
             resp.raise_for_status()
             unloaded.append(model)
         except Exception as exc:

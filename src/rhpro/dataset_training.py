@@ -8,6 +8,8 @@ import json
 import hashlib
 import unicodedata
 import re
+import shutil
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -49,8 +51,25 @@ META_HEADERS_RAW_ADDITIONS = [
     "LIEU ET DATE",
 ]
 
+# PATCH v1.1 (AC5): Titres administratifs à ignorer complètement
+# Ces titres ne créent PAS de section ET ne comptent PAS dans unknown_titles
+IGNORED_TITLES_ADMIN = [
+    "PARTICIPATION AU PROGRAMME",
+    "A L'ATTENTION DE",
+    "A L ATTENTION DE",
+    "LIEU ET DATE",
+    "OFFICE CANTONAL DES ASSURANCES SOCIALES OCAS",
+    "OFFICE CANTONAL DES ASSURANCES SOCIALES",
+    "OCAS",
+    "ASSURANCE INVALIDITE",
+    "SERVICE DE L ASSURANCE INVALIDITE",
+    "REPUBLIQUE ET CANTON",
+    "DEPARTEMENT DE LA SECURITE",
+    "EN TETE ADMINISTRATIF",  # Cas générique
+]
+
 # Fusionner avec les méta headers existants
-ALL_META_HEADERS = list(META_HEADERS_RAW) + META_HEADERS_RAW_ADDITIONS
+ALL_META_HEADERS = list(META_HEADERS_RAW) + META_HEADERS_RAW_ADDITIONS + IGNORED_TITLES_ADMIN
 
 # Pré-calculer les meta headers normalisés
 META_HEADERS_NORM = {_normalize_title_for_meta(h) for h in ALL_META_HEADERS}
@@ -1372,6 +1391,7 @@ def analyze_dataset(
     limit: Optional[int] = None,
     validation_profile: Optional[ValidationProfile] = None,
     index_msg: bool = True,
+    quarantine_empty_sources: bool = False,
 ) -> DatasetTrainingResult:
     """
     Analyse un dataset de clients et extrait patterns/métriques.
@@ -1383,9 +1403,7 @@ def analyze_dataset(
         limit: Limiter le nombre de clients à analyser
         validation_profile: Profil de validation optionnel
         index_msg: Si True, inclure les .msg dans le RAG (défaut: True)
-        scan_depth: Profondeur de scan
-        limit: Limiter le nombre de clients à analyser
-        validation_profile: Profil de validation optionnel
+        quarantine_empty_sources: Si True, déplacer les dossiers avec sources=0 vers quarantaine (défaut: False)
         
     Returns:
         DatasetTrainingResult avec toutes les analyses
@@ -1538,6 +1556,10 @@ def analyze_dataset(
                     if is_noise_heading(title):
                         continue
                     
+                    # PATCH v1.1 (AC5): Vérifier que ce n'est pas un titre admin ignoré
+                    if _normalize_title_for_meta(title_for_filter) in META_HEADERS_NORM:
+                        continue  # NE PAS compter les titres administratifs
+                    
                     # Seulement maintenant => unknown
                     unknown_titles[title_for_filter] += 1
             
@@ -1590,6 +1612,23 @@ def analyze_dataset(
     gold_detected = sum(1 for c in successful_clients if (c.get("gold") or {}).get("detected"))
     pipeline_ready = sum(1 for c in successful_clients if c.get("pipeline_ready"))
     
+    # PATCH v1.1 (AC1): Calculer ready par profil (STRICT/STANDARD/DRAFT)
+    # Critères simplifiés basés sur les métriques observées:
+    # - STRICT: GOLD détecté + sources>=3 + sections>=8
+    # - STANDARD: sources>=2 + sections>=5
+    # - DRAFT: sources>=1
+    ready_strict = sum(1 for c in successful_clients 
+                       if c.get("sources_count", 0) >= 3 
+                       and (c.get("gold") or {}).get("detected", False)
+                       and c.get("sections_extracted", 0) >= 8)
+    
+    ready_standard = sum(1 for c in successful_clients 
+                         if c.get("sources_count", 0) >= 2 
+                         and c.get("sections_extracted", 0) >= 5)
+    
+    ready_draft = sum(1 for c in successful_clients 
+                      if c.get("sources_count", 0) >= 1)
+    
     # Distributions
     sources_counts = [c["sources_count"] for c in successful_clients if "sources_count" in c]
     
@@ -1600,7 +1639,58 @@ def analyze_dataset(
     # ✅ PRIORITÉ 4: Calculer clients_used et clients_no_sources AVANT de construire result.stats
     clients_used_list = [c for c in successful_clients if c.get('sources_count', 0) > 0]
     clients_used = len(clients_used_list)
-    clients_no_sources = len(successful_clients) - clients_used
+    
+    # Identifier clients avec sources_count=0
+    empty_sources_clients = [c for c in successful_clients if c.get('sources_count', 0) == 0]
+    clients_no_sources = len(empty_sources_clients)
+    
+    # Quarantaine des dossiers vides (optionnel)
+    quarantine_manifest = None
+    quarantine_base = None
+    if quarantine_empty_sources and empty_sources_clients:
+        run_id = str(uuid.uuid4())[:8]
+        quarantine_base = Path("data/_trash/empty_sources") / run_id
+        quarantine_base.mkdir(parents=True, exist_ok=True)
+        
+        manifest_entries = []
+        print(f"\n🗑️  Quarantaine de {len(empty_sources_clients)} clients avec sources=0...")
+        
+        for client_data in empty_sources_clients:
+            client_folder_path = Path(client_data["folder_path"])
+            client_id = client_data["folder_name"]
+            
+            try:
+                # Déplacer vers quarantaine
+                dest_path = quarantine_base / client_folder_path.name
+                shutil.move(str(client_folder_path), str(dest_path))
+                
+                manifest_entries.append({
+                    "client_id": client_id,
+                    "path_before": str(client_folder_path),
+                    "path_after": str(dest_path),
+                    "timestamp": datetime.now().isoformat(),
+                    "reason": "sources_count=0",
+                })
+                
+                print(f"  ✅ {client_id} → {dest_path.relative_to(Path('data'))}")
+            except Exception as e:
+                print(f"  ❌ Erreur quarantaine {client_id}: {e}")
+                # Ne pas casser le run, continuer
+                continue
+        
+        # Écrire manifest
+        manifest_path = quarantine_base / "manifest.json"
+        quarantine_manifest = {
+            "run_id": run_id,
+            "timestamp": datetime.now().isoformat(),
+            "total_quarantined": len(manifest_entries),
+            "entries": manifest_entries,
+        }
+        
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(quarantine_manifest, f, indent=2, ensure_ascii=False)
+        
+        print(f"  📄 Manifest: {manifest_path}")
     
     # ✅ PRIORITÉ 5: Écrire les diagnostics GOLD missing si présents
     if gold_missing_diagnostics:
@@ -1631,10 +1721,20 @@ def analyze_dataset(
         "errors_top": errors_top,  # ✅ Top 5 types d'erreurs
         "clients_used": clients_used,  # ✅ PRIORITÉ 4: Clients avec sources > 0
         "clients_no_sources": clients_no_sources,  # ✅ PRIORITÉ 4: Clients sans sources
+        "empty_sources_clients_count": clients_no_sources,  # ✅ Feature: Clients vides
+        "empty_sources_clients": [c["folder_name"] for c in empty_sources_clients[:50]],  # Top 50
+        "quarantine_manifest_path": str(quarantine_base / "manifest.json") if quarantine_manifest else None,
         "gold_detected": gold_detected,
         "gold_detection_rate": gold_detected / len(successful_clients) if successful_clients else 0,
         "pipeline_ready": pipeline_ready,
         "pipeline_ready_rate": pipeline_ready / len(successful_clients) if successful_clients else 0,
+        # PATCH v1.1 (AC1): Ready par profil
+        "ready_strict": ready_strict,
+        "ready_standard": ready_standard,
+        "ready_draft": ready_draft,
+        "ready_strict_rate": ready_strict / len(successful_clients) if successful_clients else 0,
+        "ready_standard_rate": ready_standard / len(successful_clients) if successful_clients else 0,
+        "ready_draft_rate": ready_draft / len(successful_clients) if successful_clients else 0,
         "sources_stats": {
             "mean": statistics.mean(sources_counts) if sources_counts else 0,
             "median": statistics.median(sources_counts) if sources_counts else 0,

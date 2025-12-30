@@ -3,9 +3,48 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+class LLMConfigRequest(BaseModel):
+    """Configuration LLM pour les requêtes API."""
+    
+    provider: Optional[Literal["ollama", "openai", "local"]] = Field(
+        default="ollama",
+        description="Provider LLM"
+    )
+    base_url: Optional[str] = Field(
+        default=None,
+        description="URL de base du service LLM"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="Nom du modèle"
+    )
+    temperature: Optional[float] = Field(
+        default=0.2,
+        ge=0.0,
+        le=1.0,
+        description="Température"
+    )
+    max_tokens: Optional[int] = Field(
+        default=4096,
+        ge=1,
+        description="Tokens max"
+    )
+    top_p: Optional[float] = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Top-p"
+    )
+    timeout: Optional[float] = Field(
+        default=900.0,
+        ge=1.0,
+        description="Timeout (s)"
+    )
 
 
 class JobStatus(str, Enum):
@@ -43,7 +82,7 @@ class ReportCreateRequest(BaseModel):
     
     # LLM
     llm_host: Optional[str] = Field("http://localhost:11434", description="Serveur Ollama")
-    llm_model: Optional[str] = Field("qwen2.5:latest", description="Modèle Ollama")
+    llm_model: Optional[str] = Field("qwen3-next:latest", description="Modèle Ollama")
     temperature: Optional[float] = Field(0.2, ge=0, le=1, description="Température LLM")
     topk: Optional[int] = Field(10, description="Top-K passages")
     top_p: Optional[float] = Field(0.9, description="Top-p")
@@ -57,6 +96,12 @@ class ReportCreateRequest(BaseModel):
     force_reextract: Optional[bool] = Field(False, description="Forcer extraction")
     enable_soffice: Optional[bool] = Field(False, description="Activer LibreOffice")
     export_pdf: Optional[bool] = Field(False, description="Exporter en PDF")
+    
+    # LLM unifié (nouveau - prioritaire)
+    llm: Optional[LLMConfigRequest] = Field(
+        default=None,
+        description="Configuration LLM unifiée (prioritaire sur llm_host/llm_model)"
+    )
     
     class Config:
         json_schema_extra = {

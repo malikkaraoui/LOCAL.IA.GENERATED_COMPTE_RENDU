@@ -203,6 +203,12 @@ async def create_report(request: ReportCreateRequest):
 
     include_filters = _parse_csv_filters(request.include_filters)
     exclude_filters = _parse_csv_filters(request.exclude_filters)
+    
+    # ✅ Convertir l'objet LLM en dictionnaire si fourni
+    llm_dict = None
+    if request.llm:
+        llm_dict = request.llm.model_dump() if hasattr(request.llm, 'model_dump') else request.llm.dict()
+        logger.info(f"✅ LLM config from request: provider={llm_dict.get('provider')} model={llm_dict.get('model')}")
 
     job = queue.enqueue(
         process_report_job,
@@ -228,6 +234,7 @@ async def create_report(request: ReportCreateRequest):
         topk=request.topk if request.topk is not None else 10,
         top_p=request.top_p if request.top_p is not None else 0.9,
         max_chars_multiplier=request.max_chars_multiplier if request.max_chars_multiplier is not None else 1.0,
+        llm=llm_dict,  # ✅ Passer l'objet LLM unifié
         # Filters
         include_filters=include_filters,
         exclude_filters=exclude_filters,

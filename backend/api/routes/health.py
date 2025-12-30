@@ -22,7 +22,7 @@ async def health_check():
 async def ollama_health():
     """Vérification de la connexion Ollama."""
     try:
-        resp = requests.get(f"{settings.OLLAMA_HOST}/api/tags", timeout=5)
+        resp = requests.get(f"{settings.OLLAMA_HOST}/api/tags", timeout=15)
         resp.raise_for_status()
         data = resp.json() if hasattr(resp, "json") else {}
         models = data.get("models", [])
@@ -43,7 +43,7 @@ async def list_ollama_models(host: str | None = Query(default=None, description=
     """
     try:
         base = (host or settings.OLLAMA_HOST).rstrip("/")
-        resp = requests.get(f"{base}/api/tags", timeout=5)
+        resp = requests.get(f"{base}/api/tags", timeout=15)
         resp.raise_for_status()
 
         data = resp.json()
