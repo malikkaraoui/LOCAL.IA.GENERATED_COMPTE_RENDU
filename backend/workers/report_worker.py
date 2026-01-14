@@ -17,6 +17,10 @@ setup_logging(console_level=logging.INFO, format_json=False)
 logger = logging.getLogger(__name__)
 
 
+class JobCancelled(RuntimeError):
+    """Exception levée quand une annulation a été demandée via l'API."""
+
+
 def process_report_job(
     client_name: str,
     clients_root: Optional[str] = None,
@@ -29,6 +33,8 @@ def process_report_job(
     surname: str = "",
     civility: str = "Monsieur",
     avs_number: str = "",
+    # Template placeholders (déterministes)
+    titre_document: str = "",
     # Lieu/Date
     location_city: str = "",
     location_date: str = "",
@@ -84,6 +90,21 @@ def process_report_job(
     from rq import get_current_job
     job = get_current_job()
     job_id = job.id if job else "unknown"
+
+    def _check_cancel_requested() -> None:
+        """Vérifie si l'annulation a été demandée via job.meta.
+
+        Note: on refresh le job pour récupérer les metas mises à jour côté API.
+        """
+        if not job:
+            return
+        try:
+            job.refresh()
+        except Exception:
+            # Si le job a été supprimé, on ne doit pas faire tomber le worker.
+            return
+        if job.meta.get("cancel_requested") is True:
+            raise JobCancelled("Annulation demandée par l'utilisateur")
     
     # ✅ Créer LLMConfig depuis l'objet llm si fourni
     from core.llm_router import LLMConfig
@@ -111,6 +132,7 @@ def process_report_job(
     })
     
     try:
+        _check_cancel_requested()
         # Verify client directory exists
         base_clients_dir = settings.CLIENTS_DIR
         if clients_root:
@@ -153,6 +175,7 @@ def process_report_job(
             surname=surname,
             civility=civility,
             avs_number=avs_number,
+            titre_document=titre_document,
             location_city=location_city,
             location_date=location_date,
             auto_location_date=auto_location_date,
@@ -175,13 +198,24 @@ def process_report_job(
         # Progress callback for RQ meta updates
         def progress_callback(update: Dict[str, Any]):
             """Update job metadata with progress."""
-            if job:
+            # Vérifier annulation avant de pousser de nouvelles metas.
+            _check_cancel_requested()
+            if not job:
+                return
+            try:
                 job.meta.update(update)
                 job.save_meta()
+            except Exception:
+                # Ne jamais faire tomber le worker si les metas ne peuvent pas être sauvées
+                # (ex: job supprimé, redis instable, etc.).
+                logger.warning("Unable to save job meta update", extra={"job_id": job_id})
         
         # Run orchestrator
         orchestrator = ReportOrchestrator(params, progress_callback)
         result = orchestrator.run()
+
+        # Vérifier annulation juste après la fin (cas rare: annulation demandée pendant la dernière étape)
+        _check_cancel_requested()
         
         logger.info(f"Job completed successfully", extra={
             "job_id": job_id,
@@ -189,6 +223,25 @@ def process_report_job(
         })
         
         return result
+
+    except JobCancelled as e:
+        logger.info("Job cancelled", extra={"job_id": job_id})
+        # Pousser un dernier état lisible côté UI.
+        if job:
+            try:
+                job.meta.update({
+                    "status": "CANCELLED",
+                    "message": str(e),
+                    "progress": None,
+                })
+                job.save_meta()
+            except Exception:
+                pass
+        return {
+            "status": "cancelled",
+            "error": str(e),
+            "error_type": "JobCancelled",
+        }
             
     except Exception as e:
         logger.exception("Unexpected error in job", extra={

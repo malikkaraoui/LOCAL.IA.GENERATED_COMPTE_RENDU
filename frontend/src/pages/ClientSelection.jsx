@@ -26,12 +26,15 @@ function ClientSelection() {
 
   // Chemins
   const [clientsRoot, setClientsRoot] = useState('./CLIENTS');
-  const [templatePath, setTemplatePath] = useState('./TemplateRapportStage.docx');
-  const [templateName, setTemplateName] = useState(DEFAULT_TEMPLATE);
+  const [templatePath, setTemplatePath] = useState('');
+  const [templateName, setTemplateName] = useState('');
   const [templates, setTemplates] = useState([]);
   const [templateUploading, setTemplateUploading] = useState(false);
   const [templateLocalFile, setTemplateLocalFile] = useState(null);
   const [outputDir, setOutputDir] = useState('./out');
+
+  const templateSelectionOk = Boolean((templateName && templateName.trim()) || (templatePath && templatePath.trim()));
+  const templateNameAvailable = Boolean(templateName && templates.includes(templateName));
 
   // LLM
   const [llmHost, setLlmHost] = useState('http://localhost:11434');
@@ -143,18 +146,17 @@ function ClientSelection() {
     (async () => {
       try {
         const resp = await reportsAPI.listTemplates();
-        const list = resp.templates || [];
-        const merged = [DEFAULT_TEMPLATE, ...list.filter((t) => t !== DEFAULT_TEMPLATE)];
-        setTemplates(merged);
+        const list = Array.isArray(resp.templates) ? resp.templates : [];
+        const uniq = Array.from(new Set(list.filter(Boolean)));
+        setTemplates(uniq);
         if (!templateName) {
-          setTemplateName(DEFAULT_TEMPLATE);
+          // Sélectionner le premier template réellement disponible côté serveur.
+          setTemplateName(uniq[0] || '');
         }
       } catch (err) {
         console.warn('Impossible de charger la liste des templates:', err);
-        setTemplates([DEFAULT_TEMPLATE]);
-        if (!templateName) {
-          setTemplateName(DEFAULT_TEMPLATE);
-        }
+        setTemplates([]);
+        if (!templateName) setTemplateName('');
       }
     })();
   }, []);
@@ -267,7 +269,8 @@ function ClientSelection() {
     const fd = new FormData();
 
     // Template: idéalement template_name (upload/liste). template_path reste un fallback dev.
-    if (templateName) {
+    // Si le template sélectionné n'existe pas dans la liste serveur, on évite d'envoyer template_name.
+    if (templateName && templateNameAvailable) {
       fd.append('template_name', templateName);
     } else if (templatePath) {
       fd.append('template_path', templatePath);
@@ -310,12 +313,22 @@ function ClientSelection() {
       return;
     }
 
+    // Empêche un call backend inutile si aucun template n'est prêt.
+    if (!templateSelectionOk) {
+      setError('Veuillez sélectionner ou uploader un template DOCX avant de générer un rapport.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
       // 1) Branding (optionnel) avant génération: produit un template brandé et le sélectionne
       let effectiveTemplateName = templateName || null;
+      if (effectiveTemplateName && !templateNameAvailable) {
+        // Sécurité: si un nom est saisi mais pas réellement disponible côté serveur, on force le fallback path.
+        effectiveTemplateName = null;
+      }
       if (brandingEnabled) {
         try {
           effectiveTemplateName = await applyBrandingAndUploadTemplateIfNeeded();
@@ -341,6 +354,7 @@ function ClientSelection() {
           surname,
           civility,
           avs_number: avsNumber,
+          titre_document: brandingTitreDocument,
           location_city: locationCity,
           location_date: getLocationDatePreview(),
           auto_location_date: autoDate,
@@ -429,6 +443,12 @@ function ClientSelection() {
             <div className="form-group">
               <label>Template DOCX</label>
               <div className="template-picker">
+                {templates.length === 0 && !templateLocalFile && (
+                  <div className="hint" style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff7ed' }}>
+                    ⚠️ Aucun template DOCX n’est disponible côté serveur. Uploade un <strong>.docx</strong> via “Parcourir…”.
+                  </div>
+                )}
+
                 <div className="template-picker-row">
                   <FilePicker
                     id="template-docx"
@@ -450,7 +470,7 @@ function ClientSelection() {
                     onChange={(e) => setTemplateName(e.target.value)}
                     disabled={loading}
                   >
-                    <option value={DEFAULT_TEMPLATE}>— Par défaut ({DEFAULT_TEMPLATE}) —</option>
+                    <option value="">— Sélectionner un template —</option>
                     {templates.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
@@ -463,7 +483,7 @@ function ClientSelection() {
                       type="text"
                       value={templatePath}
                       onChange={(e) => setTemplatePath(e.target.value)}
-                      placeholder="./TemplateRapportStage.docx"
+                      placeholder="(optionnel) chemin côté serveur, ex: ./uploaded_templates/mon_template.docx"
                     />
                     <small className="hint">
                       Mode avancé: chemin côté serveur (dev local). Sinon utilise “Parcourir…” au-dessus.
@@ -952,7 +972,7 @@ function ClientSelection() {
 
       <button
         onClick={handleCreateReport}
-        disabled={loading || !selectedClient}
+        disabled={loading || !selectedClient || !templateSelectionOk}
         className="btn-primary btn-generate"
       >
         {loading ? '⏳ Génération en cours...' : '🚀 Générer le Rapport'}

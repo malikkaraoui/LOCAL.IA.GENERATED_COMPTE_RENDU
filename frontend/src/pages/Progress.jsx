@@ -215,15 +215,17 @@ function Progress() {
 
   const handleCancelJob = async () => {
     if (!jobId) return;
-    const ok = window.confirm('Annuler ce job ? (Suppression de la queue / résultat perdu)');
+    const ok = window.confirm(
+      "Annuler ce job ?\n\nCela enverra une demande d'annulation au worker (sans le casser). Le job s'arrêtera dès que possible."
+    );
     if (!ok) return;
 
     setAdminBusy(true);
     setAdminMessage(null);
     setError(null);
     try {
-      await reportsAPI.deleteReport(jobId, { force: true });
-      setAdminMessage('🗑️ Job supprimé. Retour à l\'accueil…');
+      await reportsAPI.cancelReport(jobId);
+      setAdminMessage('🛑 Annulation demandée. Retour à l\'accueil…');
       setTimeout(() => {
         window.location.href = '/';
       }, 700);

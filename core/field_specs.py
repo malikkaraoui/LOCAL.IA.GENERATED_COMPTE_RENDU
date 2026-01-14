@@ -56,6 +56,7 @@ def _register_specs() -> dict[str, FieldSpec]:
         "NAME": "name",
         "SURNAME": "surname",
         "LIEU_ET_DATE": "location_date",
+        "TITRE_DOCUMENT": "titre_document",
     }
 
     narrative = {

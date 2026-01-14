@@ -165,6 +165,27 @@ export const reportsAPI = {
     const response = await apiClient.delete(`/reports/${jobId}`, { params });
     return response.data;
   },
+
+  /**
+   * Demande l'annulation d'un job (ne supprime pas le job).
+   * Recommandé pour arrêter un job 'started' sans casser le worker.
+   */
+  cancelReport: async (jobId) => {
+    const response = await apiClient.post(`/reports/${jobId}/cancel`);
+    return response.data;
+  },
+
+  /**
+   * Test (pré-vol) d'un client pour l'UI Training.
+   * Retour attendu: { success, status, score, reasons, actions, ... }
+   */
+  testClient: async ({ client_name, profile = 'STANDARD' } = {}) => {
+    const response = await apiClient.post('/training/test-client', {
+      client_name,
+      profile,
+    });
+    return response.data;
+  },
 };
 
 /**

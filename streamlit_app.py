@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -41,6 +42,19 @@ with st.sidebar:
         )
     )
     st.session_state.current_page = page
+
+    st.divider()
+    st.subheader("🔗 Liens utiles")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    api_docs_url = os.getenv("API_DOCS_URL", "http://127.0.0.1:8000/api/docs")
+    api_health_url = os.getenv("API_HEALTH_URL", "http://127.0.0.1:8000/api/health")
+    st.markdown(
+        f"""
+- **Frontend (React)** : [{frontend_url}]({frontend_url})
+- **API Docs (Swagger)** : [{api_docs_url}]({api_docs_url})
+- **Backend health** : [{api_health_url}]({api_health_url})
+"""
+    )
 
 # Si Batch Parser, afficher la page dédiée
 if st.session_state.current_page == "Batch Parser RH-Pro":

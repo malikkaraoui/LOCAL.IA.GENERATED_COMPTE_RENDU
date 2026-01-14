@@ -40,6 +40,7 @@ class ReportGenerationParams:
     surname: str = ""
     civility: str = "Monsieur"
     avs_number: str = ""
+    titre_document: str = ""
     
     # Lieu et date
     location_city: str = ""
@@ -248,6 +249,53 @@ class ReportOrchestrator:
         """Extraction des documents sources."""
         extracted_path = self.temp_dir / "extracted.json"
 
+        def _is_under(path: Path, parent: Path) -> bool:
+            try:
+                path.resolve().relative_to(parent.resolve())
+                return True
+            except Exception:
+                return False
+
+        def _is_ingested_audio_file(path: Path) -> bool:
+            # Convention: <client>/sources/ingested_audio/*.{txt,json}
+            try:
+                parts = [p.lower() for p in path.parts]
+            except Exception:
+                parts = []
+            return "ingested_audio" in parts
+
+        def _walk_client_files_filtered(root: Path) -> list[Path]:
+            """Walk récursif du dossier client en ignorant les dossiers générés.
+
+            Objectif: éviter que le RAG ré-ingère les sorties (rapports générés, caches, etc.).
+            """
+            from src.utils.file_filters import is_ignored_filename
+
+            skip_dir_names = {
+                "output",
+                "output_final",
+                "htmlcov",
+                "__pycache__",
+                # Dossier de sortie standard côté projet client
+                "06 rapport final",
+            }
+
+            out: list[Path] = []
+            root = root.expanduser().resolve()
+            for p in root.rglob("*"):
+                if not p.is_file():
+                    continue
+                if is_ignored_filename(p):
+                    continue
+                try:
+                    rel_parts = [x.lower() for x in p.relative_to(root).parts]
+                except Exception:
+                    rel_parts = [x.lower() for x in p.parts]
+                if any(part in skip_dir_names for part in rel_parts):
+                    continue
+                out.append(p)
+            return sorted(out)
+
         def _audio_deps_ok() -> bool:
             # Dépendances nécessaires à faster-whisper (ffmpeg/ffprobe + module Python)
             if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
@@ -363,7 +411,11 @@ class ReportOrchestrator:
 
         def _attempt_extract(input_dir: Path) -> list[ExtractedDoc]:
             # Liste des fichiers
-            files = walk_files(input_dir)
+            if _is_under(input_dir, self.params.client_dir) and input_dir.resolve() == self.params.client_dir.resolve():
+                # Scan "intelligent" (éviter de prendre les sorties)
+                files = _walk_client_files_filtered(input_dir)
+            else:
+                files = walk_files(input_dir)
             if not files:
                 raise ValueError(f"Aucun fichier trouvé dans {input_dir}")
 
@@ -439,6 +491,35 @@ class ReportOrchestrator:
             if sources_dir.exists():
                 input_dir = sources_dir
                 fallback_dir = self.params.client_dir
+
+                # Si sources/ existe mais ne contient que ingested_audio (ou aucun doc "réel"),
+                # alors on préfère scanner le dossier client (sinon on perd PDFs/DOCX/TXT rangés
+                # dans 01/03/04/05...
+                try:
+                    files_in_sources = walk_files(sources_dir)
+                    supported_exts = {".pdf", ".docx", ".txt", ".msg"}
+                    if bool(self.params.enable_soffice):
+                        supported_exts |= {".doc", ".rtf", ".odt", ".docm", ".dot", ".dotx", ".dotm"}
+
+                    has_real_doc = False
+                    for fp in files_in_sources:
+                        if fp.suffix.lower() not in supported_exts:
+                            continue
+                        if _is_ingested_audio_file(fp):
+                            # Transcriptions audio ≠ sources principales
+                            continue
+                        has_real_doc = True
+                        break
+
+                    if not has_real_doc:
+                        logger.info(
+                            "Le dossier 'sources/' ne contient pas de documents principaux (hors ingested_audio). "
+                            "Fallback vers le dossier client pour inclure les sous-dossiers 01/03/04/05…"
+                        )
+                        input_dir = self.params.client_dir
+                except Exception:
+                    # Non bloquant : on garde le comportement existant
+                    pass
             else:
                 input_dir = self.params.client_dir
 
@@ -555,6 +636,7 @@ class ReportOrchestrator:
             "SURNAME": self.params.surname,
             "LIEU_ET_DATE": location_date_value,
             "NUMERO_AVS": avs_value,
+            "TITRE_DOCUMENT": self.params.titre_document,
         }
         
         # Génération des champs
@@ -605,6 +687,7 @@ class ReportOrchestrator:
             "{{MONSIEUR_OU_MADAME}}": self.params.civility,
             "{{NAME}}": self.params.name,
             "{{SURNAME}}": self.params.surname,
+            "{{TITRE_DOCUMENT}}": self.params.titre_document,
         }
         replace_text_everywhere(doc, simple_mapping)
         

@@ -85,20 +85,47 @@ echo -e "${CYAN}═════════════════════�
 echo -e "${CYAN}4️⃣  Démarrage du Worker RQ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-if pgrep -f "scripts/start_worker.py" >/dev/null 2>&1; then
-    echo -e "${GREEN}✅ Worker déjà actif${NC}"
-else
-    nohup .venv/bin/python scripts/start_worker.py > /tmp/worker.log 2>&1 &
-    WORKER_PID=$!
-    echo -e "${YELLOW}⏳ Attente du worker...${NC}"
-    sleep 2
-    if ps -p $WORKER_PID > /dev/null; then
-        echo -e "${GREEN}✅ Worker démarré (PID: $WORKER_PID) - SimpleWorker sans fork${NC}"
+
+# Pour éviter le "je coupe et je ne peux plus rien faire" (job long + worker unique),
+# on lance 2 workers par défaut sur macOS (SimpleWorker, sans fork).
+WORKER_COUNT="${WORKER_COUNT:-}"
+if [ -z "$WORKER_COUNT" ]; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        WORKER_COUNT=2
     else
-        echo -e "${RED}❌ Échec démarrage worker${NC}"
-        tail -20 /tmp/worker.log
-        exit 1
+        WORKER_COUNT=1
     fi
+fi
+
+current_workers=$(pgrep -f "scripts/start_worker.py" 2>/dev/null | wc -l | tr -d ' ')
+current_workers=${current_workers:-0}
+
+if [ "$current_workers" -ge "$WORKER_COUNT" ]; then
+    echo -e "${GREEN}✅ Workers déjà actifs (${current_workers}/${WORKER_COUNT})${NC}"
+else
+    to_start=$((WORKER_COUNT - current_workers))
+    echo -e "${YELLOW}⏳ Lancement de ${to_start} worker(s) (${current_workers} déjà actif(s))...${NC}"
+
+    for i in $(seq 1 $to_start); do
+        # Déterminer l'index global du worker (1 => /tmp/worker.log, 2 => /tmp/worker_2.log, ...)
+        idx=$((current_workers + i))
+        if [ "$idx" -le 1 ]; then
+            log_path="/tmp/worker.log"
+        else
+            log_path="/tmp/worker_${idx}.log"
+        fi
+
+        nohup .venv/bin/python scripts/start_worker.py > "$log_path" 2>&1 &
+        WORKER_PID=$!
+        sleep 0.6
+        if ps -p $WORKER_PID > /dev/null; then
+            echo -e "${GREEN}✅ Worker démarré (PID: $WORKER_PID) - log: ${log_path}${NC}"
+        else
+            echo -e "${RED}❌ Échec démarrage worker${NC}"
+            tail -20 "$log_path" || true
+            exit 1
+        fi
+    done
 fi
 echo ""
 

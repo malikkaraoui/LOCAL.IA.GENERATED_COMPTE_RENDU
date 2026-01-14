@@ -69,6 +69,9 @@ class ReportCreateRequest(BaseModel):
     surname: Optional[str] = Field(None, description="Nom de famille")
     civility: Optional[str] = Field("Monsieur", description="Civilité")
     avs_number: Optional[str] = Field(None, description="Numéro AVS")
+
+    # Template placeholders (déterministes)
+    titre_document: Optional[str] = Field(None, description="Titre du document ({{TITRE_DOCUMENT}})")
     
     # Localisation
     location_city: Optional[str] = Field("Genève", description="Ville")

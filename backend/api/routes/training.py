@@ -126,6 +126,17 @@ class ScanBatchRequest(BaseModel):
     min_pipeline_score: float = 0.3
 
 
+class TestClientRequest(BaseModel):
+    """Requête de test (pré-vol) sur un client côté API.
+
+    NOTE: Cette route est utilisée par l'UI React (/training) et vise à
+    vérifier rapidement la préparabilité du client au pipeline.
+    """
+
+    client_name: str
+    profile: str = "STANDARD"  # STRICT | STANDARD | DRAFT (tolérant)
+
+
 @router.post("/scan-batch")
 async def scan_batch(req: ScanBatchRequest):
     """
@@ -429,4 +440,106 @@ async def normalize_batch(req: BatchNormalizeRequest):
             status_code=500,
             detail=f"Erreur lors du batch : {str(e)}"
         )
+
+
+@router.post("/test-client")
+async def test_client(req: TestClientRequest):
+    """Test rapide d'un client (pré-vol) pour l'UI Training.
+
+    Objectif : fournir un résultat stable sans lancer de génération LLM.
+    Le score est une heuristique basée sur :
+    - confiance GOLD (gold_score)
+    - quantité de sources RAG (rag_sources_count)
+
+    Returns:
+        { success, status, score, reasons, actions, scan_summary }
+    """
+    try:
+        from src.rhpro.client_scanner import scan_client_folder
+
+        client_name = (req.client_name or "").strip()
+        if not client_name:
+            raise HTTPException(status_code=400, detail="client_name manquant")
+
+        client_dir = settings.CLIENTS_DIR / client_name
+        if not client_dir.exists() or not client_dir.is_dir():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Client '{client_name}' introuvable dans {settings.CLIENTS_DIR}",
+            )
+
+        scan_result = scan_client_folder(str(client_dir))
+
+        warnings = list(scan_result.get("warnings") or [])
+        stats = scan_result.get("stats") or {}
+        gold_score = float(stats.get("gold_score") or 0.0)
+        rag_sources_count = int(stats.get("rag_sources_count") or 0)
+        pipeline_ready = bool(scan_result.get("pipeline_ready"))
+
+        # Score heuristique [0..1]
+        rag_component = min(1.0, rag_sources_count / 5.0) if rag_sources_count >= 0 else 0.0
+        score = 0.5 * max(0.0, min(1.0, gold_score)) + 0.5 * rag_component
+        score = round(score, 3)
+
+        # Status (GO/DRAFT/NO_GO)
+        profile = (req.profile or "STANDARD").strip().upper()
+        if not pipeline_ready:
+            status = "NO_GO"
+        elif profile == "DRAFT":
+            status = "DRAFT"
+        else:
+            # Heuristique: GO si score suffisant, sinon DRAFT.
+            status = "GO" if score >= 0.7 else "DRAFT"
+
+        # Reasons / actions
+        reasons: list[str] = []
+        actions: list[str] = []
+
+        if warnings:
+            reasons.extend(warnings)
+
+        folder_structure = scan_result.get("folder_structure") or {}
+        missing_required = [
+            key
+            for key in ("01_personnel", "06_rapport")
+            if not folder_structure.get(key)
+        ]
+
+        if missing_required:
+            actions.append(
+                "Ajouter les dossiers requis: " + ", ".join(missing_required)
+            )
+
+        if not scan_result.get("gold"):
+            actions.append(
+                "Ajouter un rapport final (GOLD) dans le dossier '06 Rapport final' (DOC/DOCX)."
+            )
+
+        if rag_sources_count < 2:
+            actions.append(
+                "Ajouter davantage de sources exploitables (PDF/DOCX/TXT/MSG) pour améliorer le contexte RAG."
+            )
+
+        if pipeline_ready and not reasons and status != "GO":
+            reasons.append("Client détecté comme pipeline-ready, mais qualité estimée moyenne.")
+
+        return {
+            "success": True,
+            "client_name": scan_result.get("client_name", client_name),
+            "status": status,
+            "score": score,
+            "reasons": reasons,
+            "actions": actions,
+            "scan_summary": {
+                "pipeline_ready": pipeline_ready,
+                "gold_score": gold_score,
+                "rag_sources_count": rag_sources_count,
+                "total_size_mb": stats.get("total_size_mb"),
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur test-client : {str(e)}")
 

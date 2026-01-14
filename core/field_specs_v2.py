@@ -29,6 +29,12 @@ PROMPT_VERSION = "V1"
 CECRL_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Non évalué"]
 BUREAUTIQUE_LEVELS = ["Faible", "Moyen", "Bon", "Très bon", "Non évalué"]
 
+# Alias de compatibilité (certains tests/imports historiques attendent TOOL_LEVELS)
+TOOL_LEVELS = BUREAUTIQUE_LEVELS
+
+# Alias de compatibilité (tests/anciens schémas): niveaux de tests/évaluations
+TEST_LEVELS = ["OK", "Moyen", "À renforcer", "Non évalué"]
+
 
 @dataclass(frozen=True)
 class FieldSpecV2:

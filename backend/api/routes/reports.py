@@ -6,6 +6,7 @@ frontend d'offrir un vrai bouton "Parcourir…" comme l'ancienne UI Streamlit.
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,8 @@ from backend.workers.report_worker import process_report_job
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 # Redis connection and queue
 redis_conn = Redis(
     host=settings.REDIS_HOST,
@@ -46,17 +49,28 @@ async def list_templates():
     - `uploaded_templates/` (settings.TEMPLATES_DIR)
     - `CLIENTS/templates/` (si présent)
     """
-    # NOTE (déc. 2025): mode "template unique".
-    # On expose uniquement le template de base (évite que des backups/exports apparaissent dans l'UI).
-    default_name = "TEMPLATE_SIMPLE_BASE1.docx"
+    def _safe_list_docx(folder: Path) -> list[str]:
+        if not folder.exists() or not folder.is_dir():
+            return []
+        out: list[str] = []
+        for p in folder.iterdir():
+            if not p.is_file():
+                continue
+            # Ignorer les fichiers temporaires Word (~$...)
+            if p.name.startswith("~$"):
+                continue
+            if p.suffix.lower() != ".docx":
+                continue
+            out.append(p.name)
+        return out
 
-    tpl_dir = settings.TEMPLATES_DIR
-    cand = tpl_dir / default_name
-    if cand.exists() and cand.is_file() and cand.suffix.lower() == ".docx":
-        return {"templates": [default_name]}
+    names = []
+    names.extend(_safe_list_docx(settings.TEMPLATES_DIR))
+    names.extend(_safe_list_docx(settings.CLIENTS_DIR / "templates"))
 
-    # Si absent, on renvoie vide (l'UI affichera quand même le nom par défaut).
-    return {"templates": []}
+    # Dédupliquer + trier (stable)
+    uniq = sorted(set(names), key=lambda s: s.lower())
+    return {"templates": uniq}
 
 
 @router.post("/templates/upload")
@@ -196,10 +210,17 @@ async def create_report(request: ReportCreateRequest):
     # Enqueue job dans Redis Queue with all parameters
     template_path = _resolve_template_path(request)
     if not template_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Template introuvable: {template_path}"
-        )
+        if not request.template_name and not request.template_path:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Aucun template DOCX par défaut n'est disponible côté serveur. "
+                    "Veuillez uploader un template (.docx) via le bouton ‘Parcourir…’ dans l'UI, "
+                    "ou déposer un .docx dans le dossier uploaded_templates/. "
+                    f"(Chemin attendu par défaut: {settings.TEMPLATE_PATH})"
+                ),
+            )
+        raise HTTPException(status_code=404, detail=f"Template introuvable: {template_path}")
 
     include_filters = _parse_csv_filters(request.include_filters)
     exclude_filters = _parse_csv_filters(request.exclude_filters)
@@ -223,6 +244,8 @@ async def create_report(request: ReportCreateRequest):
         surname=request.surname or "",
         civility=request.civility or "Monsieur",
         avs_number=request.avs_number or "",
+        # Template placeholders (déterministes)
+        titre_document=request.titre_document or "",
         # Location/Date
         location_city=request.location_city or "",
         location_date=request.location_date or "",
@@ -481,9 +504,54 @@ async def delete_report(job_id: str, force: bool = Query(False, description="For
                 detail=f"Job en cours (status={status}). Suppression refusée sans force=true.",
             )
 
+        # ⚠️ IMPORTANT (macOS SimpleWorker): supprimer un job *déjà démarré* pendant son exécution
+        # peut faire planter le worker quand il tente de sauvegarder les metas/résultats.
+        # Solution viable: convertir la suppression forcée en annulation demandée.
+        if status == "started":
+            job.meta["cancel_requested"] = True
+            job.meta["cancel_requested_at"] = datetime.now().isoformat()
+            job.save_meta()
+            return {
+                "message": "Annulation demandée (job en cours). Il sera stoppé dès que possible.",
+                "job_id": job_id,
+                "status": status,
+            }
+
         job.delete()
         return {"message": "Job supprimé"}
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=404, detail="Job introuvable")
+
+
+@router.post("/reports/{job_id}/cancel")
+async def cancel_report(job_id: str):
+    """Demande l'annulation d'un job en cours.
+
+    Cette route ne supprime pas le job. Elle positionne un flag `cancel_requested`.
+    Le worker le détecte et termine proprement, évitant un worker "cassé".
+    """
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Job introuvable")
+
+    status = job.get_status(refresh=True)
+    # Si déjà terminé, rien à faire.
+    if status in {"finished", "failed"}:
+        return {
+            "message": "Job déjà terminé",
+            "job_id": job_id,
+            "status": status,
+        }
+
+    job.meta["cancel_requested"] = True
+    job.meta["cancel_requested_at"] = datetime.now().isoformat()
+    job.save_meta()
+
+    return {
+        "message": "Annulation demandée",
+        "job_id": job_id,
+        "status": status,
+    }

@@ -495,7 +495,10 @@ def generate_fields(
         cleaned_value = ""
         missing_info: list[str] = []
 
-        if spec.field_type == "deterministic":
+        # Si une valeur est fournie via deterministic_values, on ne doit PAS appeler le LLM,
+        # même si le FieldSpec ne déclare pas explicitement le champ comme "deterministic".
+        # (cas typique: placeholders template ajoutés côté UI, ex: TITRE_DOCUMENT)
+        if spec.field_type == "deterministic" or key.upper() in deterministic_lookup:
             cleaned_value = (deterministic_lookup.get(key.upper()) or "").strip()
             if not cleaned_value:
                 missing_info.append("DETERMINISTIC_EMPTY")
