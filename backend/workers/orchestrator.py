@@ -478,6 +478,9 @@ class ReportOrchestrator:
             return docs
 
         # Déterminer le dossier source
+        # ⚠️ Important: on doit indexer/RAG tout le dossier du client, pas seulement `sources/`.
+        # Sinon, on loupe des documents rangés dans 01/03/04/05/... (et donc des infos critiques comme l'AVS).
+        # Exception: si l'appelant fournit un fichier source explicite, on respecte ce choix.
         fallback_dir: Optional[Path] = None
         if self.params.source_file:
             source_path = Path(self.params.source_file)
@@ -485,43 +488,7 @@ class ReportOrchestrator:
                 raise FileNotFoundError(f"Fichier source introuvable: {source_path}")
             input_dir = source_path.parent
         else:
-            # Par défaut, chercher un dossier "sources" (si c'est une vraie arborescence de sources)
-            # mais si ce dossier est vide/inutile, retomber sur le dossier client.
-            sources_dir = self.params.client_dir / "sources"
-            if sources_dir.exists():
-                input_dir = sources_dir
-                fallback_dir = self.params.client_dir
-
-                # Si sources/ existe mais ne contient que ingested_audio (ou aucun doc "réel"),
-                # alors on préfère scanner le dossier client (sinon on perd PDFs/DOCX/TXT rangés
-                # dans 01/03/04/05...
-                try:
-                    files_in_sources = walk_files(sources_dir)
-                    supported_exts = {".pdf", ".docx", ".txt", ".msg"}
-                    if bool(self.params.enable_soffice):
-                        supported_exts |= {".doc", ".rtf", ".odt", ".docm", ".dot", ".dotx", ".dotm"}
-
-                    has_real_doc = False
-                    for fp in files_in_sources:
-                        if fp.suffix.lower() not in supported_exts:
-                            continue
-                        if _is_ingested_audio_file(fp):
-                            # Transcriptions audio ≠ sources principales
-                            continue
-                        has_real_doc = True
-                        break
-
-                    if not has_real_doc:
-                        logger.info(
-                            "Le dossier 'sources/' ne contient pas de documents principaux (hors ingested_audio). "
-                            "Fallback vers le dossier client pour inclure les sous-dossiers 01/03/04/05…"
-                        )
-                        input_dir = self.params.client_dir
-                except Exception:
-                    # Non bloquant : on garde le comportement existant
-                    pass
-            else:
-                input_dir = self.params.client_dir
+            input_dir = self.params.client_dir
 
         # Optionnel: ingestion audio automatique avant de lister / extraire.
         # On le fait une seule fois (sinon, avec le fallback sources->client_dir,
@@ -619,7 +586,13 @@ class ReportOrchestrator:
             detected_avs = detect_avs_number(payload)
             if detected_avs:
                 avs_value = detected_avs
-                logger.info(f"Numéro AVS détecté: {avs_value}")
+                # ⚠️ Ne jamais logger de PII en clair
+                try:
+                    digits = "".join(ch for ch in str(avs_value) if ch.isdigit())
+                    masked = f"{digits[:3]}.XXXX.XXXX.XX" if len(digits) == 13 else "XXX.XXXX.XXXX.XX"
+                except Exception:
+                    masked = "XXX.XXXX.XXXX.XX"
+                logger.info("Numéro AVS détecté: %s", masked)
         
         # Construire la valeur LIEU_ET_DATE
         location_date_value = build_location_date(

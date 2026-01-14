@@ -314,15 +314,14 @@ class TestReportWorker:
 class TestOrchestrator:
     """Tests pour l'orchestrateur."""
     
-    @patch('backend.workers.orchestrator.walk_files')
     @patch('backend.workers.orchestrator.extract_one')
-    def test_extraction_step(self, mock_extract, mock_walk, tmp_path):
+    def test_extraction_step(self, mock_extract, tmp_path):
         """Test de l'étape d'extraction."""
         from backend.workers.orchestrator import ReportOrchestrator, ReportGenerationParams
         from extract_sources import ExtractedDoc
         
-        # Mock files
-        mock_walk.return_value = [tmp_path / "doc1.pdf"]
+        # Créer un fichier réel : le scan utilise maintenant rglob sur client_dir
+        (tmp_path / "doc1.pdf").write_bytes(b"%PDF-1.4\n%fake\n")
         
         # Mock extraction
         mock_doc = ExtractedDoc(
@@ -354,10 +353,12 @@ class TestOrchestrator:
         assert extracted_path.exists()
         assert extracted_path.suffix == ".json"
 
-    @patch('backend.workers.orchestrator.walk_files')
     @patch('backend.workers.orchestrator.extract_one')
-    def test_extraction_falls_back_to_client_dir_when_sources_empty(self, mock_extract, mock_walk, tmp_path):
-        """Si client_dir/sources existe mais ne donne rien d'extractible, on retombe sur client_dir."""
+    def test_extraction_falls_back_to_client_dir_when_sources_empty(self, mock_extract, tmp_path):
+        """Compat: si sources/ existe mais n'apporte rien d'extractible, on peut quand même extraire ailleurs.
+
+        Note: l'orchestrateur scanne désormais tout le dossier client par défaut.
+        """
         from backend.workers.orchestrator import ReportOrchestrator, ReportGenerationParams
         from extract_sources import ExtractedDoc
 
@@ -367,13 +368,9 @@ class TestOrchestrator:
         sources_file = tmp_path / "sources" / "note.bin"
         client_file = tmp_path / "doc1.pdf"
 
-        def _walk_side_effect(root):
-            root = root  # Path
-            if str(root).endswith("/sources"):
-                return [sources_file]
-            return [client_file]
-
-        mock_walk.side_effect = _walk_side_effect
+        # Créer les fichiers réels
+        sources_file.write_bytes(b"x")
+        client_file.write_bytes(b"%PDF-1.4\n%fake\n")
 
         # 1) Extraction dans /sources: fichier non supporté => doc.text vide
         empty_doc = ExtractedDoc(
