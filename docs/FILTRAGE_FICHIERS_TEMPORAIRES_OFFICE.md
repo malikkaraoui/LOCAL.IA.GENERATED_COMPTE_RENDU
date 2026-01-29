@@ -34,7 +34,7 @@ Le filtre a été intégré dans **17 fichiers** couvrant tous les points de dé
   - `collect_rag_sources()` — collecte des sources RAG
 - ✅ [`core/extract.py`](core/extract.py)
   - `walk_files()` — liste récursive des fichiers
-- ✅ [`CLIENTS/extract_sources.py`](CLIENTS/extract_sources.py)
+- ✅ [`core/extract_sources.py`](core/extract_sources.py)
   - `walk_files()` — extraction des sources client
 
 #### 🤖 Backend & API

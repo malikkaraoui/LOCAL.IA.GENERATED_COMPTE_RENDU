@@ -23,7 +23,7 @@ def scan_client_folder(client_folder_path: str, index_msg: bool = True)
 - Ils apparaissent dans les statistiques `extensions`
 - Compatibilité ascendante : possibilité de désactiver avec `index_msg=False`
 
-### 2. Extracteur Legacy (`CLIENTS/extract_sources.py`)
+### 2. Extracteur Legacy (`core/extract_sources.py`)
 
 **Ajouts :**
 - Import du module `msg_extractor`
@@ -199,7 +199,7 @@ Les fichiers `.msg` apparaissent maintenant automatiquement dans :
 ## 📚 Fichiers modifiés
 
 1. `src/rhpro/client_scanner.py` - Scanner avec index_msg=True
-2. `CLIENTS/extract_sources.py` - Support .msg dans extracteur legacy
+2. `core/extract_sources.py` - Support .msg dans extracteur legacy
 3. `backend/workers/orchestrator.py` - Logs incluant .msg
 4. `frontend/src/pages/Progress.jsx` - Affichage .msg
 5. `test_msg_support.py` - Tests automatiques (nouveau)
