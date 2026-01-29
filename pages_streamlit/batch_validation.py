@@ -12,12 +12,7 @@ from pathlib import Path
 import json
 import pandas as pd
 from typing import Dict, Any, List, Optional
-import sys
-
-# Ajouter src/ au path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from rhpro.batch_report import (
+from src.rhpro.batch_report import (
     load_batch_report,
     filter_batch_report,
     print_batch_summary,

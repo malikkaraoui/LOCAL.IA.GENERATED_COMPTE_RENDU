@@ -3,12 +3,8 @@ Page Streamlit pour génération de rapport individuel par nom de client
 """
 import streamlit as st
 from pathlib import Path
-import sys
 
-# Ajouter src/ au path pour les imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from rhpro.client_finder import (
+from src.rhpro.client_finder import (
     find_client_folders,
     find_client_folder,
     format_search_results,

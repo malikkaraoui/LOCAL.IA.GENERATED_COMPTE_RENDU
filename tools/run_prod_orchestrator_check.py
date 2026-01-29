@@ -4,11 +4,6 @@ import json
 import logging
 import re
 from pathlib import Path
-import sys
-
-# Permet d'exécuter ce script depuis tools/ (sys.path[0]=tools) tout en important backend/core.
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def mask_avs(value: str) -> str:

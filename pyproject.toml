@@ -7,11 +7,10 @@ name = "script-ia-rapports"
 version = "2.0.1"
 description = "Générateur de rapports assisté par LLM local"
 requires-python = ">=3.10"
-dependencies = [
-    "streamlit==1.38.0",
-    "python-docx==1.1.2",
-    "PyMuPDF==1.24.0",
-]
+dependencies = []  # deps gérées via requirements.txt
+
+[tool.setuptools.packages.find]
+include = ["core*", "backend*", "src*", "script_ai*", "pages_streamlit*"]
 
 [tool.black]
 line-length = 120

@@ -6,12 +6,7 @@ from pathlib import Path
 import json
 import pandas as pd
 from datetime import datetime
-import sys
-
-# Ajouter src/ au path pour les imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from rhpro.batch_runner import discover_sources, run_batch
+from src.rhpro.batch_runner import discover_sources, run_batch
 
 
 def show_batch_parser_page():

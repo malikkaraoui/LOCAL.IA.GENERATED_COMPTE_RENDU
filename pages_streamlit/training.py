@@ -9,16 +9,10 @@ Permet de :
 """
 
 import streamlit as st
-import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import json
 import pandas as pd
-
-# Ajouter le projet au path
-project_root = Path(__file__).parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
 
 from src.rhpro.client_scanner import scan_client_folder, format_scan_report
 from src.rhpro.client_normalizer import (
