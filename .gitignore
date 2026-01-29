@@ -45,5 +45,9 @@ CLIENTS/__pycache__/
 # Logs & misc
 *.log
 
-# Sandbox generated data
-sandbox/
+# Sandbox — ignore everything except organized code folders
+sandbox/*
+!sandbox/demos/
+!sandbox/tests_legacy/
+!sandbox/validation/
+!sandbox/scripts/

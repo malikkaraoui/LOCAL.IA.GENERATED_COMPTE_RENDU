@@ -11,13 +11,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 from dataclasses import dataclass
 
-# Import des modules CLI du dossier CLIENTS et core
-import sys
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root / "CLIENTS"))
-sys.path.insert(0, str(project_root))
-
-from extract_sources import extract_one, walk_files, ExtractedDoc
+from core.extract_sources import extract_one, walk_files, ExtractedDoc
 from core.generate import generate_fields
 from core.template_fields import build_field_specs, extract_placeholders_from_docx
 from core.location_date import build_location_date

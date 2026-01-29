@@ -14,7 +14,7 @@ def test_extractor_supports_txt_in_nested_sources(tmp_path: Path):
     p = client_sources / "note.txt"
     p.write_text("Bonjour\n\nCeci est une transcription.", encoding="utf-8")
 
-    from extract_sources import extract_one, walk_files
+    from core.extract_sources import extract_one, walk_files
 
     files = walk_files(tmp_path / "CLIENTS" / "DEMO" / "sources")
     assert p in files

@@ -318,7 +318,7 @@ class TestOrchestrator:
     def test_extraction_step(self, mock_extract, tmp_path):
         """Test de l'étape d'extraction."""
         from backend.workers.orchestrator import ReportOrchestrator, ReportGenerationParams
-        from extract_sources import ExtractedDoc
+        from core.extract_sources import ExtractedDoc
         
         # Créer un fichier réel : le scan utilise maintenant rglob sur client_dir
         (tmp_path / "doc1.pdf").write_bytes(b"%PDF-1.4\n%fake\n")
@@ -360,7 +360,7 @@ class TestOrchestrator:
         Note: l'orchestrateur scanne désormais tout le dossier client par défaut.
         """
         from backend.workers.orchestrator import ReportOrchestrator, ReportGenerationParams
-        from extract_sources import ExtractedDoc
+        from core.extract_sources import ExtractedDoc
 
         # Simuler l'existence du dossier sources
         (tmp_path / "sources").mkdir(parents=True, exist_ok=True)
