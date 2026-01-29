@@ -28,7 +28,7 @@ streamlit run streamlit_app.py
 
 Puis : **🎓 Entraînement Pipeline RH-Pro** → **📦 Batch**
 
-[➡️ Voir TRAINING_QUICKSTART.md](TRAINING_QUICKSTART.md) pour guide complet
+[➡️ Voir le guide Training](docs/guides/GUIDE_TRAINING.md) pour guide complet
 
 ---
 
@@ -93,7 +93,7 @@ Ce script unique lance automatiquement :
 ┌─────────────────┐
 │  Worker RQ      │  ← Traitement asynchrone
 │                 │
-│  1. Extraction  │──► extract_sources.py (68KB de données)
+│  1. Extraction  │──► core/extract_sources.py
 │  2. Génération  │──► Ollama LLM (~1m35s avec Mistral)
 │  3. Rendu DOCX  │──► python-docx (37KB final)
 │  4. Export PDF  │──► docx2pdf (optionnel)
@@ -297,7 +297,7 @@ pkill -f start_worker.py
 
 ## 🌐 Déploiement Windows
 
-Consultez le guide complet : [docs/WINDOWS_DEPLOYMENT.md](docs/WINDOWS_DEPLOYMENT.md)
+Consultez le guide complet : [docs/archive/WINDOWS_DEPLOYMENT.md](docs/archive/WINDOWS_DEPLOYMENT.md)
 
 Résumé :
 - Installation avec `winget` et PowerShell
@@ -356,11 +356,42 @@ LOG_LEVEL=INFO
 2. Ajoutez vos propres marqueurs `{{nouveau_champ}}`
 3. Mettez à jour `CLIENTS/generate_fields.py` pour générer le contenu
 
+## 📁 Structure du Projet
+
+```
+SCRIPT.IA/
+├── core/               # Pipeline : extraction, génération, rendu
+├── backend/            # FastAPI + Workers RQ
+├── frontend/           # React SPA (Vite + TypeScript)
+├── src/rhpro/          # Parsing & training RH-Pro
+├── script_ai/          # Audio / RAG
+├── pages_streamlit/    # UI Streamlit (legacy)
+├── scripts/            # Scripts de démarrage / déploiement
+├── tests/              # Tests unitaires & intégration
+├── tools/              # Outils CLI de debug
+├── docs/               # Documentation complète
+│   ├── correctifs/     # Notes de correctifs
+│   ├── guides/         # Guides d'installation & utilisation
+│   ├── integrations/   # Notes d'intégration features
+│   ├── resumes/        # Résumés de sessions
+│   ├── ruleset/        # Conventions & policies
+│   └── archive/        # Documentation historique
+├── sandbox/            # Demos, tests legacy, scripts utilitaires
+│   ├── demos/
+│   ├── tests_legacy/
+│   ├── validation/
+│   └── scripts/
+└── logs/               # Fichiers de log
+```
+
 ## 📚 Documentation Complète
 
 - **API Backend** : http://localhost:8000/api/docs (Swagger)
 - **Tests** : [tests/README.md](tests/README.md)
-- **Windows** : [docs/WINDOWS_DEPLOYMENT.md](docs/WINDOWS_DEPLOYMENT.md)
+- **Windows** : [docs/archive/WINDOWS_DEPLOYMENT.md](docs/archive/WINDOWS_DEPLOYMENT.md)
+- **Guides** : [docs/guides/](docs/guides/)
+- **Correctifs** : [docs/correctifs/](docs/correctifs/)
+- **Intégrations** : [docs/integrations/](docs/integrations/)
 
 ## 🤝 Support
 
