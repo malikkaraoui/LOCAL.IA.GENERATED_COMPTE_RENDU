@@ -33,7 +33,6 @@ data/**
 
 # Client and sensitive documents
 CLIENTS/**/*
-!CLIENTS/*.py
 CLIENTS/__pycache__/
 *.docx
 *.doc
@@ -44,6 +43,7 @@ CLIENTS/__pycache__/
 
 # Logs & misc
 *.log
+logs/
 
 # Sandbox — ignore everything except organized code folders
 sandbox/*
