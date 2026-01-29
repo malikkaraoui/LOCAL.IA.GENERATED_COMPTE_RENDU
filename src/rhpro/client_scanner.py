@@ -15,7 +15,6 @@ Usage:
         print(f"Sources: {len(result['rag_sources'])} fichiers")
 """
 
-import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -188,8 +187,6 @@ def normalize_folder_name(folder_name: str) -> str:
     Returns:
         Nom normalisé (lowercase, sans accents)
     """
-    import unicodedata
-    
     # Supprimer les accents
     nfd = unicodedata.normalize('NFD', folder_name)
     text = ''.join(c for c in nfd if unicodedata.category(c) != 'Mn')

@@ -92,8 +92,6 @@ async def upload_template(file: UploadFile = File(...)):
     dest = settings.TEMPLATES_DIR / safe_name
     if dest.exists():
         # Éviter d'écraser: on suffixe avec un timestamp
-        from datetime import datetime
-
         stem = dest.stem
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         dest = settings.TEMPLATES_DIR / f"{stem}_{ts}.docx"
