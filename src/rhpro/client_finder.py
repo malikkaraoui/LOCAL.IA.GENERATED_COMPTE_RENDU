@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Tuple, Optional
 from difflib import SequenceMatcher
 from src.utils.file_filters import is_ignored_filename
 import re
-import re
 
 
 def contains_keyword(text: str, keywords: List[str]) -> bool:
