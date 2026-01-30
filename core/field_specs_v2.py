@@ -95,6 +95,18 @@ Tu dois produire une sortie **strictement conforme** aux instructions ci-dessous
 - Pas de titres inutiles. Pas de bavardage.
 - Pas de contenu médical/diagnostic (sauf si explicitement écrit dans les sources, et alors rester descriptif).
 
+### INTERDICTION D'EXPLIQUER LES MÉTHODOLOGIES (CRITIQUE)
+- Tu ne dois **JAMAIS** expliquer une méthodologie, un test ou un outil d'évaluation.
+- INTERDIT d'écrire des phrases du type :
+  - "Le positionnement de niveau est évalué à l'aide d'un test qui consiste à..."
+  - "Les seuils définis en pourcentage sont..."
+  - "Le modèle RIASEC permet de comprendre..."
+  - "Ce test mesure..."
+  - "L'évaluation repose sur..."
+- Tu n'es PAS un manuel d'utilisation. Tu restitues les RÉSULTATS du client, pas la description du test.
+- Donne uniquement : le résultat (score, niveau, appréciation) + les faits concrets du client.
+- Si tu n'as pas de résultat concret dans les sources → "Non renseigné".
+
 ### RESPECT STRICT DES FORMATS (selon field_type)
 - `narrative` : texte fluide, pro, longueur limitée (voir max_chars), sans liste longue.
 - `list` : **UNIQUEMENT** un JSON array valide `["item1", "item2"]` (sans texte autour).
@@ -448,61 +460,75 @@ Attendu :
 Format : 2-4 puces, 2 phrases par puce max.
 """,
         "VOCATIO": """
-But : restituer le profil Vocatio (test d'orientation) si présent dans les sources.
+But : restituer le profil Vocatio tel qu'il figure dans les SOURCES (résultats de test).
 
 Attendu :
-- Profil Vocatio tel qu'il apparaît dans le rapport de test.
-- Description des intérêts professionnels identifiés.
-- Si absent des sources : "Non renseigné".
+- Profil Vocatio extrait du rapport de test (dimensions, scores, intérêts).
+- Restitution fidèle des résultats : pas de reformulation libre.
+- Si absent des sources : répondre exactement "Non renseigné".
 
-Contraintes :
-- Extraction fidèle du PDF de test.
-- Ne pas inventer de profil.
+INTERDIT :
+- Ne JAMAIS expliquer ce qu'est le test Vocatio ou la méthode RIASEC.
+- Ne JAMAIS écrire de phrases génériques du type "le modèle RIASEC permet de...", "cet outil d'orientation...".
+- Tu n'es PAS un professeur. Tu restitues des DONNÉES du client, pas une définition.
 
-Format : 4-8 lignes.
+Format : 4-8 lignes de données concrètes du client.
 """,
         "DOMAINES_PROFESSIONNELS_EXEMPLES": """
-But : lister les domaines professionnels identifiés (issus du test ou de l'analyse).
+But : lister les domaines professionnels identifiés pour CE client dans les SOURCES.
 
 Attendu :
-- Domaines professionnels avec exemples concrets.
-- Issus du test RIASEC/Vocatio ou de l'analyse du conseiller.
-- Si absent : "Non renseigné".
+- Domaines professionnels avec exemples concrets extraits des sources.
+- Données issues du test RIASEC/Vocatio ou de l'analyse du conseiller.
+- Si absent des sources : répondre exactement "Non renseigné".
+
+INTERDIT :
+- Ne JAMAIS expliquer ce qu'est RIASEC ou Vocatio.
+- Ne JAMAIS inventer de domaines. Uniquement ceux présents dans les sources.
 
 Format : 4-8 lignes ou liste courte.
 """,
         "RIASEC_CORRESPONDANCE_SCORE": """
-But : restituer le score RIASEC (Holland) si présent dans les sources.
+But : restituer le score RIASEC de CE client tel qu'il figure dans les SOURCES.
 
 Attendu :
-- Code RIASEC (ex : RIA, SEC, AIS) et scores associés.
-- Correspondance avec les domaines professionnels.
-- Extraction fidèle du PDF de test.
-- Si absent : "Non renseigné".
+- Code RIASEC (ex : RIA, SEC, AIS) et scores associés extraits du PDF de test.
+- Correspondance avec les domaines professionnels du client.
+- Restitution fidèle, pas de reformulation.
+- Si absent des sources : répondre exactement "Non renseigné".
 
-Contraintes :
-- Ne pas inventer de score.
-- Restituer tel quel.
+INTERDIT :
+- Ne JAMAIS expliquer ce qu'est le modèle RIASEC de Holland.
+- Ne JAMAIS écrire "Le modèle RIASEC permet de...", "les 6 dimensions sont...", etc.
+- Ne JAMAIS inventer de score. Si pas de score dans les sources → "Non renseigné".
 
-Format : 3-6 lignes.
+Format : 3-6 lignes de données concrètes.
 """,
         "ROLES_PROFESSIONNELS": """
-But : identifier les rôles professionnels correspondant au profil.
+But : lister les rôles professionnels identifiés pour CE client dans les SOURCES.
 
 Attendu :
-- Rôles identifiés via tests ou analyse (ex : coordinateur, technicien, formateur).
-- Cohérence avec le profil RIASEC si disponible.
-- Si issu d'un test : le préciser.
+- Rôles identifiés via tests ou analyse du conseiller (ex : coordinateur, technicien).
+- Extraits des sources uniquement.
+- Si absent des sources : répondre exactement "Non renseigné".
+
+INTERDIT :
+- Ne JAMAIS inventer de rôles non présents dans les sources.
+- Ne JAMAIS expliquer la méthodologie d'orientation.
 
 Format : 4-8 lignes ou liste courte.
 """,
         "PROFESSIONS": """
-But : lister les professions identifiées comme pertinentes pour le profil.
+But : lister les professions identifiées comme pertinentes pour CE client dans les SOURCES.
 
 Attendu :
-- Professions concrètes issues des tests, de l'analyse ou de la discussion.
-- Cohérence avec compétences, intérêts et contraintes.
-- Si issu d'un test : restituer fidèlement.
+- Professions concrètes extraites des tests, de l'analyse ou de la discussion.
+- Uniquement celles présentes dans les sources.
+- Si absent des sources : répondre exactement "Non renseigné".
+
+INTERDIT :
+- Ne JAMAIS inventer de professions non mentionnées dans les sources.
+- Ne JAMAIS faire de suggestions génériques.
 
 Format : 4-8 lignes ou liste courte.
 """,

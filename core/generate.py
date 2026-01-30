@@ -188,6 +188,20 @@ def find_forbidden_output_reasons(text: str) -> list[str]:
         "rien à ajouter ou à résumer",
         "si vous avez besoin d'aide",
         "je serais ravi de vous aider",
+        # Détection d'explications méthodologiques (LLM qui fait cours au lieu de restituer)
+        "le modèle riasec",
+        "le test riasec permet",
+        "john holland",
+        "cet outil d'orientation",
+        "il repose sur six dimensions",
+        "les six types de personnalité",
+        "les seuils définis en pourcentage",
+        "est évalué à l'aide d'un test qui consiste",
+        "le positionnement de niveau est évalué",
+        "ce test mesure",
+        "l'évaluation repose sur",
+        "les seuils sont",
+        "le taux de réussite global",
     ]
     text_lower = text.lower()
     if any(p in text_lower for p in refusal_patterns):
@@ -371,6 +385,7 @@ def build_prompt(spec, instruction: str, context_blocks: list[dict[str, Any]]) -
         "Écris TOUT le contenu nécessaire en entier, sans jamais tronquer ni résumer avec '...'.",
         "Ne répète jamais un titre/label déjà présent dans le template : fournis uniquement le contenu sous le titre.",
         "Ponctuation : pas de '::'. Un seul ':' maximum par ligne.",
+        "INTERDIT d'expliquer une méthodologie ou un test. Donne uniquement les RÉSULTATS du client, pas la description du test.",
         "Si l'information n'existe pas dans les sources : écris __VIDE__.",
     ]
     
