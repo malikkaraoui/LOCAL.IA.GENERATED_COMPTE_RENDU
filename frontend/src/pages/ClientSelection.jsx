@@ -815,7 +815,7 @@ function ClientSelection() {
                 <div className="llm-restart-message llm-restart-error">
                   ❌ {llmModelsError}
                   <div style={{ marginTop: 4, opacity: 0.9 }}>
-                    Astuce: si tu es sur <code>http://127.0.0.1:5173</code>, l'API doit autoriser cette origine (CORS).
+                    Astuce: si tu es sur <code>http://127.0.0.1:5174</code>, l'API doit autoriser cette origine (CORS).
                   </div>
                 </div>
               )}

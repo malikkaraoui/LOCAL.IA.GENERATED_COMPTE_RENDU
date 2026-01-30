@@ -65,49 +65,64 @@ TOOL_QUALIFIERS = {
 }
 
 
-def extract_bureautique_level(text: str) -> str:
+def extract_bureautique_level(text: str, tool_filter: str | None = None) -> str:
     """
     Extrait un niveau de bureautique depuis le texte.
-    
+
     Args:
         text: Contenu à analyser
-        
+        tool_filter: Si fourni, ne chercher que cet outil (ex: "word", "excel")
+
     Returns:
         Niveau: "Faible" | "Moyen" | "Bon" | "Très bon" | "Non évalué"
-        
+
     Examples:
         >>> extract_bureautique_level("Bonne maîtrise de Word et Excel")
         'Bon'
-        >>> extract_bureautique_level("Utilisateur expert des outils Office")
-        'Très bon'
-        >>> extract_bureautique_level("Pas d'information")
+        >>> extract_bureautique_level("Bonne maîtrise de Word", tool_filter="word")
+        'Bon'
+        >>> extract_bureautique_level("Bonne maîtrise de Word", tool_filter="excel")
         'Non évalué'
     """
     if not text:
         return "Non évalué"
-    
+
     text_lower = text.lower()
-    
-    # Vérifier si au moins un outil est mentionné
-    tool_mentioned = False
-    for tool_patterns in TOOL_KEYWORDS.values():
-        if any(pattern in text_lower for pattern in tool_patterns):
-            tool_mentioned = True
-            break
-    
-    if not tool_mentioned:
-        return "Non évalué"
-    
+
+    # Si un filtre d'outil est spécifié, ne chercher que cet outil
+    if tool_filter:
+        tool_filter_lower = tool_filter.lower()
+        keywords = TOOL_KEYWORDS.get(tool_filter_lower, [tool_filter_lower])
+        tool_mentioned = any(kw in text_lower for kw in keywords)
+
+        if not tool_mentioned:
+            return "Non évalué"
+
+        # Chercher le qualificatif le plus proche de la mention de l'outil
+        # Découper en phrases et ne chercher que dans celles contenant l'outil
+        sentences = re.split(r'[.;!\n]+', text_lower)
+        relevant = [s for s in sentences if any(kw in s for kw in keywords)]
+        search_text = " ".join(relevant) if relevant else text_lower
+    else:
+        # Vérifier si au moins un outil est mentionné
+        tool_mentioned = False
+        for tool_patterns in TOOL_KEYWORDS.values():
+            if any(pattern in text_lower for pattern in tool_patterns):
+                tool_mentioned = True
+                break
+
+        if not tool_mentioned:
+            return "Non évalué"
+
+        search_text = text_lower
+
     # Chercher un qualificatif (priorité décroissante)
     for level, patterns in TOOL_QUALIFIERS.items():
-        if any(pattern in text_lower for pattern in patterns):
-            # Normaliser la sortie
+        if any(pattern in search_text for pattern in patterns):
             if level == "très bon":
                 return "Très bon"
             return level.capitalize()
-    
-    # Outil mentionné mais pas de qualificatif → considérer comme "Moyen"
-    # (mais c'est risqué, préférer "Non évalué")
+
     return "Non évalué"
 
 
@@ -196,14 +211,25 @@ def extract_enum_from_context(
     if not text:
         return "Non évalué"
     
-    # Bureautique (AVANT langues car contient aussi POSITIONNEMENT_DE_NIVEAU)
-    if "BUREAUTIQUE" in field_key:
+    # Bureautique séparés (Word, Excel, PowerPoint, Outlook)
+    tool_map = {
+        "WORD_POSITIONNEMENT": "word",
+        "EXCEL_POSITIONNEMENT": "excel",
+        "POWERPOINT_POSITIONNEMENT": "powerpoint",
+        "OUTLOOK_POSITIONNEMENT": "outlook",
+    }
+    for prefix, tool in tool_map.items():
+        if field_key.startswith(prefix):
+            return extract_bureautique_level(text, tool_filter=tool)
+
+    # Ancien champ fusionné (compatibilité)
+    if "BUREAUTIQUE" in field_key or "WORD_EXCEL_POWERPOINT_OUTLOOK" in field_key:
         return extract_bureautique_level(text)
-    
-    # Langues
+
+    # Langues (CECRL) — Français, Allemand, Anglais
     if "POSITIONNEMENT_DE_NIVEAU" in field_key:
         return extract_cecrl_level(text)
-    
+
     # Tests
     if "TEST" in field_key or "CALCUL" in field_key or "COMPREHENSION" in field_key:
         return extract_test_result(text, field_key)

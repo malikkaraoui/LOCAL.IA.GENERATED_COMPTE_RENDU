@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -140,6 +141,7 @@ def replace_section(
     answer_text: str,
     start_style_prefixes: Optional[list[str]] = None,
     end_style_prefixes: Optional[list[str]] = None,
+    remove_if_empty: bool = True,
 ) -> None:
     start_idx, start_par = find_paragraph(doc, start_text, style_prefixes=start_style_prefixes)
     if start_par is None or start_idx is None:
@@ -163,8 +165,18 @@ def replace_section(
     for paragraph in list(between):
         delete_paragraph(paragraph)
     text = (answer_text or "").strip()
+    # Considérer "Non renseigné" et "[]" comme vide
+    if text.lower() in ("non renseigné", "non renseigne", "[]", "non évalué", "non evalue", "vide"):
+        text = ""
+    # Détection "CHAMP : VIDE" ou "CHAMP : Vide"
+    if re.match(r'^[\w\s]+:\s*vide\s*$', text, re.IGNORECASE):
+        text = ""
     if not text:
-        insert_paragraph_after(start_par, "", base_style)
+        if remove_if_empty:
+            # Supprimer la section entière (titre inclus)
+            delete_paragraph(start_par)
+        else:
+            insert_paragraph_after(start_par, "", base_style)
         return
     cursor = start_par
     for line in [ln.strip() for ln in text.splitlines() if ln.strip()]:
@@ -266,5 +278,42 @@ def render_report(
         end_style_prefixes=None,
     )
 
+    # Nettoyage final : supprimer les placeholders {{...}} orphelins
+    _clean_orphan_placeholders(doc)
+
     doc.save(str(output_path))
     return output_path
+
+
+RE_MOUSTACHE = re.compile(r"\{\{[^}]+\}\}")
+
+
+def _clean_orphan_placeholders(doc: Document) -> None:
+    """Supprime tout texte {{...}} restant dans le document (placeholders non remplacés)."""
+
+    def _clean_par(par: Paragraph) -> None:
+        text = "".join(run.text for run in par.runs) if par.runs else (par.text or "")
+        if not RE_MOUSTACHE.search(text):
+            return
+        cleaned = RE_MOUSTACHE.sub("", text).strip()
+        if par.runs:
+            par.runs[0].text = cleaned
+            for r in par.runs[1:]:
+                r.text = ""
+        else:
+            par.text = cleaned
+        # Si le paragraphe est maintenant vide, le supprimer
+        if not cleaned:
+            try:
+                delete_paragraph(par)
+            except Exception:
+                pass
+
+    for paragraph in list(doc.paragraphs):
+        _clean_par(paragraph)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in list(cell.paragraphs):
+                    _clean_par(paragraph)

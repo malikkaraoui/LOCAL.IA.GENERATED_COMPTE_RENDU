@@ -25,9 +25,9 @@ else
 fi
 
 # Arrêter Frontend
-# 1) Tuer explicitement ce qui écoute sur 5173 (le cas le plus fréquent)
-if lsof -nP -iTCP:5173 -sTCP:LISTEN >/dev/null 2>&1; then
-    pids=$(lsof -nP -iTCP:5173 -sTCP:LISTEN -t 2>/dev/null || true)
+# 1) Tuer explicitement ce qui écoute sur 5174 (le cas le plus fréquent)
+if lsof -nP -iTCP:5174 -sTCP:LISTEN >/dev/null 2>&1; then
+    pids=$(lsof -nP -iTCP:5174 -sTCP:LISTEN -t 2>/dev/null || true)
     if [ -n "$pids" ]; then
         kill -TERM $pids 2>/dev/null || true
         sleep 1

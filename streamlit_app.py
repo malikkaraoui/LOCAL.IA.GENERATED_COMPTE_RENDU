@@ -45,7 +45,7 @@ with st.sidebar:
 
     st.divider()
     st.subheader("🔗 Liens utiles")
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5174")
     api_docs_url = os.getenv("API_DOCS_URL", "http://127.0.0.1:8000/api/docs")
     api_health_url = os.getenv("API_HEALTH_URL", "http://127.0.0.1:8000/api/health")
     st.markdown(

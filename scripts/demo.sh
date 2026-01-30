@@ -42,7 +42,7 @@ else
 fi
 
 echo -ne "${YELLOW}⏳ Frontend... ${NC}"
-if curl -s "http://localhost:5173" > /dev/null; then
+if curl -s "http://localhost:5174" > /dev/null; then
     echo -e "${GREEN}✅${NC}"
 else
     echo -e "${RED}❌ Frontend non accessible${NC}"
@@ -174,7 +174,7 @@ step "6️⃣  Prochaines étapes"
 echo -e "${GREEN}✅ Le rapport a été généré avec succès !${NC}"
 echo ""
 echo -e "${CYAN}📱 Pour télécharger depuis l'interface :${NC}"
-echo "   1. Ouvrez http://localhost:5173"
+echo "   1. Ouvrez http://localhost:5174"
 echo "   2. Le rapport apparaît dans la liste"
 echo "   3. Cliquez sur 'Télécharger DOCX'"
 echo ""

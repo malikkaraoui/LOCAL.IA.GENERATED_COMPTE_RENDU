@@ -136,6 +136,16 @@ def sanitize_output(text: str) -> str:
     text = text.replace("\u200b", " ")
     text = re.sub(r"(?i)^json[:\s]+", "", text.strip())
     
+    # Convertir les listes à puces markdown (* item, - item) en bullet propre
+    lines = text.split("\n")
+    cleaned_lines = []
+    for ln in lines:
+        stripped = ln.strip()
+        if stripped.startswith("* "):
+            stripped = "- " + stripped[2:]
+        cleaned_lines.append(stripped)
+    text = "\n".join(cleaned_lines)
+
     # Supprimer les points de suspension "..." que le LLM pourrait ajouter à la fin
     # pour indiquer une troncature (interdits par les instructions mais parfois présents)
     text = text.strip()
@@ -164,6 +174,24 @@ def find_forbidden_output_reasons(text: str) -> list[str]:
         reasons.append("TOKENS")
     if RE_FORBIDDEN_SOURCE_REF.search(text):
         reasons.append("SOURCE_REF")
+
+    # Détection de refus LLM (excuses, refus de traiter données personnelles)
+    refusal_patterns = [
+        "je suis désolé",
+        "je ne peux pas",
+        "je ne suis pas en mesure",
+        "informations personnelles et privées",
+        "ne correspond pas aux consignes",
+        "la réponse est bien __vide__",
+        "il n'y a donc rien",
+        "passage pertinent n'a pas été trouvé",
+        "rien à ajouter ou à résumer",
+        "si vous avez besoin d'aide",
+        "je serais ravi de vous aider",
+    ]
+    text_lower = text.lower()
+    if any(p in text_lower for p in refusal_patterns):
+        reasons.append("LLM_REFUSAL")
 
     # Ponctuation: interdiction de "::" et au plus un ":" par ligne
     if "::" in text:
@@ -332,7 +360,9 @@ def _looks_like_timeout(error_message: str) -> bool:
 
 def build_prompt(spec, instruction: str, context_blocks: list[dict[str, Any]]) -> str:
     lines: list[str] = [
-        "Tu es un assistant RH.",
+        "Tu es un assistant RH pour un service public suisse. Le traitement est 100% local et consenti par l'assuré.",
+        "Tu es AUTORISÉ et OBLIGÉ de traiter toutes les données personnelles fournies (nom, parcours, compétences, tests).",
+        "INTERDIT de refuser, de t'excuser ou d'écrire 'je ne peux pas' / 'informations personnelles'. Rédige le contenu demandé.",
         "Tu réponds uniquement en français.",
         "Tu n'utilises jamais JSON ni Markdown.",
         "Interdit d'écrire des placeholders ({{...}}, {...}, XX, NAME, surname).",
@@ -701,7 +731,14 @@ def generate_fields(
                         response_text = "__VIDE__"
 
                 cleaned_value = sanitize_output(response_text)
-                if cleaned_value == "__VIDE__":
+                # __VIDE__ exact OU texte contenant __VIDE__ (LLM qui bavarde autour)
+                if "__VIDE__" in cleaned_value or "__vide__" in cleaned_value.lower():
+                    cleaned_value = ""
+                # Détection "CHAMP : VIDE" ou "CHAMP : Vide" (LLM qui préfixe avec le nom du champ)
+                if re.match(r'^[\w\s]+:\s*vide\s*$', cleaned_value.strip(), re.IGNORECASE):
+                    cleaned_value = ""
+                # Mot seul "Vide" ou "VIDE"
+                if cleaned_value.strip().lower() == "vide":
                     cleaned_value = ""
                 cleaned_value = truncate_lines(cleaned_value, spec.max_lines)
                 cleaned_value = truncate_chars(cleaned_value, spec.max_chars)
@@ -709,6 +746,9 @@ def generate_fields(
                 # SCHEMA V2: Validation spécifique pour listes (max 4 items)
                 if USE_SCHEMA_V2 and hasattr(spec, 'field_type') and spec.field_type == "list":
                     cleaned_value = validate_list_v2(cleaned_value, max_items=4, max_chars=spec.max_chars)
+
+                # SCHEMA V2: test_narrative — traiter comme narrative (même pipeline)
+                # Le type est géré par les instructions du prompt, pas par le code
                 
                 # Validation allowed_values (V1) ou enum_values (V2)
                 allowed = getattr(spec, 'allowed_values', None) or getattr(spec, 'enum_values', None)

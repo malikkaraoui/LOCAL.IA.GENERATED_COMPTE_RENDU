@@ -72,7 +72,7 @@ FORCE_RESTART="${FORCE_RESTART:-0}"
 if [ "$FORCE_RESTART" = "1" ]; then
     pkill -f "start_worker.py" 2>/dev/null && echo -e "${YELLOW}🛑 Worker arrêté${NC}" || echo -e "${GREEN}✓ Aucun worker en cours${NC}"
     pkill -f "backend.main" 2>/dev/null && echo -e "${YELLOW}🛑 Backend arrêté${NC}" || echo -e "${GREEN}✓ Aucun backend en cours${NC}"
-    pkill -f "vite.*5173" 2>/dev/null && echo -e "${YELLOW}🛑 Frontend arrêté${NC}" || echo -e "${GREEN}✓ Aucun frontend en cours${NC}"
+    pkill -f "vite.*5174" 2>/dev/null && echo -e "${YELLOW}🛑 Frontend arrêté${NC}" || echo -e "${GREEN}✓ Aucun frontend en cours${NC}"
     sleep 2
 else
     echo -e "${GREEN}✓ Mode safe: on ne coupe pas les services déjà démarrés.${NC}"
@@ -159,7 +159,7 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
 echo -e "${CYAN}6️⃣  Démarrage du Frontend React${NC}"
 echo -e "${CYAN}═══════════════════════════════════════${NC}"
-if curl -s http://localhost:5173 > /dev/null 2>&1; then
+if curl -s http://localhost:5174 > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Frontend déjà actif${NC}"
 else
     cd frontend
@@ -168,14 +168,14 @@ else
     cd ..
     echo -e "${YELLOW}⏳ Attente du frontend...${NC}"
     for i in {1..15}; do
-        if curl -s http://localhost:5173 > /dev/null 2>&1; then
+        if curl -s http://localhost:5174 > /dev/null 2>&1; then
             echo -e "${GREEN}✅ Frontend démarré (PID: $FRONTEND_PID)${NC}"
             break
         fi
         sleep 1
     done
 
-    if ! curl -s http://localhost:5173 > /dev/null 2>&1; then
+    if ! curl -s http://localhost:5174 > /dev/null 2>&1; then
         echo -e "${RED}❌ Frontend non accessible${NC}"
         tail -20 /tmp/frontend.log
         exit 1
@@ -214,7 +214,7 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}🎉 Tous les services sont démarrés !${NC}"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo ""
-echo -e "${CYAN}📱 Frontend:${NC}   http://localhost:5173"
+echo -e "${CYAN}📱 Frontend:${NC}   http://localhost:5174"
 echo -e "${CYAN}🎓 Streamlit:${NC}  http://localhost:8501 (avec menu)"
 echo -e "${CYAN}🔧 Backend:${NC}    ${API_BASE_URL}/api/health"
 echo -e "${CYAN}📚 API Docs:${NC}   ${API_BASE_URL}/api/docs"
@@ -230,7 +230,7 @@ echo ""
 echo -e "${YELLOW}💡 Pour arrêter tous les services: ./scripts/stop.sh${NC}"
 echo ""
 echo -e "${GREEN}🚀 Ouvrez votre navigateur sur:${NC}"
-echo -e "   ${GREEN}Frontend:${NC}   http://localhost:5173"
+echo -e "   ${GREEN}Frontend:${NC}   http://localhost:5174"
 echo -e "   ${GREEN}Streamlit:${NC}  http://localhost:8501"
 echo ""
 
@@ -238,5 +238,5 @@ echo ""
 if command -v open &> /dev/null; then
     echo -e "${CYAN}🌐 Ouverture du navigateur...${NC}"
     sleep 2
-    open http://localhost:5173
+    open http://localhost:5174
 fi
