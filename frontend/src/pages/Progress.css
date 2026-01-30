@@ -218,6 +218,21 @@
   background: #fff3cd;
 }
 
+.field-row.field-stuck td {
+  background: #fff0e0;
+}
+
+.field-row.field-stuck .field-activity {
+  color: #c55;
+  font-weight: 600;
+}
+
+.field-active-hint {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: #666;
+}
+
 .logs {
   max-height: 400px;
   overflow-y: auto;

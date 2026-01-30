@@ -102,6 +102,22 @@ def replace_text_everywhere(doc: Document, mapping: dict[str, str]) -> None:
                 for paragraph in cell.paragraphs:
                     replace_in_par(paragraph)
 
+    # Headers et footers
+    for section in doc.sections:
+        for header_footer in (section.header, section.footer, section.first_page_header, section.first_page_footer):
+            if header_footer and header_footer.is_linked_to_previous:
+                continue
+            try:
+                for paragraph in header_footer.paragraphs:
+                    replace_in_par(paragraph)
+                for table in header_footer.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            for paragraph in cell.paragraphs:
+                                replace_in_par(paragraph)
+            except Exception:
+                pass
+
 
 def _stringify_answer(value: Any) -> str:
     if isinstance(value, str):
@@ -225,61 +241,9 @@ def render_report(
     if moustache_mapping:
         replace_text_everywhere(doc, moustache_mapping)
 
-    def get_answer(key: str) -> str:
-        value = answers_dict.get(key)
-        return _stringify_answer(value)
-
-    replace_section(
-        doc,
-        start_text="Profession",
-        end_text="Formation",
-        answer_text=get_answer("PROFESSION"),
-        start_style_prefixes=["TITRE", "Heading"],
-        end_style_prefixes=["TITRE", "Heading"],
-    )
-    replace_section(
-        doc,
-        start_text="Formation",
-        end_text="Tests",
-        answer_text=get_answer("FORMATION"),
-        start_style_prefixes=["TITRE", "Heading"],
-        end_style_prefixes=["Heading"],
-    )
-    replace_section(
-        doc,
-        start_text="RÉSULTATS DE LA DISCUSSION AVEC L’ASSURÉ",
-        end_text="Compétences Professionnelles & Sociales",
-        answer_text=get_answer("DISCUSSION_ASSURE"),
-        start_style_prefixes=["TITRE", "Heading"],
-        end_style_prefixes=["Heading"],
-    )
-    replace_section(
-        doc,
-        start_text="Orientation",
-        end_text="Stage",
-        answer_text=get_answer("ORIENTATION"),
-        start_style_prefixes=["TITRE", "Heading"],
-        end_style_prefixes=["TITRE", "Heading"],
-    )
-    replace_section(
-        doc,
-        start_text="Stage",
-        end_text="Formation",
-        answer_text=get_answer("STAGE"),
-        start_style_prefixes=["TITRE", "Heading"],
-        end_style_prefixes=["TITRE", "Heading"],
-    )
-    replace_section(
-        doc,
-        start_text="Conclusion",
-        end_text="Lieu & Date",
-        answer_text=get_answer("CONCLUSION"),
-        start_style_prefixes=["Heading"],
-        end_style_prefixes=None,
-    )
-
-    # Nettoyage final : supprimer les placeholders {{...}} orphelins
+    # Nettoyage : supprimer les placeholders {{...}} orphelins et leurs titres parents
     _clean_orphan_placeholders(doc)
+    _remove_empty_sections(doc)
 
     doc.save(str(output_path))
     return output_path
@@ -317,3 +281,111 @@ def _clean_orphan_placeholders(doc: Document) -> None:
             for cell in row.cells:
                 for paragraph in list(cell.paragraphs):
                     _clean_par(paragraph)
+
+    # Nettoyer aussi les headers et footers
+    for section in doc.sections:
+        for header_footer in (section.header, section.footer, section.first_page_header, section.first_page_footer):
+            if header_footer and header_footer.is_linked_to_previous:
+                continue
+            try:
+                for paragraph in list(header_footer.paragraphs):
+                    _clean_par(paragraph)
+                for table in header_footer.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            for paragraph in list(cell.paragraphs):
+                                _clean_par(paragraph)
+            except Exception:
+                pass
+
+
+# Valeurs considérées comme vides
+_EMPTY_VALUES = {"non renseigné", "non renseigne", "non évalué", "non evalue", "[]", "vide", ""}
+_RE_CHAMP_VIDE = re.compile(r'^[\w\s]+:\s*vide\s*$', re.IGNORECASE)
+
+# Styles de titre (paragraphe qui précède un contenu)
+_TITLE_STYLE_PREFIXES = ("Heading", "TITRE")
+
+
+def _is_title_style(paragraph: Paragraph) -> bool:
+    name = getattr(getattr(paragraph, "style", None), "name", "") or ""
+    return any(name.startswith(prefix) for prefix in _TITLE_STYLE_PREFIXES)
+
+
+def _is_empty_content(text: str) -> bool:
+    t = (text or "").strip()
+    if t.lower() in _EMPTY_VALUES:
+        return True
+    if _RE_CHAMP_VIDE.match(t):
+        return True
+    return not t
+
+
+def _remove_empty_sections(doc: Document) -> None:
+    """Supprime les titres dont le contenu suivant est vide.
+
+    Parcourt les paragraphes : si un titre est suivi uniquement de paragraphes
+    vides (avant le prochain titre ou la fin), supprime le titre et ces paragraphes.
+    Remonte aussi : si un titre parent (Heading 1, TITRE 2) n'a plus aucun
+    contenu sous lui, il est également supprimé.
+    """
+    # Deux passes : d'abord supprimer les sous-sections vides, puis les sections parentes vides
+    for _ in range(3):  # max 3 passes pour gérer la cascade
+        paragraphs = list(doc.paragraphs)
+        if not paragraphs:
+            break
+        to_delete = []
+        i = 0
+        while i < len(paragraphs):
+            p = paragraphs[i]
+            if _is_title_style(p):
+                # Collecter les paragraphes de contenu après ce titre
+                j = i + 1
+                content_paragraphs = []
+                while j < len(paragraphs) and not _is_title_style(paragraphs[j]):
+                    content_paragraphs.append(paragraphs[j])
+                    j += 1
+                # Vérifier si tout le contenu est vide
+                all_empty = all(_is_empty_content(cp.text) for cp in content_paragraphs)
+                if all_empty and content_paragraphs:
+                    to_delete.append(p)
+                    to_delete.extend(content_paragraphs)
+                elif not content_paragraphs:
+                    # Titre sans contenu du tout (titre suivi directement d'un autre titre)
+                    # Ne supprimer que si ce n'est pas un Heading 1 (section parente)
+                    style_name = getattr(getattr(p, "style", None), "name", "") or ""
+                    if not style_name.startswith("Heading 1"):
+                        to_delete.append(p)
+            i += 1
+
+        if not to_delete:
+            break
+        for p in to_delete:
+            try:
+                delete_paragraph(p)
+            except Exception:
+                pass
+
+    # Dernière passe : supprimer les Heading 1 qui n'ont plus de contenu
+    paragraphs = list(doc.paragraphs)
+    i = 0
+    while i < len(paragraphs):
+        p = paragraphs[i]
+        style_name = getattr(getattr(p, "style", None), "name", "") or ""
+        if style_name.startswith("Heading 1"):
+            j = i + 1
+            has_content = False
+            while j < len(paragraphs):
+                sn = getattr(getattr(paragraphs[j], "style", None), "name", "") or ""
+                if sn.startswith("Heading 1"):
+                    break
+                if paragraphs[j].text.strip():
+                    has_content = True
+                    break
+                j += 1
+            if not has_content:
+                try:
+                    delete_paragraph(p)
+                except Exception:
+                    pass
+        i += 1

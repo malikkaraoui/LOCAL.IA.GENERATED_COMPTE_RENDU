@@ -280,11 +280,19 @@ def start_worker(queue_name: str = "reports,rag,training"):
     import platform
     if platform.system() == "Darwin":  # macOS
         from rq import SimpleWorker
-        worker = SimpleWorker(queues, connection=redis_conn)
-        logger.info("Using SimpleWorker (no fork) for macOS compatibility")
+        worker = SimpleWorker(
+            queues,
+            connection=redis_conn,
+            default_worker_ttl=1800,  # 30 min — éviter AbandonedJobError sur longs jobs LLM
+        )
+        logger.info("Using SimpleWorker (no fork) for macOS compatibility — worker_ttl=1800s")
     else:
-        worker = Worker(queues, connection=redis_conn)
-    
+        worker = Worker(
+            queues,
+            connection=redis_conn,
+            default_worker_ttl=1800,
+        )
+
     worker.work(with_scheduler=True)
 
 

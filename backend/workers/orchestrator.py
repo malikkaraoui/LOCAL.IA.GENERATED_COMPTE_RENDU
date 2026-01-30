@@ -157,9 +157,23 @@ class ReportOrchestrator:
             }
             self.field_order.append(field_key)
 
+        # Enregistrer started_at au premier passage non-pending
+        if stage != "pending" and "started_at" not in self.field_progress[field_key]:
+            self.field_progress[field_key]["started_at"] = datetime.now().isoformat()
+
         self.field_progress[field_key]["stage"] = stage
         self.field_progress[field_key]["message"] = message
         self.field_progress[field_key]["updated_at"] = datetime.now().isoformat()
+
+        # Calculer elapsed_seconds depuis started_at
+        started_at_str = self.field_progress[field_key].get("started_at")
+        if started_at_str:
+            try:
+                started_at_dt = datetime.fromisoformat(started_at_str)
+                elapsed = (datetime.now() - started_at_dt).total_seconds()
+                self.field_progress[field_key]["elapsed_seconds"] = round(elapsed, 1)
+            except Exception:
+                pass
         self.field_progress_version += 1
 
         total = max(len(self.field_order), 1)

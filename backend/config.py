@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # Ollama
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3-next:latest"
-    OLLAMA_TIMEOUT: int = 900
+    OLLAMA_TIMEOUT: int = 120  # 2 min max par appel LLM (était 900 = 15 min)
     
     # Redis (pour queue)
     REDIS_HOST: str = "localhost"

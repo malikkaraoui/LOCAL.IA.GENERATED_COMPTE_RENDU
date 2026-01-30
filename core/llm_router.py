@@ -43,7 +43,7 @@ class LLMConfig(BaseModel):
         description="Température de génération"
     )
     max_tokens: int = Field(
-        default=4096,
+        default=1024,
         ge=1,
         description="Nombre maximum de tokens générés"
     )
@@ -54,7 +54,7 @@ class LLMConfig(BaseModel):
         description="Top-p sampling"
     )
     timeout: float = Field(
-        default=900.0,
+        default=120.0,
         ge=1.0,
         description="Timeout en secondes"
     )
@@ -66,8 +66,8 @@ class LLMConfig(BaseModel):
         host: str = "http://localhost:11434",
         temperature: float = 0.2,
         top_p: float = 0.9,
-        timeout: float = 900.0,
-        max_tokens: int = 4096,
+        timeout: float = 120.0,
+        max_tokens: int = 1024,
     ) -> "LLMConfig":
         """Crée une config depuis les anciens paramètres (rétrocompatibilité)."""
         return cls(

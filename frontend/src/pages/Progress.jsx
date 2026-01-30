@@ -299,18 +299,33 @@ function Progress() {
 
     const order = (fieldOrder && fieldOrder.length) ? fieldOrder : Object.keys(fieldProgress);
     const now = new Date();
-    const STUCK_THRESHOLD_SECONDS = 90;
+    const STUCK_THRESHOLD_SECONDS = 120;
+
+    // Compteurs
+    const totalFields = order.length;
+    const doneFields = order.filter((k) => {
+      const s = (fieldProgress[k] || {}).stage;
+      return ['done', 'warning', 'error'].includes(s);
+    }).length;
+    const activeField = order.find((k) => {
+      const s = (fieldProgress[k] || {}).stage;
+      return s && !['pending', 'done', 'warning', 'error'].includes(s);
+    });
 
     return (
       <div className="field-progress">
-        <h3>Progression des champs LLM</h3>
+        <h3>Progression des champs LLM — {doneFields}/{totalFields} terminés
+          {activeField && (
+            <span className="field-active-hint"> — en cours : <code>{activeField}</code></span>
+          )}
+        </h3>
         <div className="field-progress-table-wrap">
           <table className="field-progress-table">
             <thead>
               <tr>
                 <th>Champ</th>
                 <th>Statut</th>
-                <th>Activité</th>
+                <th>Durée</th>
                 <th>Détails</th>
               </tr>
             </thead>
@@ -321,20 +336,34 @@ function Progress() {
                 const stage = info.stage || 'pending';
                 const icon = FIELD_STAGE_ICONS[stage] || '•';
                 const stageLabel = FIELD_STAGE_LABELS[stage] || stage;
-                const updatedAt = info.updated_at ? new Date(info.updated_at) : null;
-                let activity = '—';
+
+                // Durée écoulée depuis started_at (envoyé par le backend)
+                let elapsed = '—';
                 let warn = false;
-                if (updatedAt && !Number.isNaN(updatedAt.getTime())) {
-                  const ageSeconds = (now.getTime() - updatedAt.getTime()) / 1000;
-                  activity = humanizeDelta(ageSeconds);
-                  warn = !['done', 'warning', 'error'].includes(stage) && ageSeconds > STUCK_THRESHOLD_SECONDS;
+                const startedAt = info.started_at ? new Date(info.started_at) : null;
+                if (startedAt && !Number.isNaN(startedAt.getTime())) {
+                  // Pour les champs terminés, utiliser elapsed_seconds du backend (plus précis)
+                  if (['done', 'warning', 'error'].includes(stage) && info.elapsed_seconds != null) {
+                    elapsed = humanizeDelta(info.elapsed_seconds);
+                  } else if (!['done', 'warning', 'error', 'pending'].includes(stage)) {
+                    // Champ en cours: calculer en live
+                    const elapsedSec = (now.getTime() - startedAt.getTime()) / 1000;
+                    elapsed = humanizeDelta(elapsedSec);
+                    warn = elapsedSec > STUCK_THRESHOLD_SECONDS;
+                  } else if (info.elapsed_seconds != null) {
+                    elapsed = humanizeDelta(info.elapsed_seconds);
+                  }
                 }
+
                 const msg = info.message || '—';
                 return (
-                  <tr key={key} className={`field-row field-stage-${stage}`}>
+                  <tr key={key} className={`field-row field-stage-${stage}${warn ? ' field-stuck' : ''}`}>
                     <td className="field-key"><code>{key}</code></td>
                     <td className="field-stage">{icon} {stageLabel}</td>
-                    <td className="field-activity">{activity}{warn ? ' ⚠️' : ''}</td>
+                    <td className="field-activity">
+                      {elapsed}
+                      {warn && ' 🐢 lent'}
+                    </td>
                     <td className="field-message">{msg}</td>
                   </tr>
                 );

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Optional
@@ -40,51 +41,58 @@ RE_FORBIDDEN_TOKENS = re.compile(r"\bXX\b|\bNAME\b|\bsurname\b", re.IGNORECASE)
 
 
 def ollama_generate(
-    model: str, 
-    prompt: str, 
-    host: str, 
-    temperature: float, 
+    model: str,
+    prompt: str,
+    host: str,
+    temperature: float,
     top_p: float,
-    timeout: float = 300.0,
+    timeout: float = 120.0,
     *,
     llm_config: Optional[LLMConfig] = None,
     field_name: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> Result[str]:
     """Génère une réponse via l'API Ollama.
-    
+
     LEGACY WRAPPER: Utilise le nouveau router LLM si llm_config fourni,
     sinon utilise les anciens paramètres pour rétrocompatibilité.
-    
+
     Args:
         model: Nom du modèle Ollama
         prompt: Prompt à envoyer
         host: URL du serveur Ollama
         temperature: Température (0-1)
         top_p: Paramètre top_p (0-1)
-        timeout: Timeout en secondes (défaut 300)
+        timeout: Timeout en secondes (défaut 120)
         llm_config: Config LLM moderne (prioritaire si fourni)
         field_name: Nom du champ (pour logs)
-        
+        max_tokens: Limite de tokens générés (override la config)
+
     Returns:
         Result[str]: Succès avec la réponse générée ou échec avec OllamaError
     """
     # ✅ Nouveau chemin: utiliser le router LLM unifié
     if llm_config:
-        result = call_llm(llm_config, prompt, field_name=field_name)
+        # Appliquer max_tokens si spécifié (override par champ)
+        effective_config = llm_config
+        if max_tokens and max_tokens != llm_config.max_tokens:
+            effective_config = llm_config.model_copy(update={"max_tokens": max_tokens, "timeout": min(llm_config.timeout, 120.0)})
+        result = call_llm(effective_config, prompt, field_name=field_name)
         if result.success:
             return Result.ok(result.value.text)
         else:
             return Result.fail(result.error)
-    
+
     # ⚠️ Ancien chemin (legacy): créer une config à la volée
     legacy_config = LLMConfig.from_legacy(
         model=model,
         host=host,
         temperature=temperature,
         top_p=top_p,
-        timeout=timeout,
+        timeout=min(timeout, 120.0),
+        max_tokens=max_tokens or 1024,
     )
-    
+
     result = call_llm(legacy_config, prompt, field_name=field_name)
     if result.success:
         return Result.ok(result.value.text)
@@ -153,7 +161,21 @@ def sanitize_output(text: str) -> str:
         text = text[:-3].rstrip()
     if text.endswith("…"):  # Version Unicode du caractère points de suspension
         text = text[:-1].rstrip()
-    
+
+    # Filet de sécurité: vider tout texte contenant un refus LLM
+    _refusal_markers = [
+        "je suis désolé",
+        "je ne peux pas",
+        "je ne suis pas en mesure",
+        "il m'est impossible",
+        "impossible pour moi de",
+        "pas disponible dans les sources",
+        "informations personnelles et privées",
+    ]
+    text_lower = text.lower()
+    if any(marker in text_lower for marker in _refusal_markers):
+        return ""
+
     return text.strip()
 
 
@@ -586,18 +608,28 @@ def generate_fields(
                 missing_info.append("NO_CONTEXT")
             else:
                 prompt = build_prompt(spec, instruction, context_blocks)
+
+                # Limiter max_tokens selon max_chars du champ (~3 chars/token en français)
+                field_max_chars = getattr(spec, 'max_chars', 2000) or 2000
+                field_max_tokens = min(int(field_max_chars / 2.5) + 128, 2048)
+                # Minimum raisonnable pour les enums/courts
+                field_max_tokens = max(field_max_tokens, 256)
+
                 if progress_callback:
-                    progress_callback(key, "prompt", f"Envoi ({len(context_blocks)} sources)")
+                    progress_callback(key, "prompt", f"Envoi ({len(context_blocks)} sources, {len(prompt)} chars)")
                 if status_callback:
                     status_callback(
                         f"LLM [{key}] envoi du prompt ({len(context_blocks)} sources, {len(prompt)} caractères)…"
                     )
-                
+
+                _llm_start = time.monotonic()
                 llm_result = ollama_generate(
                     model, prompt, host, temperature, top_p,
                     llm_config=llm_config,
                     field_name=key,
+                    max_tokens=field_max_tokens,
                 )
+                _llm_elapsed = time.monotonic() - _llm_start
                 if not llm_result.success:
                     error_msg = str(llm_result.error)
                     is_timeout = _looks_like_timeout(error_msg)
@@ -674,10 +706,11 @@ def generate_fields(
                         continue
                 
                 raw_response = llm_result.value
+                _elapsed_str = f"{_llm_elapsed:.0f}s" if _llm_elapsed < 60 else f"{_llm_elapsed/60:.1f}min"
                 if status_callback:
-                    status_callback(f"LLM [{key}] réponse reçue ({len(raw_response)} caractères)")
+                    status_callback(f"LLM [{key}] réponse reçue ({len(raw_response)} caractères, {_elapsed_str})")
                 if progress_callback:
-                    progress_callback(key, "response", f"Réponse ({len(raw_response)} caractères)")
+                    progress_callback(key, "response", f"Réponse ({len(raw_response)} chars, {_elapsed_str})")
 
                 retry = False
                 response_text = raw_response
@@ -724,6 +757,8 @@ def generate_fields(
                         + "\n- Écris TOUT le contenu en entier sans abréger"
                         + "\n- Interdit d'écrire des titres/labels déjà présents dans le template"
                         + "\n- Ponctuation: pas de '::' et un seul ':' maximum par ligne"
+                        + "\n- INTERDIT de s'excuser, de refuser ou d'écrire 'je suis désolé' / 'je ne peux pas'. Rédige le contenu ou écris __VIDE__."
+                        + "\n- INTERDIT d'expliquer un test ou une méthodologie. Donne les RÉSULTATS uniquement."
                         + "\nSi une info manque: écris __VIDE__."
                         + "\nRecommence maintenant en texte brut."
                     )
