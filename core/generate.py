@@ -162,8 +162,9 @@ def sanitize_output(text: str) -> str:
     if text.endswith("…"):  # Version Unicode du caractère points de suspension
         text = text[:-1].rstrip()
 
-    # Filet de sécurité: vider tout texte contenant un refus LLM
-    _refusal_markers = [
+    # Filet de sécurité: vider tout texte contenant un refus LLM ou une explication méthodologique
+    _kill_markers = [
+        # Refus
         "je suis désolé",
         "je ne peux pas",
         "je ne suis pas en mesure",
@@ -171,9 +172,30 @@ def sanitize_output(text: str) -> str:
         "impossible pour moi de",
         "pas disponible dans les sources",
         "informations personnelles et privées",
+        # Explications méthodologiques (interdit: le LLM doit donner les RÉSULTATS, pas expliquer le test)
+        "le modèle riasec",
+        "le test riasec permet",
+        "john holland",
+        "cet outil d'orientation",
+        "il repose sur six dimensions",
+        "les six types de personnalité",
+        "six types de personnalités",
+        "recherche (r), intervention (i)",
+        "recherche (r), intervention",
+        "il identifie six types",
+        "les seuils définis en pourcentage",
+        "est évalué à l'aide d'un test qui consiste",
+        "le positionnement de niveau est évalué",
+        "ce test mesure",
+        "l'évaluation repose sur",
+        "les seuils sont",
+        "le taux de réussite global",
+        "ce modèle est souvent utilisé",
+        "outil d'orientation professionnel",
+        "comprendre les motivations et les préférences",
     ]
     text_lower = text.lower()
-    if any(marker in text_lower for marker in _refusal_markers):
+    if any(marker in text_lower for marker in _kill_markers):
         return ""
 
     return text.strip()
@@ -490,6 +512,8 @@ def generate_fields(
     max_chars_multiplier: float = 1.0,
     # ✅ NOUVEAU: Config LLM unifiée (prioritaire)
     llm_config: Optional[LLMConfig] = None,
+    # V3: type de rapport (rapport_initial, etc.)
+    report_type: Optional[str] = None,
 ) -> dict[str, Any]:
     # ✅ Créer une config LLM unifiée (depuis llm_config ou legacy params)
     if not llm_config:
@@ -508,6 +532,18 @@ def generate_fields(
         llm_config.base_url,
     )
     
+    # V3: if report_type is provided, use V3 specs
+    USE_V3 = False
+    if report_type and not fields:
+        from .field_specs_v3 import get_specs_for_report_type
+        v3_specs = get_specs_for_report_type(report_type)
+        if v3_specs:
+            fields = [
+                {"key": s.key, "query": s.query, "instructions": s.instructions}
+                for s in v3_specs
+            ]
+            USE_V3 = True
+
     fields = fields or DEFAULT_FIELDS
     deterministic_lookup = {k.upper(): v for k, v in (deterministic_values or {}).items()}
     chunks, index = build_index(
@@ -523,8 +559,15 @@ def generate_fields(
     for field in fields:
         key = field["key"]
         
-        # Schema V2 ou V1
-        if USE_SCHEMA_V2:
+        # Schema V3, V2 ou V1
+        if USE_V3:
+            from .field_specs_v3 import get_field_spec_v3
+            spec = get_field_spec_v3(key)
+            if not spec:
+                # Fallback to V2
+                from .field_specs_v2 import get_field_spec_v2
+                spec = get_field_spec_v2(key)
+        elif USE_SCHEMA_V2:
             from .field_specs_v2 import get_field_spec_v2
             spec = get_field_spec_v2(key)
             # V2: pas de multiplicateur (limites strictes)
@@ -565,7 +608,7 @@ def generate_fields(
         # Si une valeur est fournie via deterministic_values, on ne doit PAS appeler le LLM,
         # même si le FieldSpec ne déclare pas explicitement le champ comme "deterministic".
         # (cas typique: placeholders template ajoutés côté UI, ex: TITRE_DOCUMENT)
-        if spec.field_type == "deterministic" or key.upper() in deterministic_lookup:
+        if getattr(spec, 'field_type', None) == "deterministic" or key.upper() in deterministic_lookup:
             cleaned_value = (deterministic_lookup.get(key.upper()) or "").strip()
             if not cleaned_value:
                 missing_info.append("DETERMINISTIC_EMPTY")
@@ -604,7 +647,7 @@ def generate_fields(
                 progress_callback(key, "extract", f"Extrait : {cleaned_value}")
         
         else:
-            if spec.skip_llm_if_no_sources and not context_blocks:
+            if getattr(spec, 'skip_llm_if_no_sources', False) and not context_blocks:
                 missing_info.append("NO_CONTEXT")
             else:
                 prompt = build_prompt(spec, instruction, context_blocks)
