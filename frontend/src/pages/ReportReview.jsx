@@ -209,153 +209,152 @@ function ReportReview() {
           </ul>
         </div>
 
-        {/* Center: Editor */}
-        <div className="review-editor">
+        {/* Main: Editor + Evaluation below */}
+        <div className="review-main">
           {selectedSection ? (
             <>
-              <div className="editor-header">
-                <h3>{selectedKey.replace(/_/g, ' ')}</h3>
-                <span
-                  className="status-badge"
-                  style={{ backgroundColor: STATUS_COLORS[selectedSection.evaluation.status] }}
-                >
-                  {STATUS_LABELS[selectedSection.evaluation.status]}
-                  {selectedSection.evaluation.score > 0 && ` (${Math.round(selectedSection.evaluation.score * 100)}%)`}
-                </span>
-              </div>
-
-              <textarea
-                className="section-textarea"
-                value={editText}
-                onChange={handleTextChange}
-                rows={15}
-                placeholder="Contenu de la section..."
-              />
-
-              <div className="editor-actions">
-                <button
-                  className="btn-save"
-                  onClick={handleSave}
-                  disabled={!isDirty || saving}
-                >
-                  {saving ? 'Sauvegarde...' : 'Sauvegarder'}
-                </button>
-
-                <button
-                  className="btn-hint"
-                  onClick={() => setShowHint(!showHint)}
-                >
-                  Relancer
-                </button>
-              </div>
-
-              {showHint && (
-                <div className="hint-box">
-                  <input
-                    type="text"
-                    value={hintText}
-                    onChange={(e) => setHintText(e.target.value)}
-                    placeholder="Indication pour le LLM (optionnel)..."
-                    className="hint-input"
-                  />
-                  <button
-                    className="btn-regenerate"
-                    onClick={handleRegenerate}
-                    disabled={regenerating}
+              {/* Editor */}
+              <div className="review-editor">
+                <div className="editor-header">
+                  <h3>{selectedKey.replace(/_/g, ' ')}</h3>
+                  <span
+                    className="status-badge"
+                    style={{ backgroundColor: STATUS_COLORS[selectedSection.evaluation.status] }}
                   >
-                    {regenerating ? 'Regeneration...' : 'Regenerer'}
+                    {STATUS_LABELS[selectedSection.evaluation.status]}
+                    {selectedSection.evaluation.score > 0 && ` (${Math.round(selectedSection.evaluation.score * 100)}%)`}
+                  </span>
+                </div>
+
+                <textarea
+                  className="section-textarea"
+                  value={editText}
+                  onChange={handleTextChange}
+                  rows={15}
+                  placeholder="Contenu de la section..."
+                />
+
+                <div className="editor-actions">
+                  <button
+                    className="btn-save"
+                    onClick={handleSave}
+                    disabled={!isDirty || saving}
+                  >
+                    {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </button>
+
+                  <button
+                    className="btn-hint"
+                    onClick={() => setShowHint(!showHint)}
+                  >
+                    Relancer
                   </button>
                 </div>
-              )}
-            </>
-          ) : (
-            <p className="no-selection">Selectionnez une section</p>
-          )}
-        </div>
 
-        {/* Right: Evaluation panel */}
-        <div className="review-eval">
-          {selectedSection ? (
-            <>
-              <h3>Evaluation</h3>
-              <div className="eval-score">
-                Score: {Math.round(selectedSection.evaluation.score * 100)}%
-              </div>
-
-              {selectedSection.evaluation.comment && (
-                <div className="eval-comment">
-                  {selectedSection.evaluation.comment}
-                </div>
-              )}
-
-              <h4>Criteres</h4>
-              <ul className="checks-list">
-                {selectedSection.evaluation.checks.map((check) => (
-                  <li key={check.element} className={`check-item ${check.found ? 'found' : 'missing'}`}>
-                    <span className="check-icon">{check.found ? '\u2713' : '\u2717'}</span>
-                    <span className="check-label">{check.element.replace(/_/g, ' ')}</span>
-                    {check.found && check.keywords_matched.length > 0 && (
-                      <span className="check-keywords">
-                        ({check.keywords_matched.slice(0, 3).join(', ')})
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-
-              <h4>Sources attendues</h4>
-              <div className="sources-list">
-                {selectedSection.sources.map((src) => (
-                  <span key={src} className="source-tag">{src}</span>
-                ))}
-              </div>
-
-              {/* Métadonnées de génération */}
-              {selectedSection.generation_meta && Object.keys(selectedSection.generation_meta).length > 0 && (
-                <>
-                  <h4>Generation</h4>
-                  <div className="gen-meta">
-                    <div className="gen-meta-row">
-                      <span className="gen-meta-label">Fichiers</span>
-                      <span className="gen-meta-value">{selectedSection.generation_meta.source_count || 0}</span>
-                    </div>
-                    <div className="gen-meta-row">
-                      <span className="gen-meta-label">Passages</span>
-                      <span className="gen-meta-value">{selectedSection.generation_meta.chunk_count || 0}</span>
-                    </div>
-                    <div className="gen-meta-row">
-                      <span className="gen-meta-label">Retries</span>
-                      <span className="gen-meta-value">{selectedSection.generation_meta.retries || 0}</span>
-                    </div>
-                    <div className="gen-meta-row">
-                      <span className="gen-meta-label">Prompt</span>
-                      <span className="gen-meta-value">{selectedSection.generation_meta.prompt_length || 0} chars</span>
-                    </div>
-                    {selectedSection.generation_meta.had_prior_sections && (
-                      <div className="gen-meta-row">
-                        <span className="gen-meta-label">Contexte</span>
-                        <span className="gen-meta-value gen-meta-tag">+ sections precedentes</span>
-                      </div>
-                    )}
-                    {selectedSection.generation_meta.source_files?.length > 0 && (
-                      <div className="gen-meta-files">
-                        <span className="gen-meta-label">Documents utilises</span>
-                        <ul className="gen-file-list">
-                          {selectedSection.generation_meta.source_files.map((f) => (
-                            <li key={f} className="gen-file-item">{f}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {selectedSection.generation_meta.instructions && (
-                      <div className="gen-meta-files">
-                        <span className="gen-meta-label">Consigne LLM</span>
-                        <div className="gen-instructions">{selectedSection.generation_meta.instructions}</div>
-                      </div>
-                    )}
+                {showHint && (
+                  <div className="hint-box">
+                    <input
+                      type="text"
+                      value={hintText}
+                      onChange={(e) => setHintText(e.target.value)}
+                      placeholder="Indication pour le LLM (optionnel)..."
+                      className="hint-input"
+                    />
+                    <button
+                      className="btn-regenerate"
+                      onClick={handleRegenerate}
+                      disabled={regenerating}
+                    >
+                      {regenerating ? 'Regeneration...' : 'Regenerer'}
+                    </button>
                   </div>
-                </>
-              )}
+                )}
+              </div>
+
+              {/* Evaluation panel — below editor */}
+              <div className="review-eval">
+                <div className="eval-grid">
+                  {/* Score + Criteres */}
+                  <div className="eval-col">
+                    <h3>Evaluation</h3>
+                    <div className="eval-score">
+                      Score: {Math.round(selectedSection.evaluation.score * 100)}%
+                    </div>
+                    {selectedSection.evaluation.comment && (
+                      <div className="eval-comment">
+                        {selectedSection.evaluation.comment}
+                      </div>
+                    )}
+                    <h4>Criteres</h4>
+                    <ul className="checks-list">
+                      {selectedSection.evaluation.checks.map((check) => (
+                        <li key={check.element} className={`check-item ${check.found ? 'found' : 'missing'}`}>
+                          <span className="check-icon">{check.found ? '\u2713' : '\u2717'}</span>
+                          <span className="check-label">{check.element.replace(/_/g, ' ')}</span>
+                          {check.found && check.keywords_matched.length > 0 && (
+                            <span className="check-keywords">
+                              ({check.keywords_matched.slice(0, 3).join(', ')})
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <h4>Sources attendues</h4>
+                    <div className="sources-list">
+                      {selectedSection.sources.map((src) => (
+                        <span key={src} className="source-tag">{src}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Generation metadata */}
+                  {selectedSection.generation_meta && Object.keys(selectedSection.generation_meta).length > 0 && (
+                    <div className="eval-col">
+                      <h3>Generation</h3>
+                      <div className="gen-meta">
+                        <div className="gen-meta-row">
+                          <span className="gen-meta-label">Fichiers</span>
+                          <span className="gen-meta-value">{selectedSection.generation_meta.source_count || 0}</span>
+                        </div>
+                        <div className="gen-meta-row">
+                          <span className="gen-meta-label">Passages</span>
+                          <span className="gen-meta-value">{selectedSection.generation_meta.chunk_count || 0}</span>
+                        </div>
+                        <div className="gen-meta-row">
+                          <span className="gen-meta-label">Retries</span>
+                          <span className="gen-meta-value">{selectedSection.generation_meta.retries || 0}</span>
+                        </div>
+                        <div className="gen-meta-row">
+                          <span className="gen-meta-label">Prompt</span>
+                          <span className="gen-meta-value">{selectedSection.generation_meta.prompt_length || 0} chars</span>
+                        </div>
+                        {selectedSection.generation_meta.had_prior_sections && (
+                          <div className="gen-meta-row">
+                            <span className="gen-meta-label">Contexte</span>
+                            <span className="gen-meta-value gen-meta-tag">+ sections precedentes</span>
+                          </div>
+                        )}
+                        {selectedSection.generation_meta.source_files?.length > 0 && (
+                          <div className="gen-meta-files">
+                            <span className="gen-meta-label">Documents utilises</span>
+                            <ul className="gen-file-list">
+                              {selectedSection.generation_meta.source_files.map((f) => (
+                                <li key={f} className="gen-file-item">{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {selectedSection.generation_meta.instructions && (
+                          <div className="gen-meta-files">
+                            <span className="gen-meta-label">Consigne LLM</span>
+                            <div className="gen-instructions">{selectedSection.generation_meta.instructions}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </>
           ) : (
             <p className="no-selection">Selectionnez une section</p>

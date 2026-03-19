@@ -12,9 +12,20 @@ Status:
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 
 from core.field_specs_v3 import FieldSpecV3
+
+
+def _normalize(text: str) -> str:
+    """Lowercase + strip accents for fuzzy keyword matching."""
+    text = text.lower()
+    # NFD decomposition then strip combining marks (accents)
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text)
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 @dataclass
@@ -52,12 +63,12 @@ def evaluate_section(spec: FieldSpecV3, text: str) -> SectionEvaluation:
             comment="Aucun contenu généré pour cette section.",
         )
 
-    text_lower = stripped.lower()
+    text_norm = _normalize(stripped)
 
     checks: list[SectionCheck] = []
     for element in spec.required_elements:
         keywords = spec.element_keywords.get(element, [])
-        matched = [kw for kw in keywords if kw.lower() in text_lower]
+        matched = [kw for kw in keywords if _normalize(kw) in text_norm]
         checks.append(
             SectionCheck(
                 element=element,

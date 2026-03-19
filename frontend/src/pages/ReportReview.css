@@ -90,11 +90,15 @@
 .btn-export:hover { background: #2563eb; }
 .btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* 3-column layout */
+/* 2-column layout: sidebar + main */
 .review-columns {
   display: grid;
-  grid-template-columns: 220px 1fr 280px;
+  grid-template-columns: 220px 1fr;
   min-height: calc(100vh - 200px);
+}
+
+.review-main {
+  overflow-y: auto;
 }
 
 /* Sidebar */
@@ -264,12 +268,21 @@
   padding: 40px;
 }
 
-/* Evaluation panel */
+/* Evaluation panel — below editor */
 .review-eval {
-  border-left: 1px solid #e5e7eb;
-  padding: 16px;
+  border-top: 1px solid #e5e7eb;
+  padding: 20px 24px;
   background: #fafafa;
-  overflow-y: auto;
+}
+
+.eval-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.eval-col {
+  min-width: 0;
 }
 
 .review-eval h3 {
@@ -354,10 +367,12 @@
   .review-columns {
     grid-template-columns: 1fr;
   }
-  .review-sidebar,
-  .review-eval {
+  .review-sidebar {
     border: none;
     border-bottom: 1px solid #e5e7eb;
+  }
+  .eval-grid {
+    grid-template-columns: 1fr;
   }
 }
 

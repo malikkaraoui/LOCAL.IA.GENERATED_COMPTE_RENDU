@@ -148,8 +148,13 @@ FIELD_SPECS_V3: dict[str, FieldSpecV3] = {
                 "formation", "titre",
             ],
             "domaine_nature": [
-                "technique", "administratif", "commercial", "social", "santé",
+                "technique", "administratif", "administrative", "commercial",
+                "social", "santé", "soins", "aide-soignant", "soignant",
                 "informatique", "sécurité", "logistique", "mécanique",
+                "secrétariat", "comptabilité", "gestion", "vente",
+                "restauration", "hôtellerie", "nettoyage", "bâtiment",
+                "construction", "électricité", "peinture", "agriculture",
+                "premiers secours", "PSC", "recyclage",
                 "diplôme", "certificat", "formation courte", "CAS", "DAS",
             ],
             "dates_durees": [
@@ -157,9 +162,11 @@ FIELD_SPECS_V3: dict[str, FieldSpecV3] = {
                 "obtenu en", "délivré", "terminé",
             ],
             "ecole_lieu": [
-                "école", "centre", "institut", "université", "HES", "EPFL",
-                "lycée", "collège", "Lausanne", "Genève", "Zurich", "Berne",
-                "Suisse", "France",
+                "école", "ecole", "centre", "institut", "université", "HES",
+                "EPFL", "lycée", "collège", "hôpital", "clinique",
+                "Lausanne", "Genève", "Zurich", "Berne", "Fribourg",
+                "Neuchâtel", "Sion", "Yverdon", "Vaud", "Valais",
+                "Suisse", "France", "SARL", "SA",
             ],
         },
         evaluation_prompt=(
