@@ -237,7 +237,12 @@ def regenerate_section(job_id: str, section_key: str, body: RegenerateRequest):
 def export_report(job_id: str):
     """Generate final DOCX from current section states."""
     from docx import Document
-    from core.render import replace_text_everywhere, build_moustache_mapping
+    from core.render import (
+        replace_text_everywhere,
+        build_moustache_mapping,
+        _clean_orphan_placeholders,
+        _remove_empty_sections,
+    )
     from fastapi.responses import FileResponse
     import tempfile
 
@@ -251,9 +256,47 @@ def export_report(job_id: str):
     template_path = meta.get("template_path", str(settings.TEMPLATE_PATH))
 
     doc = Document(template_path)
+
+    # 1) Simple mapping for deterministic / legacy placeholders
+    name = answers.get("NAME", "")
+    if isinstance(name, dict):
+        name = name.get("value", "") or name.get("answer", "") or ""
+    surname = answers.get("SURNAME", "")
+    if isinstance(surname, dict):
+        surname = surname.get("value", "") or surname.get("answer", "") or ""
+    civility = answers.get("MONSIEUR_OU_MADAME", "")
+    if isinstance(civility, dict):
+        civility = civility.get("value", "") or civility.get("answer", "") or ""
+    civility = civility or "Monsieur"
+    location_date = answers.get("LIEU_ET_DATE", "")
+    if isinstance(location_date, dict):
+        location_date = location_date.get("value", "") or location_date.get("answer", "") or ""
+
+    simple_mapping = {}
+    if name:
+        simple_mapping["{NAME}"] = name
+        simple_mapping["{{NAME}}"] = name
+        simple_mapping["{monsieur ou madame NAME}"] = f"{civility} {name}".strip()
+    if surname:
+        simple_mapping["{surname}"] = surname
+        simple_mapping["{{SURNAME}}"] = surname
+        simple_mapping["XX"] = f"{civility} {surname}".strip()
+    simple_mapping["{{MONSIEUR_OU_MADAME}}"] = civility
+    if location_date:
+        simple_mapping["{LIEU_ET_DATE}"] = location_date
+        simple_mapping["{{LIEU_ET_DATE}}"] = location_date
+
+    if simple_mapping:
+        replace_text_everywhere(doc, simple_mapping)
+
+    # 2) Moustache mapping for all answers (sections + deterministic)
     moustache_mapping = build_moustache_mapping(answers)
     if moustache_mapping:
         replace_text_everywhere(doc, moustache_mapping)
+
+    # 3) Clean orphan placeholders and empty sections
+    _clean_orphan_placeholders(doc)
+    _remove_empty_sections(doc)
 
     # Save to temp file
     tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
