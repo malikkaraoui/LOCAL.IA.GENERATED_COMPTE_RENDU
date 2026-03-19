@@ -105,6 +105,12 @@ class ReportCreateRequest(BaseModel):
         default=None,
         description="Configuration LLM unifiée (prioritaire sur llm_host/llm_model)"
     )
+
+    # V3: Type de rapport
+    report_type: Optional[str] = Field(
+        default=None,
+        description="Type de rapport V3 (rapport_initial, rapport_final, etc.)"
+    )
     
     class Config:
         json_schema_extra = {

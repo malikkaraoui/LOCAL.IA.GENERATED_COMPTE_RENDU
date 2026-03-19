@@ -51,6 +51,8 @@ class ReportGenerationParams:
     max_chars_multiplier: float = 1.0
     # ✅ NOUVEAU: Config LLM unifiée (prioritaire)
     llm_config: Optional[Any] = None  # Type: core.llm_router.LLMConfig
+    # V3: type de rapport
+    report_type: Optional[str] = None
     
     # Extraction
     extract_method: str = "auto"
@@ -621,8 +623,7 @@ class ReportOrchestrator:
         }
         
         # Génération des champs
-        answers = generate_fields(
-            payload,
+        generate_kwargs = dict(
             model=self.params.llm_model,
             host=self.params.llm_host,
             temperature=self.params.temperature,
@@ -638,6 +639,29 @@ class ReportOrchestrator:
             status_callback=lambda msg: self._log_progress("GENERATING", msg, None),
             progress_callback=lambda k, stg, m: self._update_field_progress(k, stg, m),
         )
+        # V3: pass report_type if provided (overrides fields from template)
+        if self.params.report_type:
+            generate_kwargs["report_type"] = self.params.report_type
+            generate_kwargs.pop("fields", None)  # Let V3 build its own fields
+
+        answers = generate_fields(payload, **generate_kwargs)
+
+        # V3: store answers + metadata in job meta for review/regeneration
+        if self.params.report_type and self.progress_callback:
+            self.progress_callback({
+                "report_type": self.params.report_type,
+                "answers": answers,
+                "extracted_payload": payload,
+                "template_path": str(self.params.template_path),
+                "client_name": self.params.client_dir.name,
+                "llm_config": {
+                    "provider": getattr(self.params.llm_config, "provider", "ollama") if self.params.llm_config else "ollama",
+                    "base_url": getattr(self.params.llm_config, "base_url", self.params.llm_host) if self.params.llm_config else self.params.llm_host,
+                    "model": getattr(self.params.llm_config, "model", self.params.llm_model) if self.params.llm_config else self.params.llm_model,
+                    "temperature": self.params.temperature,
+                    "top_p": self.params.top_p,
+                },
+            })
         
         # Sauvegarde
         answers_path.write_text(

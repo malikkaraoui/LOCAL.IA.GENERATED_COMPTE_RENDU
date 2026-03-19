@@ -256,6 +256,7 @@ async def create_report(request: ReportCreateRequest):
         top_p=request.top_p if request.top_p is not None else 0.9,
         max_chars_multiplier=request.max_chars_multiplier if request.max_chars_multiplier is not None else 1.0,
         llm=llm_dict,  # ✅ Passer l'objet LLM unifié
+        report_type=request.report_type,  # V3: type de rapport
         # Filters
         include_filters=include_filters,
         exclude_filters=exclude_filters,

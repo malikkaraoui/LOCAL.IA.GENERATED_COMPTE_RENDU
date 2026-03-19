@@ -48,6 +48,8 @@ def process_report_job(
     max_chars_multiplier: float = 1.0,
     # ✅ NOUVEAU: Config LLM unifiée (prioritaire si fourni)
     llm: Optional[Dict[str, Any]] = None,
+    # V3: type de rapport
+    report_type: Optional[str] = None,
     # Options
     include_filters: list = None,
     exclude_filters: list = None,
@@ -186,6 +188,7 @@ def process_report_job(
             top_p=top_p,
             max_chars_multiplier=max_chars_multiplier,
             llm_config=llm_config,  # ✅ Passer la config unifiée
+            report_type=report_type,  # V3: type de rapport
             extract_method=extract_method,
             source_file=source_file,
             enable_soffice=enable_soffice,
