@@ -82,6 +82,14 @@ export const reportsAPI = {
   },
 
   /**
+   * Liste des types de rapport V3
+   */
+  getReportTypes: async () => {
+    const response = await apiClient.get('/report-types');
+    return response.data;
+  },
+
+  /**
    * Créer un nouveau rapport
    */
   createReport: async (clientName, sourceFile = null, extractMethod = 'auto', additionalParams = {}) => {
@@ -287,6 +295,28 @@ export const trainingAPI = {
    */
   getStatus: async (jobId) => {
     const response = await apiClient.get(`/training/${jobId}/status`);
+    return response.data;
+  },
+};
+
+/**
+ * API Review (V3 — revue section par section)
+ */
+export const reviewAPI = {
+  getReview: async (jobId) => {
+    const response = await apiClient.get(`/reports/${jobId}/review`);
+    return response.data;
+  },
+  updateSection: async (jobId, sectionKey, text) => {
+    const response = await apiClient.put(`/reports/${jobId}/sections/${sectionKey}`, { text });
+    return response.data;
+  },
+  regenerateSection: async (jobId, sectionKey, hint = null) => {
+    const response = await apiClient.post(`/reports/${jobId}/sections/${sectionKey}/regenerate`, { hint });
+    return response.data;
+  },
+  exportReport: async (jobId) => {
+    const response = await apiClient.post(`/reports/${jobId}/export`, null, { responseType: 'blob' });
     return response.data;
   },
 };

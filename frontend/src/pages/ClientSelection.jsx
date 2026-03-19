@@ -48,6 +48,10 @@ function ClientSelection() {
   const [llmRestartMessage, setLlmRestartMessage] = useState(null);
   const [llmModelsError, setLlmModelsError] = useState(null);
 
+  // Type de rapport (V3)
+  const [reportTypes, setReportTypes] = useState([]);
+  const [selectedReportType, setSelectedReportType] = useState('rapport_initial');
+
   // Options avancées
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [topK, setTopK] = useState(10);
@@ -139,6 +143,16 @@ function ClientSelection() {
         console.error('Erreur lors du chargement des clients:', err);
         // Fallback (évite un écran vide si le backend est temporairement down)
         setClients(['KARAOUI Malik']);
+      }
+    })();
+
+    // Charger les types de rapport V3
+    (async () => {
+      try {
+        const resp = await reportsAPI.getReportTypes();
+        setReportTypes(resp.types || []);
+      } catch (err) {
+        console.warn('Impossible de charger les types de rapport:', err);
       }
     })();
 
@@ -386,6 +400,7 @@ function ClientSelection() {
           force_reextract: forceReextract,
           enable_soffice: enableSoffice,
           export_pdf: autoPdf,
+          report_type: selectedReportType || undefined,
         }
       );
       
@@ -510,6 +525,33 @@ function ClientSelection() {
             </div>
           </div>
         </div>
+
+        {/* Section Type de Rapport (V3) */}
+        {reportTypes.length > 0 && (
+          <div className="form-section">
+            <h3>📋 Type de rapport</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Type de rapport</label>
+                <select
+                  value={selectedReportType}
+                  onChange={(e) => setSelectedReportType(e.target.value)}
+                  disabled={loading}
+                >
+                  {reportTypes.map((rt) => (
+                    <option
+                      key={rt.key}
+                      value={rt.key}
+                      disabled={rt.sections.length === 0}
+                    >
+                      {rt.label} {rt.sections.length === 0 ? '(bientôt)' : `(${rt.sections.length} sections)`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Section Branding */}
         <div className="form-section">

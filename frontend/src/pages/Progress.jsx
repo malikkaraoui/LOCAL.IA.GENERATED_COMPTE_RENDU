@@ -477,11 +477,14 @@ function Progress() {
 
       {completed && status === 'COMPLETED' && (
         <div className="actions">
+          <button onClick={() => window.location.href = `/review/${jobId}`} className="btn-download" style={{ background: '#8b5cf6' }}>
+            Revue du rapport
+          </button>
           <button onClick={handleDownload} className="btn-download">
-            📥 Télécharger le Rapport
+            Telecharger le Rapport
           </button>
           <button onClick={() => window.location.href = '/'} className="btn-secondary">
-            ← Retour à l'accueil
+            Retour
           </button>
         </div>
       )}
