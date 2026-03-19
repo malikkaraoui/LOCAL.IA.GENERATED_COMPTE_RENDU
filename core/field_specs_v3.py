@@ -114,7 +114,7 @@ FIELD_SPECS_V3: dict[str, FieldSpecV3] = {
     # ── FORMATION ───────────────────────────────────────────────
     "FORMATION": FieldSpecV3(
         key="FORMATION",
-        query="Formations, diplômes, certifications",
+        query="Formations, diplômes, certifications, parcours scolaire, tests de positionnement, évaluations de niveau",
         instructions=(
             "But : parcours de formation complet.\n\n"
             "Attendu :\n"
@@ -171,7 +171,7 @@ FIELD_SPECS_V3: dict[str, FieldSpecV3] = {
     # ── INCERTITUDE ET OBSTACLE ─────────────────────────────────
     "INCERTITUDE_ET_OBSTACLE": FieldSpecV3(
         key="INCERTITUDE_ET_OBSTACLE",
-        query="Obstacles identifiés dans le parcours",
+        query="Obstacles, freins, difficultés, limitations, santé, mobilité, langue, arrêt de travail, contraintes",
         instructions=(
             "But : identifier les obstacles et les différents freins "
             "(physique, médical, administratif, psychologique). "

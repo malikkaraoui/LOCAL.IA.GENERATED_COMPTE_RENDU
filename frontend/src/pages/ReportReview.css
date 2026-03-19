@@ -360,3 +360,72 @@
     border-bottom: 1px solid #e5e7eb;
   }
 }
+
+/* ── Generation metadata ── */
+.gen-meta {
+  margin-top: 8px;
+}
+
+.gen-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gray-100);
+  font-size: 12px;
+}
+
+.gen-meta-label {
+  color: var(--gray-500);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gen-meta-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.gen-meta-tag {
+  background: var(--blue-light, #dbeafe);
+  color: var(--blue, #2563eb);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.gen-meta-files {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gray-200);
+}
+
+.gen-file-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0 0;
+}
+
+.gen-file-item {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: var(--gray-600);
+  padding: 2px 0;
+  word-break: break-all;
+}
+
+.gen-instructions {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  font-size: 11px;
+  color: var(--gray-600);
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}

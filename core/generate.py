@@ -76,7 +76,7 @@ def ollama_generate(
         # Appliquer max_tokens si spécifié (override par champ)
         effective_config = llm_config
         if max_tokens and max_tokens != llm_config.max_tokens:
-            effective_config = llm_config.model_copy(update={"max_tokens": max_tokens, "timeout": min(llm_config.timeout, 120.0)})
+            effective_config = llm_config.model_copy(update={"max_tokens": max_tokens})
         result = call_llm(effective_config, prompt, field_name=field_name)
         if result.success:
             return Result.ok(result.value.text)
@@ -89,7 +89,7 @@ def ollama_generate(
         host=host,
         temperature=temperature,
         top_p=top_p,
-        timeout=min(timeout, 120.0),
+        timeout=timeout,
         max_tokens=max_tokens or 1024,
     )
 
@@ -140,9 +140,16 @@ def check_llm_status(host: str, model: Optional[str] = None, timeout: float = 3.
 
 
 def sanitize_output(text: str) -> str:
+    # Nettoyer les blocs <think>...</think> (deepseek-r1, qwen3, etc.)
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text)
+    # Cas incomplet: <think> sans </think> fermant (timeout mid-reasoning)
+    text = re.sub(r"<think>[\s\S]*$", "", text)
+
     text = text.replace("```", " ")
     text = text.replace("\u200b", " ")
     text = re.sub(r"(?i)^json[:\s]+", "", text.strip())
+    # Retirer le markdown bold **text** → text
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
     
     # Convertir les listes à puces markdown (* item, - item) en bullet propre
     lines = text.split("\n")
@@ -162,41 +169,34 @@ def sanitize_output(text: str) -> str:
     if text.endswith("…"):  # Version Unicode du caractère points de suspension
         text = text[:-1].rstrip()
 
-    # Filet de sécurité: vider tout texte contenant un refus LLM ou une explication méthodologique
+    # Filet de sécurité: seuls les vrais refus LLM sont bloquants
+    # Les explications méthodologiques sont tolérées (corrigibles via review panel)
     _kill_markers = [
-        # Refus
         "je suis désolé",
         "je ne peux pas",
         "je ne suis pas en mesure",
         "il m'est impossible",
         "impossible pour moi de",
-        "pas disponible dans les sources",
         "informations personnelles et privées",
-        # Explications méthodologiques (interdit: le LLM doit donner les RÉSULTATS, pas expliquer le test)
-        "le modèle riasec",
-        "le test riasec permet",
-        "john holland",
-        "cet outil d'orientation",
-        "il repose sur six dimensions",
-        "les six types de personnalité",
-        "six types de personnalités",
-        "recherche (r), intervention (i)",
-        "recherche (r), intervention",
-        "il identifie six types",
-        "les seuils définis en pourcentage",
-        "est évalué à l'aide d'un test qui consiste",
-        "le positionnement de niveau est évalué",
-        "ce test mesure",
-        "l'évaluation repose sur",
-        "les seuils sont",
-        "le taux de réussite global",
-        "ce modèle est souvent utilisé",
-        "outil d'orientation professionnel",
-        "comprendre les motivations et les préférences",
     ]
     text_lower = text.lower()
     if any(marker in text_lower for marker in _kill_markers):
+        LOG.info("sanitize_output: refus LLM détecté, texte vidé")
         return ""
+
+    # Nettoyer les références sources que le LLM ajoute parfois
+    # [1, 2, 3, 4, 5] ou [9, 11] — liste de nombres entre crochets
+    text = re.sub(r'\[\s*\d+\s*(?:,\s*\d+\s*)*\]', '', text)
+    # (source [1]), (sources [1], [2], [5])
+    text = re.sub(r'\(?\bsources?\s*\[?\d+\]?\s*(?:,\s*\[?\d+\]?)*\)?', '', text, flags=re.IGNORECASE)
+    # ([1], [2]) avec crochets individuels
+    text = re.sub(r'\(\s*\[?\d+\]?\s*(?:,\s*\[?\d+\]?\s*)*\)', '', text)
+    # Nettoyer les parenthèses/crochets vides résultants et doubles espaces
+    text = re.sub(r'\(\s*,?\s*\)', '', text)
+    text = re.sub(r'\[\s*\]', '', text)
+    text = re.sub(r'  +', ' ', text)
+    # Nettoyer espace avant ponctuation résultant des suppressions
+    text = re.sub(r' +([.,;:!?])', r'\1', text)
 
     return text.strip()
 
@@ -207,60 +207,45 @@ def looks_like_json_or_markdown(text: str) -> bool:
 
 
 def find_forbidden_output_reasons(text: str) -> list[str]:
-    """Retourne la liste des raisons pour lesquelles le texte ne doit pas être accepté."""
+    """Retourne la liste des raisons pour lesquelles le texte ne doit pas être accepté.
+
+    Seules les raisons BLOQUANTES déclenchent un retry+vide :
+      PLACEHOLDER, LLM_REFUSAL
+    Les raisons SOFT sont loguées mais le contenu est conservé :
+      TOKENS, SOURCE_REF, METHODOLOGY (warning only)
+    """
     reasons: list[str] = []
     if not text:
         return reasons
 
     if RE_FORBIDDEN_PLACEHOLDERS.search(text):
         reasons.append("PLACEHOLDER")
-    if RE_FORBIDDEN_TOKENS.search(text):
-        reasons.append("TOKENS")
-    if RE_FORBIDDEN_SOURCE_REF.search(text):
-        reasons.append("SOURCE_REF")
 
-    # Détection de refus LLM (excuses, refus de traiter données personnelles)
+    # Refus explicite du LLM (excuses, refus de traiter)
     refusal_patterns = [
         "je suis désolé",
         "je ne peux pas",
         "je ne suis pas en mesure",
         "informations personnelles et privées",
-        "ne correspond pas aux consignes",
         "la réponse est bien __vide__",
-        "il n'y a donc rien",
-        "passage pertinent n'a pas été trouvé",
-        "rien à ajouter ou à résumer",
         "si vous avez besoin d'aide",
         "je serais ravi de vous aider",
-        # Détection d'explications méthodologiques (LLM qui fait cours au lieu de restituer)
-        "le modèle riasec",
-        "le test riasec permet",
-        "john holland",
-        "cet outil d'orientation",
-        "il repose sur six dimensions",
-        "les six types de personnalité",
-        "les seuils définis en pourcentage",
-        "est évalué à l'aide d'un test qui consiste",
-        "le positionnement de niveau est évalué",
-        "ce test mesure",
-        "l'évaluation repose sur",
-        "les seuils sont",
-        "le taux de réussite global",
     ]
     text_lower = text.lower()
     if any(p in text_lower for p in refusal_patterns):
         reasons.append("LLM_REFUSAL")
 
-    # Ponctuation: interdiction de "::" et au plus un ":" par ligne
-    if "::" in text:
-        reasons.append("MULTI_COLON")
-    else:
-        for ln in text.splitlines():
-            if ln.count(":") > 1:
-                reasons.append("MULTI_COLON")
-                break
+    # Warnings (non bloquants) — loguées mais contenu gardé
+    if RE_FORBIDDEN_TOKENS.search(text):
+        reasons.append("TOKENS_WARN")
+    if RE_FORBIDDEN_SOURCE_REF.search(text):
+        reasons.append("SOURCE_REF_WARN")
 
     return reasons
+
+
+# Raisons qui justifient un retry et potentiellement un vidage
+BLOCKING_REASONS = {"PLACEHOLDER", "LLM_REFUSAL"}
 
 
 def truncate_lines(text: str, max_lines: int) -> str:
@@ -424,13 +409,12 @@ def build_prompt(spec, instruction: str, context_blocks: list[dict[str, Any]]) -
         "Tu réponds uniquement en français.",
         "Tu n'utilises jamais JSON ni Markdown.",
         "Interdit d'écrire des placeholders ({{...}}, {...}, XX, NAME, surname).",
-        "Interdit d'écrire 'source 1', 'source 2' ou '(source X)' dans la réponse.",
-        "Interdit d'ajouter des points de suspension '...' pour indiquer que tu as tronqué le texte.",
-        "Écris TOUT le contenu nécessaire en entier, sans jamais tronquer ni résumer avec '...'.",
+        "Ne cite jamais les sources dans ta réponse (pas de 'source 1', '[1]', '(source X)').",
+        "Écris TOUT le contenu nécessaire en entier, sans tronquer ni résumer avec '...'.",
         "Ne répète jamais un titre/label déjà présent dans le template : fournis uniquement le contenu sous le titre.",
-        "Ponctuation : pas de '::'. Un seul ':' maximum par ligne.",
-        "INTERDIT d'expliquer une méthodologie ou un test. Donne uniquement les RÉSULTATS du client, pas la description du test.",
-        "Si l'information n'existe pas dans les sources : écris __VIDE__.",
+        "Privilégie les RÉSULTATS concrets du client plutôt que des explications théoriques.",
+        "IMPORTANT : rédige toujours un texte même si les sources sont partielles. Exploite au maximum ce qui est disponible.",
+        "Écris __VIDE__ UNIQUEMENT si les sources ne contiennent AUCUNE information exploitable pour cette section.",
     ]
     
     # V2: field_type pour instructions adaptées
@@ -458,7 +442,7 @@ def build_prompt(spec, instruction: str, context_blocks: list[dict[str, Any]]) -
     lines.append(f"Champ : {spec.key}")
     lines.append(f"Consigne : {instruction}")
     if not context_blocks:
-        lines.append("Aucun passage pertinent n'a été trouvé. Réponds __VIDE__.")
+        lines.append("Aucun passage source n'a été trouvé directement. Rédige quand même en te basant sur les informations du champ et ton expertise RH. Si c'est vraiment impossible, écris __VIDE__.")
     else:
         lines.append("Sources autorisées :")
         for idx, ctx in enumerate(context_blocks, start=1):
@@ -603,6 +587,7 @@ def generate_fields(
             progress_callback(key, "context", f"{len(context_blocks)} passages sélectionnés")
         raw_response = ""
         cleaned_value = ""
+        prompt = ""
         missing_info: list[str] = []
 
         # Si une valeur est fournie via deterministic_values, on ne doit PAS appeler le LLM,
@@ -650,6 +635,26 @@ def generate_fields(
             if getattr(spec, 'skip_llm_if_no_sources', False) and not context_blocks:
                 missing_info.append("NO_CONTEXT")
             else:
+                # Injecter le contenu des sections précédentes comme contexte supplémentaire
+                # Permet au LLM de s'appuyer sur ce qui a déjà été rédigé (cohérence + enrichissement)
+                if answers:
+                    prior_texts = []
+                    for prev_key, prev_data in answers.items():
+                        prev_answer = prev_data.get("answer", "")
+                        if prev_answer and len(prev_answer) > 20:
+                            prior_texts.append(f"[Section {prev_key}] {prev_answer}")
+                    if prior_texts:
+                        synthetic_ctx = "\n\n".join(prior_texts)
+                        context_blocks.append({
+                            "score": 1.0,
+                            "chunk_id": "__prior_sections__",
+                            "source_path": "sections_precedentes",
+                            "page": None,
+                            "text": synthetic_ctx[:3000],  # Cap à 3000 chars
+                        })
+                        LOG.info("LLM [%s] injecté %d sections précédentes comme contexte (%d chars)",
+                                 key, len(prior_texts), len(synthetic_ctx[:3000]))
+
                 prompt = build_prompt(spec, instruction, context_blocks)
 
                 # Limiter max_tokens selon max_chars du champ (~3 chars/token en français)
@@ -780,28 +785,33 @@ def generate_fields(
                         LOG.warning("Retry failed for %s, using original response", key)
                         response_text = raw_response
 
-                # Auto-contrôle: interdire placeholders / traces de sources / ponctuation invalide
+                # Nettoyer <think>...</think> avant les contrôles (deepseek-r1, qwen3, etc.)
+                response_text = re.sub(r"<think>[\s\S]*?</think>", "", response_text)
+                response_text = re.sub(r"<think>[\s\S]*$", "", response_text)
+                response_text = response_text.strip()
+
+                # Auto-contrôle: seuls PLACEHOLDER et LLM_REFUSAL déclenchent un retry
                 forbidden_reasons = find_forbidden_output_reasons(response_text)
-                if forbidden_reasons:
-                    reason_text = ",".join(forbidden_reasons)
+                blocking = [r for r in forbidden_reasons if r in BLOCKING_REASONS]
+                soft = [r for r in forbidden_reasons if r not in BLOCKING_REASONS]
+
+                if soft:
+                    LOG.info("LLM [%s] warnings non-bloquants: %s (contenu gardé)", key, ",".join(soft))
+
+                if blocking:
+                    reason_text = ",".join(blocking)
                     if progress_callback:
-                        progress_callback(key, "retry", f"Sortie interdite détectée ({reason_text}), correction")
+                        progress_callback(key, "retry", f"Sortie interdite ({reason_text}), correction")
                     if status_callback:
                         status_callback(
-                            f"LLM [{key}] sortie interdite détectée ({reason_text}) → correction…"
+                            f"LLM [{key}] sortie interdite ({reason_text}) → correction…"
                         )
 
                     anti_forbidden = (
                         prompt
                         + "\n\nAUTO-CONTROLE OBLIGATOIRE AVANT RÉPONSE :"
                         + "\n- Interdit d'écrire des placeholders: {{...}}, {...}, XX, NAME, surname"
-                        + "\n- Interdit d'écrire 'source 1/2' ou '(source X)'"
-                        + "\n- Interdit d'ajouter des points de suspension '...' pour tronquer"
-                        + "\n- Écris TOUT le contenu en entier sans abréger"
-                        + "\n- Interdit d'écrire des titres/labels déjà présents dans le template"
-                        + "\n- Ponctuation: pas de '::' et un seul ':' maximum par ligne"
                         + "\n- INTERDIT de s'excuser, de refuser ou d'écrire 'je suis désolé' / 'je ne peux pas'. Rédige le contenu ou écris __VIDE__."
-                        + "\n- INTERDIT d'expliquer un test ou une méthodologie. Donne les RÉSULTATS uniquement."
                         + "\nSi une info manque: écris __VIDE__."
                         + "\nRecommence maintenant en texte brut."
                     )
@@ -818,21 +828,72 @@ def generate_fields(
                     else:
                         LOG.warning("Forbidden-output retry failed for %s", key)
 
-                    # Si malgré correction, encore interdit → on vide
-                    if find_forbidden_output_reasons(response_text):
+                    # Après retry: seuls PLACEHOLDER/LLM_REFUSAL encore présents → vide
+                    retry_reasons = find_forbidden_output_reasons(response_text)
+                    retry_blocking = [r for r in retry_reasons if r in BLOCKING_REASONS]
+                    if retry_blocking:
+                        LOG.warning("LLM [%s] encore bloquant après retry: %s → VIDE", key, retry_blocking)
                         missing_info.append("FORBIDDEN_OUTPUT")
                         response_text = "__VIDE__"
+                    elif retry_reasons:
+                        LOG.info("LLM [%s] warnings après retry: %s (contenu gardé)", key, retry_reasons)
 
                 cleaned_value = sanitize_output(response_text)
-                # __VIDE__ exact OU texte contenant __VIDE__ (LLM qui bavarde autour)
+                LOG.debug("LLM [%s] raw=%d chars → sanitized=%d chars", key, len(response_text), len(cleaned_value))
+
+                # Nettoyage __VIDE__: d'abord retirer les tokens, puis vider si rien ne reste
                 if "__VIDE__" in cleaned_value or "__vide__" in cleaned_value.lower():
-                    cleaned_value = ""
+                    # Retirer les tokens __VIDE__ et les lignes qui ne contiennent que ça
+                    stripped = re.sub(r'(?i)__vide__', '', cleaned_value)
+                    # Retirer les lignes devenues vides (ex: "* Santé : " après suppression)
+                    stripped = "\n".join(
+                        ln for ln in stripped.splitlines()
+                        if ln.strip() and not re.match(r'^[\s\-\*]*[\w\s]*:\s*$', ln.strip())
+                    ).strip()
+                    if stripped and len(stripped) > 20:
+                        LOG.info("LLM [%s] __VIDE__ tokens retirés, contenu gardé (%d chars)", key, len(stripped))
+                        cleaned_value = stripped
+                    else:
+                        LOG.info("LLM [%s] → vidé: contenu insuffisant après retrait __VIDE__", key)
+                        cleaned_value = ""
                 # Détection "CHAMP : VIDE" ou "CHAMP : Vide" (LLM qui préfixe avec le nom du champ)
-                if re.match(r'^[\w\s]+:\s*vide\s*$', cleaned_value.strip(), re.IGNORECASE):
+                if cleaned_value and re.match(r'^[\w\s]+:\s*vide\s*$', cleaned_value.strip(), re.IGNORECASE):
+                    LOG.info("LLM [%s] → vidé: pattern 'CHAMP : VIDE'", key)
                     cleaned_value = ""
                 # Mot seul "Vide" ou "VIDE"
-                if cleaned_value.strip().lower() == "vide":
+                if cleaned_value and cleaned_value.strip().lower() == "vide":
+                    LOG.info("LLM [%s] → vidé: mot seul 'vide'", key)
                     cleaned_value = ""
+
+                # PUSH RETRY: si le LLM a répondu vide mais qu'on avait des sources,
+                # on retente avec un prompt plus insistant
+                if not cleaned_value and context_blocks and len(context_blocks) > 0:
+                    LOG.info("LLM [%s] réponse vide avec %d sources → push retry", key, len(context_blocks))
+                    if progress_callback:
+                        progress_callback(key, "retry", "Réponse vide, nouvelle tentative insistante")
+                    push_prompt = (
+                        prompt
+                        + "\n\nATTENTION : tu as répondu VIDE mais des sources sont disponibles."
+                        + "\nRelis attentivement les sources ci-dessus et rédige un texte."
+                        + "\nMême si l'information est partielle ou indirecte, exploite-la."
+                        + "\nDéduis, infère, synthétise à partir de ce qui est disponible."
+                        + "\nÉcris au minimum 3 lignes. Ne réponds JAMAIS 'VIDE' ou '__VIDE__'."
+                    )
+                    push_result = ollama_generate(
+                        model, push_prompt, host, temperature=0.3, top_p=top_p,
+                        llm_config=llm_config, field_name=key, max_tokens=field_max_tokens,
+                    )
+                    if push_result.success:
+                        push_text = push_result.value
+                        push_text = re.sub(r"<think>[\s\S]*?</think>", "", push_text)
+                        push_text = re.sub(r"<think>[\s\S]*$", "", push_text)
+                        push_text = sanitize_output(push_text.strip())
+                        if push_text and len(push_text) > 20 and push_text.strip().lower() != "vide":
+                            LOG.info("LLM [%s] push retry réussi (%d chars)", key, len(push_text))
+                            cleaned_value = push_text
+                        else:
+                            LOG.info("LLM [%s] push retry encore vide", key)
+
                 cleaned_value = truncate_lines(cleaned_value, spec.max_lines)
                 cleaned_value = truncate_chars(cleaned_value, spec.max_chars)
                 
@@ -852,12 +913,24 @@ def generate_fields(
                 if not cleaned_value and not missing_info:
                     missing_info.append("EMPTY")
 
+        # Métadonnées de production pour la page review
+        source_files = list({Path(ctx["source_path"]).name for ctx in context_blocks if ctx.get("source_path") and ctx["chunk_id"] != "__prior_sections__"})
+
         answers[key] = {
             "field": key,
             "answer": cleaned_value,
             "value": cleaned_value,
             "missing_info": missing_info,
             "sources_used": sources_ids,
+            "meta": {
+                "source_files": sorted(source_files),
+                "source_count": len(source_files),
+                "chunk_count": len([c for c in context_blocks if c["chunk_id"] != "__prior_sections__"]),
+                "had_prior_sections": any(c["chunk_id"] == "__prior_sections__" for c in context_blocks),
+                "prompt_length": len(prompt) if isinstance(prompt, str) else 0,
+                "instructions": instruction[:200] if instruction else "",
+                "query": query or "",
+            },
         }
 
         spec_dump = {name: getattr(spec, name) for name in spec.__dataclass_fields__}

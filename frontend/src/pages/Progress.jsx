@@ -4,7 +4,7 @@ import { adminAPI, ragAudioAPI, reportsAPI } from '../services/api';
 import './Progress.css';
 
 /**
- * Page de suivi de la progression du rapport avec SSE.
+ * Page de suivi — Swiss International Style.
  */
 function Progress() {
   const { jobId } = useParams();
@@ -19,40 +19,35 @@ function Progress() {
   const [adminMessage, setAdminMessage] = useState(null);
   const [ragBusy, setRagBusy] = useState(false);
   const [ragMessage, setRagMessage] = useState(null);
+  const [jobMeta, setJobMeta] = useState(null);
 
-  const FIELD_STAGE_LABELS = {
+  const STAGE_LABEL = {
     pending: 'En attente',
-    start: 'Préparation',
-    context: 'Contexte prêt',
-    prompt: 'Prompt envoyé',
-    response: 'Réponse reçue',
+    start: 'Preparation',
+    context: 'Contexte',
+    prompt: 'Envoi',
+    response: 'Reception',
     retry: 'Correction',
-    done: 'Terminé',
-    warning: 'Réponse vide',
+    done: 'Termine',
+    warning: 'Vide',
     error: 'Erreur',
   };
 
-  const FIELD_STAGE_ICONS = {
-    pending: '⏳',
-    start: '⚙️',
-    context: '📚',
-    prompt: '📤',
-    response: '📥',
-    retry: '♻️',
-    done: '✅',
-    warning: '⚠️',
-    error: '❌',
+  const STATUS_LABEL = {
+    PENDING: 'En attente',
+    EXTRACTING: 'Lecture des documents',
+    GENERATING: 'Redaction en cours',
+    RENDERING: 'Mise en page',
+    COMPLETED: 'Termine',
+    FAILED: 'Echec',
   };
 
   const humanizeDelta = (seconds) => {
-    if (seconds < 1) return 'juste maintenant';
-    if (seconds < 60) return `${Math.floor(seconds)} s`;
-    const minutes = Math.floor(seconds / 60);
-    const rest = Math.floor(seconds % 60);
-    if (minutes < 60) return `${minutes} min ${String(rest).padStart(2, '0')} s`;
-    const hours = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${hours} h ${m} min`;
+    if (seconds < 1) return '<1s';
+    if (seconds < 60) return `${Math.floor(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}m${String(s).padStart(2, '0')}s`;
   };
 
   const extractApiErrorDetail = (err) => {
@@ -72,78 +67,12 @@ function Progress() {
     if (data.field_progress) setFieldProgress(data.field_progress);
     if (data.field_order) setFieldOrder(data.field_order);
     if (data.source_stats) setSourceStats(data.source_stats);
+    if (data.job_meta) setJobMeta(data.job_meta);
   };
 
-  const renderSourceStats = () => {
-    if (!sourceStats) return null;
-
-    const total = sourceStats.total_files ?? 0;
-    const byExt = sourceStats.by_ext || {};
-    const extractedDocs = sourceStats.extracted_docs;
-    const audioTxt = sourceStats.audio_ingested?.txt ?? 0;
-    const sourceDir = sourceStats.source_dir;
-
-    const keys = ['.pdf', '.docx', '.txt', '.msg', '.m4a', '.mp3', '.wav'];
-    const picked = keys
-      .map((k) => ({ key: k, value: byExt[k] || 0 }))
-      .filter((kv) => kv.value > 0);
-
-    const sumPicked = picked.reduce((acc, kv) => acc + kv.value, 0);
-    const otherCount = Math.max(0, total - sumPicked);
-
-    // Labels clairs pour chaque type
-    const getLabel = (ext) => {
-      const labels = {
-        '.pdf': 'pdf',
-        '.docx': 'docx',
-        '.txt': 'txt',
-        '.msg': 'msg (Outlook)', // ✅ Clarification
-        '.m4a': 'm4a',
-        '.mp3': 'mp3',
-        '.wav': 'wav'
-      };
-      return labels[ext] || ext;
-    };
-
-    return (
-      <div className="logs-container">
-        <h3>Sources détectées</h3>
-        <div className="sources-meta">
-          <div className="sources-pill"><span>Total</span><strong>{total}</strong></div>
-          {typeof extractedDocs === 'number' && (
-            <div className="sources-pill"><span>Extraits</span><strong>{extractedDocs}</strong></div>
-          )}
-          <div className="sources-pill"><span>Audio RAG (.txt)</span><strong>{audioTxt}</strong></div>
-        </div>
-
-        <div className="sources-grid">
-          {picked.map((kv) => (
-            <div key={kv.key} className="sources-pill">
-              <span>{getLabel(kv.key)}</span>
-              <strong>{kv.value}</strong>
-            </div>
-          ))}
-          {otherCount > 0 && (
-            <div className="sources-pill">
-              <span>autres</span>
-              <strong>{otherCount}</strong>
-            </div>
-          )}
-        </div>
-
-        {sourceDir && (
-          <div className="sources-dir">
-            <span>Dossier :</span> <code>{sourceDir}</code>
-          </div>
-        )}
-      </div>
-    );
-  };
-
+  // ── SSE ──
   useEffect(() => {
     if (!jobId) return;
-
-    // Connexion SSE pour suivre la progression
     const eventSource = reportsAPI.streamReportProgress(
       jobId,
       (message) => {
@@ -152,181 +81,162 @@ function Progress() {
             setStatus(message.data.status);
             mergeProgressPayload(message.data);
             break;
-          
           case 'log':
             setLogs((prev) => [...prev, message.data]);
             mergeProgressPayload(message.data);
             break;
-
           case 'progress':
             mergeProgressPayload(message.data);
-            // Certains backends peuvent aussi pousser un status/progress ici
             if (message.data.status) setStatus(message.data.status);
             break;
-          
           case 'complete':
             setCompleted(true);
-            if (message.data.status === 'failed') {
-              setError(message.data.error);
-            }
+            if (message.data.status === 'failed') setError(message.data.error);
             break;
         }
       },
       (err) => {
-        setError('Erreur de connexion au serveur');
+        setError('Connexion au serveur perdue');
         console.error(err);
       }
     );
-
-    // Cleanup
-    return () => {
-      eventSource.close();
-    };
+    return () => eventSource.close();
   }, [jobId]);
 
+  // ── Actions ──
   const handleDownload = async () => {
-    try {
-      await reportsAPI.downloadReport(jobId);
-    } catch {
-      setError('Erreur lors du téléchargement');
-    }
+    try { await reportsAPI.downloadReport(jobId); }
+    catch { setError('Erreur lors du telechargement'); }
   };
 
   const handleRestartWorkers = async () => {
-    if (!jobId) return;
-    const ok = window.confirm(
-      `Redémarrer les workers va interrompre les jobs en cours (ils peuvent passer en FAILED).\n\nContinuer ?`
-    );
-    if (!ok) return;
-
-    setAdminBusy(true);
-    setAdminMessage(null);
-    setError(null);
-
+    if (!window.confirm('Redemarrer le processus de generation ?\nLes taches en cours seront interrompues.')) return;
+    setAdminBusy(true); setAdminMessage(null); setError(null);
     try {
       const resp = await adminAPI.restartWorkers({ count: 1, kill: true });
-      setAdminMessage(`✅ Workers relancés (PID: ${resp?.pids?.join(', ') || 'n/a'}). Logs: ${resp?.logs?.[0] || '/tmp/worker.log'}`);
+      setAdminMessage(`Processus relance (PID: ${resp?.pids?.join(', ') || '-'})`);
     } catch (err) {
-      setError(extractApiErrorDetail(err) || 'Erreur lors du redémarrage des workers');
-    } finally {
-      setAdminBusy(false);
-    }
+      setError(extractApiErrorDetail(err) || 'Erreur lors du redemarrage');
+    } finally { setAdminBusy(false); }
   };
 
   const handleCancelJob = async () => {
-    if (!jobId) return;
-    const ok = window.confirm(
-      "Annuler ce job ?\n\nCela enverra une demande d'annulation au worker (sans le casser). Le job s'arrêtera dès que possible."
-    );
-    if (!ok) return;
-
-    setAdminBusy(true);
-    setAdminMessage(null);
-    setError(null);
+    if (!window.confirm('Annuler cette generation ?')) return;
+    setAdminBusy(true); setAdminMessage(null); setError(null);
     try {
       await reportsAPI.cancelReport(jobId);
-      setAdminMessage('🛑 Annulation demandée. Retour à l\'accueil…');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 700);
+      setAdminMessage('Annulation demandee...');
+      setTimeout(() => { window.location.href = '/'; }, 700);
     } catch (err) {
-      const statusCode = err?.response?.status;
-      setError(extractApiErrorDetail(err) || (statusCode ? `Erreur HTTP ${statusCode} lors de l'annulation` : 'Erreur lors de l\'annulation'));
-    } finally {
-      setAdminBusy(false);
-    }
+      setError(extractApiErrorDetail(err) || "Erreur lors de l'annulation");
+    } finally { setAdminBusy(false); }
   };
 
-  const guessSourceIdFromSourceDir = () => {
+  const guessSourceId = () => {
     const dir = sourceStats?.source_dir;
     if (!dir) return null;
     const parts = String(dir).split('/').filter(Boolean);
     if (!parts.length) return null;
     const last = parts[parts.length - 1];
-    if (last === 'sources' && parts.length >= 2) return parts[parts.length - 2];
-    return last;
+    return last === 'sources' && parts.length >= 2 ? parts[parts.length - 2] : last;
   };
 
-  const handleIngestLocalAudio = async () => {
-    const sourceId = guessSourceIdFromSourceDir();
-    if (!sourceId) {
-      setError("Impossible de déduire le client (source_id) depuis les sources.");
-      return;
-    }
-
-    const ok = window.confirm(
-      `Lancer la transcription (Whisper local) des audios du client “${sourceId}” ?\n\nCela peut prendre plusieurs minutes (CPU).`
-    );
-    if (!ok) return;
-
-    setRagBusy(true);
-    setRagMessage(null);
-    setError(null);
+  const handleIngestAudio = async () => {
+    const sourceId = guessSourceId();
+    if (!sourceId) { setError('Impossible de determiner le client pour la transcription.'); return; }
+    if (!window.confirm(`Transcrire les fichiers audio du client "${sourceId}" ?`)) return;
+    setRagBusy(true); setRagMessage(null); setError(null);
     try {
       const resp = await ragAudioAPI.ingestLocal({ sourceId, maxFiles: 50, skipAlreadyIngested: true });
-      const queued = resp?.queued ?? 0;
-      setRagMessage(`🎙️ Ingestion en file: ${queued} audio(s). (Queue: rag) — Relance ensuite le rapport avec “force re-extract” pour les inclure.`);
-
-      // Rafraîchir le compteur d'audio ingérés
-      const st = await ragAudioAPI.status({ sourceId });
-      const txt = st?.audio_ingested?.txt ?? 0;
-      const js = st?.audio_ingested?.json ?? 0;
-      setRagMessage((prev) => `${prev}\nStatut ingested_audio: ${txt} .txt / ${js} .json`);
+      setRagMessage(`${resp?.queued ?? 0} fichier(s) audio en cours de transcription.`);
     } catch (err) {
-      setError(extractApiErrorDetail(err) || 'Erreur lors de l\'ingestion audio');
-    } finally {
-      setRagBusy(false);
-    }
+      setError(extractApiErrorDetail(err) || 'Erreur lors de la transcription');
+    } finally { setRagBusy(false); }
   };
 
-  const statusLabels = {
-    'PENDING': 'En attente',
-    'EXTRACTING': 'Extraction du document',
-    'GENERATING': 'Génération du contenu',
-    'RENDERING': 'Création du document',
-    'COMPLETED': 'Terminé',
-    'FAILED': 'Échec',
-  };
+  // ── Render: Sources ──
+  const renderSources = () => {
+    if (!sourceStats) return null;
+    const total = sourceStats.total_files ?? 0;
+    const byExt = sourceStats.by_ext || {};
+    const extracted = sourceStats.extracted_docs;
+    const audioTxt = sourceStats.audio_ingested?.txt ?? 0;
+    const dir = sourceStats.source_dir;
 
-  const renderFieldProgressTable = () => {
-    if (!fieldProgress || !Object.keys(fieldProgress).length) {
-      return (
-        <div className="field-progress-empty">
-          Lance la génération pour suivre les champs ici.
+    const types = ['.pdf', '.docx', '.txt', '.msg', '.m4a', '.mp3', '.wav'];
+    const cells = types.map((k) => ({ key: k.replace('.', ''), value: byExt[k] || 0 })).filter((c) => c.value > 0);
+    const sumCells = cells.reduce((a, c) => a + c.value, 0);
+    const other = Math.max(0, total - sumCells);
+
+    return (
+      <div className="card">
+        <div className="card-header">Documents source</div>
+        <div className="card-body">
+          <div className="sources-grid">
+            <div className="stat-cell">
+              <span className="stat-value">{total}</span>
+              <span className="stat-label">Total</span>
+            </div>
+            {typeof extracted === 'number' && (
+              <div className="stat-cell">
+                <span className="stat-value">{extracted}</span>
+                <span className="stat-label">Lus</span>
+              </div>
+            )}
+            <div className="stat-cell">
+              <span className="stat-value">{audioTxt}</span>
+              <span className="stat-label">Audio</span>
+            </div>
+            {cells.map((c) => (
+              <div className="stat-cell" key={c.key}>
+                <span className="stat-value">{c.value}</span>
+                <span className="stat-label">{c.key}</span>
+              </div>
+            ))}
+            {other > 0 && (
+              <div className="stat-cell">
+                <span className="stat-value">{other}</span>
+                <span className="stat-label">Autres</span>
+              </div>
+            )}
+          </div>
+          {dir && <div className="sources-path">{dir}</div>}
         </div>
-      );
-    }
+      </div>
+    );
+  };
 
-    const order = (fieldOrder && fieldOrder.length) ? fieldOrder : Object.keys(fieldProgress);
+  // ── Render: Field progress ──
+  const renderFields = () => {
+    if (!fieldProgress || !Object.keys(fieldProgress).length) return null;
+
+    const order = fieldOrder?.length ? fieldOrder : Object.keys(fieldProgress);
     const now = new Date();
-    const STUCK_THRESHOLD_SECONDS = 120;
-
-    // Compteurs
-    const totalFields = order.length;
-    const doneFields = order.filter((k) => {
-      const s = (fieldProgress[k] || {}).stage;
-      return ['done', 'warning', 'error'].includes(s);
-    }).length;
-    const activeField = order.find((k) => {
-      const s = (fieldProgress[k] || {}).stage;
+    const STUCK = 120;
+    const total = order.length;
+    const done = order.filter((k) => ['done', 'warning', 'error'].includes(fieldProgress[k]?.stage)).length;
+    const active = order.find((k) => {
+      const s = fieldProgress[k]?.stage;
       return s && !['pending', 'done', 'warning', 'error'].includes(s);
     });
 
     return (
-      <div className="field-progress">
-        <h3>Progression des champs LLM — {doneFields}/{totalFields} terminés
-          {activeField && (
-            <span className="field-active-hint"> — en cours : <code>{activeField}</code></span>
-          )}
-        </h3>
-        <div className="field-progress-table-wrap">
-          <table className="field-progress-table">
+      <div className="card progress-grid-full">
+        <div className="card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Progression</span>
+          <span style={{ fontWeight: 400, fontSize: 12, letterSpacing: 0 }}>
+            <strong>{done}</strong> / {total}
+            {active && <span className="field-active-label">&#x2192; {active}</span>}
+          </span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="fields-table">
             <thead>
               <tr>
-                <th>Champ</th>
-                <th>Statut</th>
-                <th>Durée</th>
-                <th>Détails</th>
+                <th>Section</th>
+                <th>Etat</th>
+                <th>Duree</th>
+                <th>Detail</th>
               </tr>
             </thead>
             <tbody>
@@ -334,37 +244,42 @@ function Progress() {
                 const info = fieldProgress[key];
                 if (!info) return null;
                 const stage = info.stage || 'pending';
-                const icon = FIELD_STAGE_ICONS[stage] || '•';
-                const stageLabel = FIELD_STAGE_LABELS[stage] || stage;
+                const label = STAGE_LABEL[stage] || stage;
 
-                // Durée écoulée depuis started_at (envoyé par le backend)
-                let elapsed = '—';
-                let warn = false;
+                let elapsed = '';
+                let stuck = false;
                 const startedAt = info.started_at ? new Date(info.started_at) : null;
                 if (startedAt && !Number.isNaN(startedAt.getTime())) {
-                  // Pour les champs terminés, utiliser elapsed_seconds du backend (plus précis)
                   if (['done', 'warning', 'error'].includes(stage) && info.elapsed_seconds != null) {
                     elapsed = humanizeDelta(info.elapsed_seconds);
                   } else if (!['done', 'warning', 'error', 'pending'].includes(stage)) {
-                    // Champ en cours: calculer en live
-                    const elapsedSec = (now.getTime() - startedAt.getTime()) / 1000;
-                    elapsed = humanizeDelta(elapsedSec);
-                    warn = elapsedSec > STUCK_THRESHOLD_SECONDS;
+                    const sec = (now.getTime() - startedAt.getTime()) / 1000;
+                    elapsed = humanizeDelta(sec);
+                    stuck = sec > STUCK;
                   } else if (info.elapsed_seconds != null) {
                     elapsed = humanizeDelta(info.elapsed_seconds);
                   }
                 }
 
-                const msg = info.message || '—';
+                const isActive = !['pending', 'done', 'warning', 'error'].includes(stage);
+                const rowClass = [
+                  isActive ? 'row-active' : '',
+                  stage === 'error' ? 'row-error' : '',
+                  stage === 'warning' ? 'row-warning' : '',
+                  stuck ? 'row-stuck' : '',
+                ].filter(Boolean).join(' ');
+
                 return (
-                  <tr key={key} className={`field-row field-stage-${stage}${warn ? ' field-stuck' : ''}`}>
-                    <td className="field-key"><code>{key}</code></td>
-                    <td className="field-stage">{icon} {stageLabel}</td>
-                    <td className="field-activity">
-                      {elapsed}
-                      {warn && ' 🐢 lent'}
+                  <tr key={key} className={rowClass}>
+                    <td><span className="field-name">{key}</span></td>
+                    <td>
+                      <span className="field-status">
+                        <span className={`field-dot field-dot-${stage}`} />
+                        {label}
+                      </span>
                     </td>
-                    <td className="field-message">{msg}</td>
+                    <td><span className="field-time">{elapsed || '\u2014'}</span></td>
+                    <td><span className="field-detail">{info.message || '\u2014'}</span></td>
                   </tr>
                 );
               })}
@@ -375,124 +290,123 @@ function Progress() {
     );
   };
 
-  return (
-    <div className="progress-page">
-      <h1>Génération du Rapport</h1>
-      <p className="job-id">Job ID: {jobId}</p>
+  // ── Render: Troubleshooting ──
+  const renderTroubleshooting = () => {
+    if (completed || (status !== 'PENDING' && status !== 'EXTRACTING')) return null;
+    const byExt = sourceStats?.by_ext || {};
+    const audioCount = (byExt['.m4a'] || 0) + (byExt['.mp3'] || 0) + (byExt['.wav'] || 0);
+    const ingestedTxt = sourceStats?.audio_ingested?.txt || 0;
 
-      <div className="status-card">
-        <div className={`status-indicator status-${status.toLowerCase()}`}>
-          {statusLabels[status] || status}
-        </div>
-
-        {!completed && (
-          <div className="spinner"></div>
-        )}
-      </div>
-
-      {renderSourceStats()}
-
-      {!completed && (status === 'PENDING' || status === 'EXTRACTING') && (
-        <div className="logs-container troubleshooting">
-          <h3>Dépannage</h3>
+    return (
+      <div className="card progress-grid-full">
+        <div className="card-header">Depannage</div>
+        <div className="card-body">
           <p className="troubleshooting-hint">
-            Si ça reste bloqué (pending / pas de logs), c'est souvent un worker occupé ou arrêté.
-            Tu peux choisir de le relancer.
+            Si la generation reste bloquee, le processus est peut-etre occupe ou arrete.
           </p>
-
-          {adminMessage && (
-            <div className="admin-message">{adminMessage}</div>
-          )}
-
-          {ragMessage && (
-            <div className="admin-message">{ragMessage}</div>
-          )}
-
+          {adminMessage && <div className="admin-message">{adminMessage}</div>}
+          {ragMessage && <div className="admin-message">{ragMessage}</div>}
           <div className="troubleshooting-actions">
-            <button
-              className="btn-danger"
-              onClick={handleRestartWorkers}
-              disabled={adminBusy}
-              title="Coupe puis relance les workers"
-            >
-              {adminBusy ? '…' : '🛑 Redémarrer les workers'}
+            <button className="btn-action btn-action-danger" onClick={handleRestartWorkers} disabled={adminBusy}>
+              {adminBusy ? '...' : 'Relancer le processus'}
             </button>
-
-            {(() => {
-              const byExt = sourceStats?.by_ext || {};
-              const audioCount = (byExt['.m4a'] || 0) + (byExt['.mp3'] || 0) + (byExt['.wav'] || 0);
-              const ingestedTxt = sourceStats?.audio_ingested?.txt || 0;
-              if (!audioCount || ingestedTxt > 0) return null;
-              return (
-                <button
-                  className="btn-primary"
-                  onClick={handleIngestLocalAudio}
-                  disabled={ragBusy}
-                  title="Transcrit (Whisper local) puis ajoute les .txt dans sources/ingested_audio"
-                >
-                  {ragBusy ? '…' : '🎙️ Ingest audios (RAG)'}
-                </button>
-              );
-            })()}
-
-            <button
-              className="btn-secondary"
-              onClick={handleCancelJob}
-              disabled={adminBusy}
-              title="Supprime ce job (force)"
-            >
-              🗑️ Annuler ce job
+            {audioCount > 0 && !ingestedTxt && (
+              <button className="btn-action btn-action-primary" onClick={handleIngestAudio} disabled={ragBusy}>
+                {ragBusy ? '...' : 'Transcrire les audios'}
+              </button>
+            )}
+            <button className="btn-action btn-action-secondary" onClick={handleCancelJob} disabled={adminBusy}>
+              Annuler
             </button>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="progress-page">
+      {/* Header */}
+      <div className="progress-header">
+        <h1>Generation</h1>
+        <span className={`status-indicator status-${status.toLowerCase()}`}>
+          {STATUS_LABEL[status] || status}
+        </span>
+        {!completed && <span className="spinner" />}
+        <span className="job-id">{jobId}</span>
+      </div>
+
+      {/* Job meta */}
+      {jobMeta && (
+        <div className="job-meta-bar">
+          <span className="meta-item"><span className="meta-check">{jobMeta.surname ? '\u2713' : '\u2014'}</span> {jobMeta.civility} {jobMeta.name} {jobMeta.surname}</span>
+          <span className="meta-item"><span className="meta-check">{jobMeta.avs_number ? '\u2713' : '\u2014'}</span> AVS {jobMeta.avs_number || 'non renseigne'}</span>
+          <span className="meta-item"><span className="meta-check">\u2713</span> {jobMeta.llm_model}</span>
+          {jobMeta.report_type && <span className="meta-item">{jobMeta.report_type}</span>}
         </div>
       )}
 
       {error && (
         <div className="error-box">
-          <h3>❌ Erreur</h3>
+          <strong>Erreur</strong>
           <pre>{error}</pre>
         </div>
       )}
 
-      <div className="logs-container">
-        <h3>Logs</h3>
-        <div className="logs">
-          {logs.length === 0 ? (
-            <p className="no-logs">Aucun log pour le moment...</p>
-          ) : (
-            logs.map((log, index) => (
-              <div key={index} className={`log-entry log-${log.phase?.toLowerCase() || 'info'}`}>
-                <span className="log-time">{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()}</span>
-                <span className="log-phase">[{log.phase || 'INFO'}]</span>
-                <span className="log-message">{log.message}</span>
-              </div>
-            ))
-          )}
+      <div className="progress-grid">
+        {/* Sources */}
+        {renderSources()}
+
+        {/* Terminal logs */}
+        <div className="card">
+          <div className="card-header">Journal</div>
+          <div className="terminal">
+            {logs.length === 0 ? (
+              <div className="terminal-empty">En attente de donnees...</div>
+            ) : (
+              logs.map((log, i) => (
+                <div key={i} className="log-line">
+                  <span className="log-time">
+                    {log.timestamp ? new Date(log.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
+                  </span>
+                  <span className={`log-tag log-tag-${(log.phase || 'info').toLowerCase()}`}>
+                    {log.phase || 'INFO'}
+                  </span>
+                  <span className="log-msg">{log.message}</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
+
+        {/* Troubleshooting */}
+        {renderTroubleshooting()}
+
+        {/* Field progress */}
+        {renderFields()}
       </div>
 
-      <div className="logs-container">
-        {renderFieldProgressTable()}
-      </div>
-
+      {/* Actions finales */}
       {completed && status === 'COMPLETED' && (
-        <div className="actions">
-          <button onClick={() => window.location.href = `/review/${jobId}`} className="btn-download" style={{ background: '#8b5cf6' }}>
+        <div className="progress-actions">
+          <button className="btn-action btn-action-primary" onClick={() => window.location.href = `/review/${jobId}`}>
             Revue du rapport
           </button>
-          <button onClick={handleDownload} className="btn-download">
-            Telecharger le Rapport
+          <button className="btn-action btn-action-primary" onClick={handleDownload}>
+            Telecharger
           </button>
-          <button onClick={() => window.location.href = '/'} className="btn-secondary">
+          <button className="btn-action btn-action-secondary" onClick={() => window.location.href = '/'}>
             Retour
           </button>
         </div>
       )}
 
       {completed && status === 'FAILED' && (
-        <button onClick={() => window.location.href = '/'} className="btn-secondary">
-          ← Retour à l'accueil
-        </button>
+        <div className="progress-actions">
+          <button className="btn-action btn-action-secondary" onClick={() => window.location.href = '/'}>
+            Retour
+          </button>
+        </div>
       )}
     </div>
   );

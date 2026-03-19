@@ -4,9 +4,9 @@ import './ClientSelection.css';
 
 /**
  * Page de configuration et génération de rapport.
+ * Design: Swiss International Style — Unica77, pleine largeur, pas de violet.
  */
 function ClientSelection() {
-  const DEFAULT_TEMPLATE = 'TEMPLATE_SIMPLE_BASE1.docx';
   // États principaux
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState('');
@@ -26,22 +26,18 @@ function ClientSelection() {
 
   // Chemins
   const [clientsRoot, setClientsRoot] = useState('./CLIENTS');
-  const [templatePath, setTemplatePath] = useState('');
-  const [templateName, setTemplateName] = useState('');
-  const [templates, setTemplates] = useState([]);
-  const [templateUploading, setTemplateUploading] = useState(false);
-  const [templateLocalFile, setTemplateLocalFile] = useState(null);
   const [outputDir, setOutputDir] = useState('./out');
 
-  const templateSelectionOk = Boolean((templateName && templateName.trim()) || (templatePath && templatePath.trim()));
-  const templateNameAvailable = Boolean(templateName && templates.includes(templateName));
+  // Template — upload uniquement, pas de mémoire serveur
+  const [templateLocalFile, setTemplateLocalFile] = useState(null);
+  const [templateUploading, setTemplateUploading] = useState(false);
+  const [templateServerName, setTemplateServerName] = useState('');
 
   // LLM
   const [llmHost, setLlmHost] = useState('http://localhost:11434');
   const [llmModel, setLlmModel] = useState('llama3.1:8b');
   const [llmCustom, setLlmCustom] = useState('');
   const [useCustomModel, setUseCustomModel] = useState(false);
-  const [maxChars, setMaxChars] = useState(500);
   const [availableModels, setAvailableModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [llmRestarting, setLlmRestarting] = useState(false);
@@ -63,7 +59,7 @@ function ClientSelection() {
   const [enableSoffice, setEnableSoffice] = useState(false);
   const [autoPdf, setAutoPdf] = useState(false);
 
-  // Branding (entête/pied) – appliqué AVANT la génération du rapport
+  // Branding
   const [brandingEnabled, setBrandingEnabled] = useState(false);
   const [brandingTitreDocument, setBrandingTitreDocument] = useState('');
   const [brandingSociete, setBrandingSociete] = useState('');
@@ -76,26 +72,23 @@ function ClientSelection() {
   const [brandingLogoHeader, setBrandingLogoHeader] = useState(null);
   const [brandingLogoFooter, setBrandingLogoFooter] = useState(null);
 
-  // Fonction pour charger les modèles Ollama  
+  // ── Chargement initial ──
   const loadOllamaModels = async () => {
     setModelsLoading(true);
     setLlmModelsError(null);
     try {
       const response = await healthAPI.getOllamaModels(llmHost);
       setAvailableModels(response.models || []);
-      
-      if (response.models && response.models.length > 0 && !llmModel) {
+      if (response.models?.length > 0 && !llmModel) {
         setLlmModel(response.models[0].name);
       }
     } catch (err) {
-      console.error('Erreur lors du chargement des modèles:', err);
       const detail = err?.response?.data?.detail || err?.message;
-      setLlmModelsError(detail || "Erreur lors du chargement des modèles");
+      setLlmModelsError(detail || 'Impossible de charger les modèles');
       setAvailableModels([
         { name: 'qwen3-next:latest', available: false },
         { name: 'mistral:latest', available: false },
         { name: 'llama3.1:8b', available: false },
-        { name: 'qwen3-vl:2b', available: false },
       ]);
     } finally {
       setModelsLoading(false);
@@ -107,157 +100,65 @@ function ClientSelection() {
     setLlmRestartMessage(null);
     try {
       const resp = await healthAPI.restartOllama(llmHost);
-      const unloadedCount = Array.isArray(resp?.unloaded) ? resp.unloaded.length : 0;
-      const runningCount = Array.isArray(resp?.running_models) ? resp.running_models.length : 0;
-      const errCount = Array.isArray(resp?.errors) ? resp.errors.length : 0;
-
-      const msg =
-        runningCount === 0
-          ? '✅ Aucun modèle actif à redémarrer (Ollama répond bien)'
-          : `✅ Restart demandé : ${unloadedCount}/${runningCount} modèle(s) déchargé(s)` + (errCount ? ` (⚠️ ${errCount} erreur(s))` : '');
-
-      setLlmRestartMessage({ type: errCount ? 'warning' : 'success', text: msg });
-      // Rafraîchir la liste des modèles (et l'état)
+      const unloaded = Array.isArray(resp?.unloaded) ? resp.unloaded.length : 0;
+      const running = Array.isArray(resp?.running_models) ? resp.running_models.length : 0;
+      const errs = Array.isArray(resp?.errors) ? resp.errors.length : 0;
+      const msg = running === 0
+        ? 'Aucun modele actif (serveur OK)'
+        : `${unloaded}/${running} modele(s) decharge(s)${errs ? ` (${errs} erreur(s))` : ''}`;
+      setLlmRestartMessage({ type: errs ? 'warning' : 'success', text: msg });
       await loadOllamaModels();
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setLlmRestartMessage({
-        type: 'error',
-        text: detail || '❌ Impossible de redémarrer les LLM (Ollama)'
-      });
+      setLlmRestartMessage({ type: 'error', text: detail || 'Impossible de redemarrer le serveur IA' });
     } finally {
       setLlmRestarting(false);
     }
   };
 
-  // Charger les modèles au démarrage
   useEffect(() => {
     loadOllamaModels();
-
-    // Charger la liste des clients depuis le backend
     (async () => {
       try {
         const resp = await reportsAPI.listClients();
         setClients(resp.clients || []);
-      } catch (err) {
-        console.error('Erreur lors du chargement des clients:', err);
-        // Fallback (évite un écran vide si le backend est temporairement down)
+      } catch {
         setClients(['KARAOUI Malik']);
       }
     })();
-
-    // Charger les types de rapport V3
     (async () => {
       try {
         const resp = await reportsAPI.getReportTypes();
         setReportTypes(resp.types || []);
-      } catch (err) {
-        console.warn('Impossible de charger les types de rapport:', err);
-      }
-    })();
-
-    // Charger la liste des templates disponibles
-    (async () => {
-      try {
-        const resp = await reportsAPI.listTemplates();
-        const list = Array.isArray(resp.templates) ? resp.templates : [];
-        const uniq = Array.from(new Set(list.filter(Boolean)));
-        setTemplates(uniq);
-        if (!templateName) {
-          // Sélectionner le premier template réellement disponible côté serveur.
-          setTemplateName(uniq[0] || '');
-        }
-      } catch (err) {
-        console.warn('Impossible de charger la liste des templates:', err);
-        setTemplates([]);
-        if (!templateName) setTemplateName('');
-      }
+      } catch {}
     })();
   }, []);
 
+  // ── Template upload ──
   const handleTemplateFileSelected = async (file) => {
     if (!file) return;
     setTemplateLocalFile(file);
     if (!file.name?.toLowerCase().endsWith('.docx')) {
-      setError('Le template doit être un fichier .docx');
+      setError('Le modele de document doit etre un fichier .docx');
       return;
     }
     setTemplateUploading(true);
     setError(null);
     try {
       const resp = await reportsAPI.uploadTemplate(file);
-      const uploadedName = resp.template_name;
-      setTemplateName(uploadedName);
-      // En mode upload, on n'utilise pas template_path
-      if (uploadedName && !templates.includes(uploadedName)) {
-        setTemplates((prev) => [uploadedName, ...prev]);
-      }
+      setTemplateServerName(resp.template_name || '');
     } catch (err) {
       const detail = err.response?.data?.detail;
-      setError(detail || 'Erreur lors de l’upload du template');
+      setError(detail || "Erreur lors de l'envoi du modele");
     } finally {
       setTemplateUploading(false);
     }
   };
 
-  const FilePicker = ({
-    id,
-    accept,
-    disabled,
-    file,
-    onFileSelected,
-    buttonLabel,
-    placeholder,
-  }) => {
-    return (
-      <div className="flex w-full min-w-0 items-center gap-3">
-        <input
-          id={id}
-          type="file"
-          accept={accept}
-          className="sr-only"
-          disabled={disabled}
-          onChange={(e) => onFileSelected?.(e.target.files?.[0] || null)}
-        />
-        <label
-          htmlFor={id}
-          className={
-            "inline-flex shrink-0 items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm " +
-            "hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 " +
-            (disabled ? "opacity-50 cursor-not-allowed hover:bg-indigo-600" : "cursor-pointer")
-          }
-        >
-          {buttonLabel}
-        </label>
-        <div
-          className={
-            "min-w-0 flex-1 truncate rounded-md border px-3 py-2 text-sm " +
-            (file ? "border-slate-200 bg-slate-50 text-slate-900" : "border-slate-200 bg-white text-slate-500")
-          }
-          title={file?.name || ''}
-        >
-          {file ? file.name : placeholder}
-        </div>
-      </div>
-    );
-  };
-
-  const getLocationDatePreview = () => {
-    if (autoDate) {
-      const today = new Date();
-      return `${locationCity}, le ${today.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
-      })}`;
-    }
-    return manualDate ? `${locationCity}, le ${manualDate}` : locationCity;
-  };
-
+  // ── Branding ──
   const extractDetailFromAxiosBlobError = async (err) => {
     const data = err?.response?.data;
     const ct = err?.response?.headers?.['content-type'] || err?.response?.headers?.['Content-Type'];
-
     if (data instanceof Blob) {
       try {
         const text = await data.text();
@@ -266,30 +167,16 @@ function ClientSelection() {
           return parsed?.detail || text;
         }
         return text;
-      } catch {
-        return null;
-      }
+      } catch { return null; }
     }
-
     return err?.response?.data?.detail || null;
   };
 
-  const applyBrandingAndUploadTemplateIfNeeded = async () => {
-    if (!brandingEnabled) {
-      return templateName || null;
-    }
+  const applyBrandingAndUpload = async () => {
+    if (!brandingEnabled) return templateServerName || null;
 
-    // Construire FormData pour /api/branding/apply
     const fd = new FormData();
-
-    // Template: idéalement template_name (upload/liste). template_path reste un fallback dev.
-    // Si le template sélectionné n'existe pas dans la liste serveur, on évite d'envoyer template_name.
-    if (templateName && templateNameAvailable) {
-      fd.append('template_name', templateName);
-    } else if (templatePath) {
-      fd.append('template_path', templatePath);
-    }
-
+    if (templateServerName) fd.append('template_name', templateServerName);
     fd.append('titre_document', brandingTitreDocument);
     fd.append('societe', brandingSociete);
     fd.append('rue', brandingRue);
@@ -298,71 +185,63 @@ function ClientSelection() {
     fd.append('ville', brandingVille);
     fd.append('tel', brandingTel);
     fd.append('email', brandingEmail);
-
     if (brandingLogoHeader) fd.append('logo_header', brandingLogoHeader);
     if (brandingLogoFooter) fd.append('logo_footer', brandingLogoFooter);
 
-    // Appeler l'API branding (retourne un DOCX)
     const { blob, filename } = await brandingAPI.applyBranding(fd);
     const docxName = filename || `template_brande_${Date.now()}.docx`;
     const file = new File([blob], docxName, {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
-
-    // Uploader le template brandé côté serveur puis l'utiliser pour le rapport
     const uploadResp = await reportsAPI.uploadTemplate(file);
-    const newTemplateName = uploadResp.template_name;
-    if (newTemplateName) {
-      setTemplateName(newTemplateName);
-      if (!templates.includes(newTemplateName)) {
-        setTemplates((prev) => [newTemplateName, ...prev]);
-      }
-    }
-    return newTemplateName || null;
+    const name = uploadResp.template_name;
+    if (name) setTemplateServerName(name);
+    return name || null;
   };
+
+  // ── Localisation preview ──
+  const getLocationDatePreview = () => {
+    if (autoDate) {
+      const today = new Date();
+      return `${locationCity}, le ${today.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+    }
+    return manualDate ? `${locationCity}, le ${manualDate}` : locationCity;
+  };
+
+  // ── Génération ──
+  const templateReady = Boolean(templateServerName || templateLocalFile);
 
   const handleCreateReport = async () => {
     if (!selectedClient) {
-      setError('Veuillez sélectionner un client');
+      setError('Selectionnez un dossier client');
       return;
     }
-
-    // Empêche un call backend inutile si aucun template n'est prêt.
-    if (!templateSelectionOk) {
-      setError('Veuillez sélectionner ou uploader un template DOCX avant de générer un rapport.');
+    if (!templateReady) {
+      setError('Selectionnez un modele de document (.docx)');
       return;
     }
-
     setLoading(true);
     setError(null);
 
     try {
-      // 1) Branding (optionnel) avant génération: produit un template brandé et le sélectionne
-      let effectiveTemplateName = templateName || null;
-      if (effectiveTemplateName && !templateNameAvailable) {
-        // Sécurité: si un nom est saisi mais pas réellement disponible côté serveur, on force le fallback path.
-        effectiveTemplateName = null;
-      }
+      let effectiveTemplate = templateServerName || null;
       if (brandingEnabled) {
         try {
-          effectiveTemplateName = await applyBrandingAndUploadTemplateIfNeeded();
+          effectiveTemplate = await applyBrandingAndUpload();
         } catch (err) {
           const detail = await extractDetailFromAxiosBlobError(err);
-          setError(detail || 'Erreur lors de l\'application du branding');
+          setError(detail || "Erreur lors de l'application de la personnalisation");
           setLoading(false);
           return;
         }
       }
 
       const finalModel = useCustomModel ? llmCustom : llmModel;
-      
-      // Calculer le multiplicateur basé sur la longueur max choisie (base = 500)
-      const maxCharsMultiplier = maxChars / 500;
-      
+
       const response = await reportsAPI.createReport(
         selectedClient,
-        null, // source_file
-        'auto', // extract_method
+        null,
+        'auto',
         {
           name,
           surname,
@@ -373,12 +252,8 @@ function ClientSelection() {
           location_date: getLocationDatePreview(),
           auto_location_date: autoDate,
           clients_root: clientsRoot,
-          // IMPORTANT: un navigateur ne peut pas transmettre un chemin local exploitable;
-          // si un template est choisi via upload/liste, on utilise template_name.
-          template_name: effectiveTemplateName || undefined,
-          template_path: effectiveTemplateName ? undefined : templatePath,
+          template_name: effectiveTemplate || undefined,
           output_dir: outputDir,
-          // ✅ Objet LLM unifié (rétrocompatibilité maintenue via champs legacy)
           llm: {
             provider: 'ollama',
             base_url: llmHost,
@@ -386,15 +261,13 @@ function ClientSelection() {
             temperature,
             max_tokens: 4096,
             top_p: topP,
-            timeout: 900.0
+            timeout: 900.0,
           },
-          // Legacy params (pour rétrocompatibilité si llm n'est pas traité)
           llm_host: llmHost,
           llm_model: finalModel,
           topk: topK,
           temperature,
           top_p: topP,
-          max_chars_multiplier: maxCharsMultiplier,
           include_filters: includeFilters,
           exclude_filters: excludeFilters,
           force_reextract: forceReextract,
@@ -403,606 +276,429 @@ function ClientSelection() {
           report_type: selectedReportType || undefined,
         }
       );
-      
       window.location.href = `/progress/${response.job_id}`;
     } catch (err) {
       const detail = err.response?.data?.detail;
       const status = err.response?.status;
-      setError(detail || (status ? `Erreur HTTP ${status} lors de la création du rapport` : 'Erreur lors de la création du rapport'));
+      setError(detail || (status ? `Erreur HTTP ${status}` : 'Erreur lors de la creation du rapport'));
     } finally {
       setLoading(false);
     }
   };
 
+  // ── File picker component ──
+  const FilePicker = ({ id, accept, disabled, file, onFileSelected, buttonLabel, placeholder }) => (
+    <div className="file-picker">
+      <input
+        id={id}
+        type="file"
+        accept={accept}
+        disabled={disabled}
+        onChange={(e) => onFileSelected?.(e.target.files?.[0] || null)}
+      />
+      <label
+        htmlFor={id}
+        className={`btn-file${disabled ? ' disabled' : ''}`}
+      >
+        {buttonLabel}
+      </label>
+      <div className={`file-name${file ? ' has-file' : ''}`} title={file?.name || ''}>
+        {file ? file.name : placeholder}
+      </div>
+    </div>
+  );
+
   return (
     <div className="client-selection">
-      <h1>🤖 Génération de Rapport</h1>
-      
+      <h1 className="page-title">Nouveau rapport</h1>
+
       <div className="form-grid">
-        {/* Section Client */}
-        <div className="form-section">
-          <h3>📁 Client et Chemins</h3>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Dossier clients</label>
-              <input
-                type="text"
-                value={clientsRoot}
-                onChange={(e) => setClientsRoot(e.target.value)}
-                placeholder="./CLIENTS"
-              />
+        {/* ── COLONNE 1: Dossier + Modele doc + Type rapport ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Dossier client */}
+          <div className="form-section">
+            <h3>Dossier client</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Emplacement des dossiers</label>
+                <input
+                  type="text"
+                  value={clientsRoot}
+                  onChange={(e) => setClientsRoot(e.target.value)}
+                  placeholder="./CLIENTS"
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Client</label>
+                <select
+                  value={selectedClient}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedClient(val);
+                    // Auto-remplir nom/prénom depuis le nom du dossier
+                    // Mots MAJUSCULES = nom de famille, reste = prénom (1re lettre en majuscule)
+                    if (val) {
+                      const parts = val.trim().split(/\s+/);
+                      const upper = parts.filter((w) => w === w.toUpperCase() && /[A-Z]/.test(w));
+                      const rest = parts.filter((w) => w !== w.toUpperCase() || !/[A-Z]/.test(w));
+                      const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                      setSurname(upper.join(' '));
+                      setName(rest.map(capitalize).join(' '));
+                    }
+                  }}
+                  disabled={loading}
+                >
+                  <option value="">Selectionner un client</option>
+                  {clients.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="hint" style={{ marginTop: 6 }}>
+                  Formats acceptes : PDF, DOCX, TXT, MSG, M4A, MP3, WAV
+                </span>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Dossier de sortie</label>
+                <input
+                  type="text"
+                  value={outputDir}
+                  onChange={(e) => setOutputDir(e.target.value)}
+                  placeholder="./out"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Client *</label>
-              <select
-                value={selectedClient}
-                onChange={(e) => setSelectedClient(e.target.value)}
-                disabled={loading}
-              >
-                <option value="">-- Sélectionner --</option>
-                {clients.map((client) => (
-                  <option key={client} value={client}>{client}</option>
-                ))}
-              </select>
-              <small className="hint" style={{ marginTop: '8px', display: 'block', opacity: 0.8 }}>
-                📄 Formats RAG supportés: PDF, DOCX, TXT, <strong>MSG (Outlook)</strong>, M4A, MP3, WAV
-              </small>
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>Template DOCX</label>
-              <div className="template-picker">
-                {templates.length === 0 && !templateLocalFile && (
-                  <div className="hint" style={{ marginBottom: '8px', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff7ed' }}>
-                    ⚠️ Aucun template DOCX n’est disponible côté serveur. Uploade un <strong>.docx</strong> via “Parcourir…”.
-                  </div>
+          {/* Modele de document */}
+          <div className="form-section">
+            <h3>Modele de document</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <FilePicker
+                  id="template-docx"
+                  accept=".docx"
+                  disabled={loading || templateUploading}
+                  file={templateLocalFile}
+                  onFileSelected={handleTemplateFileSelected}
+                  buttonLabel={templateUploading ? 'Envoi...' : 'Parcourir'}
+                  placeholder="Aucun modele selectionne"
+                />
+                {templateServerName && (
+                  <span className="hint" style={{ marginTop: 6 }}>
+                    Pret : {templateServerName}
+                  </span>
                 )}
+              </div>
+            </div>
+          </div>
 
-                <div className="template-picker-row">
-                  <FilePicker
-                    id="template-docx"
-                    accept=".docx"
-                    disabled={loading || templateUploading}
-                    file={templateLocalFile}
-                    onFileSelected={(file) => handleTemplateFileSelected(file)}
-                    buttonLabel={templateUploading ? 'Upload…' : 'Parcourir…'}
-                    placeholder="Aucun template sélectionné"
-                  />
-                  {templateName && (
-                    <small className="hint">Template côté serveur: <strong>{templateName}</strong></small>
-                  )}
-                </div>
-
-                <div className="template-picker-row">
+          {/* Type de rapport */}
+          {reportTypes.length > 0 && (
+            <div className="form-section">
+              <h3>Type de rapport</h3>
+              <div className="form-row">
+                <div className="form-group">
                   <select
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
+                    value={selectedReportType}
+                    onChange={(e) => setSelectedReportType(e.target.value)}
                     disabled={loading}
                   >
-                    <option value="">— Sélectionner un template —</option>
-                    {templates.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                    {reportTypes.map((rt) => (
+                      <option
+                        key={rt.key}
+                        value={rt.key}
+                        disabled={rt.sections.length === 0}
+                      >
+                        {rt.label} {rt.sections.length === 0 ? '(bientot)' : `(${rt.sections.length} sections)`}
+                      </option>
                     ))}
                   </select>
                 </div>
-
-                {!templateName && (
-                  <div className="template-picker-row">
-                    <input
-                      type="text"
-                      value={templatePath}
-                      onChange={(e) => setTemplatePath(e.target.value)}
-                      placeholder="(optionnel) chemin côté serveur, ex: ./uploaded_templates/mon_template.docx"
-                    />
-                    <small className="hint">
-                      Mode avancé: chemin côté serveur (dev local). Sinon utilise “Parcourir…” au-dessus.
-                    </small>
-                  </div>
-                )}
-
-                {templateName && (
-                  <small className="hint">Template sélectionné: <strong>{templateName}</strong></small>
-                )}
               </div>
             </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>Dossier de sortie</label>
-              <input
-                type="text"
-                value={outputDir}
-                onChange={(e) => setOutputDir(e.target.value)}
-                placeholder="./out"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Section Type de Rapport (V3) */}
-        {reportTypes.length > 0 && (
+        {/* ── COLONNE 2: Identite + Lieu et date ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div className="form-section">
-            <h3>📋 Type de rapport</h3>
+            <h3>Identite du beneficiaire</h3>
             <div className="form-row">
               <div className="form-group">
-                <label>Type de rapport</label>
-                <select
-                  value={selectedReportType}
-                  onChange={(e) => setSelectedReportType(e.target.value)}
-                  disabled={loading}
-                >
-                  {reportTypes.map((rt) => (
-                    <option
-                      key={rt.key}
-                      value={rt.key}
-                      disabled={rt.sections.length === 0}
-                    >
-                      {rt.label} {rt.sections.length === 0 ? '(bientôt)' : `(${rt.sections.length} sections)`}
-                    </option>
-                  ))}
+                <label>Prenom</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prenom" />
+              </div>
+              <div className="form-group">
+                <label>Nom</label>
+                <input type="text" value={surname} onChange={(e) => setSurname(e.target.value)} placeholder="Nom" />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Civilite</label>
+                <select value={civility} onChange={(e) => setCivility(e.target.value)}>
+                  <option value="Monsieur">Monsieur</option>
+                  <option value="Madame">Madame</option>
+                  <option value="Autre">Autre</option>
                 </select>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Section Branding */}
-        <div className="form-section">
-          <h3>🎨 Branding DOCX (avant génération)</h3>
-
-          <div className="form-row">
-            <div className="form-group checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={brandingEnabled}
-                  onChange={(e) => setBrandingEnabled(e.target.checked)}
-                />
-                <span>Appliquer l’entête/pied de page (logos + champs)</span>
-              </label>
-            </div>
-          </div>
-
-          {brandingEnabled && (
-            <>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Titre document (TITRE_DOCUMENT)</label>
-                  <input
-                    type="text"
-                    value={brandingTitreDocument}
-                    onChange={(e) => setBrandingTitreDocument(e.target.value)}
-                    placeholder="ESSAI"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Société (SOCIETE)</label>
-                  <input
-                    type="text"
-                    value={brandingSociete}
-                    onChange={(e) => setBrandingSociete(e.target.value)}
-                    placeholder="MALIK SAS"
-                  />
-                </div>
+              <div className="form-group">
+                <label>Numero AVS</label>
+                <input type="text" value={avsNumber} onChange={(e) => setAvsNumber(e.target.value)} placeholder="756.XXXX.XXXX.XX" />
               </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Rue</label>
-                  <input
-                    type="text"
-                    value={brandingRue}
-                    onChange={(e) => setBrandingRue(e.target.value)}
-                    placeholder="Joseph DessaiX"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Numéro</label>
-                  <input
-                    type="text"
-                    value={brandingNumero}
-                    onChange={(e) => setBrandingNumero(e.target.value)}
-                    placeholder="2"
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>CP</label>
-                  <input
-                    type="text"
-                    value={brandingCp}
-                    onChange={(e) => setBrandingCp(e.target.value)}
-                    placeholder="74000"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Ville</label>
-                  <input
-                    type="text"
-                    value={brandingVille}
-                    onChange={(e) => setBrandingVille(e.target.value)}
-                    placeholder="ANNECY"
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Téléphone</label>
-                  <input
-                    type="text"
-                    value={brandingTel}
-                    onChange={(e) => setBrandingTel(e.target.value)}
-                    placeholder="+33..."
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input
-                    type="text"
-                    value={brandingEmail}
-                    onChange={(e) => setBrandingEmail(e.target.value)}
-                    placeholder="contact@..."
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Logo entête (PNG/JPG/TIFF)</label>
-                  <FilePicker
-                    id="branding-logo-header"
-                    accept="image/png,image/jpeg,image/tiff"
-                    disabled={loading}
-                    file={brandingLogoHeader}
-                    onFileSelected={(file) => setBrandingLogoHeader(file)}
-                    buttonLabel="Parcourir…"
-                    placeholder="Aucun logo sélectionné"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Logo pied de page (PNG/JPG/TIFF)</label>
-                  <FilePicker
-                    id="branding-logo-footer"
-                    accept="image/png,image/jpeg,image/tiff"
-                    disabled={loading}
-                    file={brandingLogoFooter}
-                    onFileSelected={(file) => setBrandingLogoFooter(file)}
-                    buttonLabel="Parcourir…"
-                    placeholder="Aucun logo sélectionné"
-                  />
-                </div>
-              </div>
-
-              {!templateName && (
-                <div className="preview-box">
-                  <strong>Note :</strong> Pour un branding fiable en mode navigateur, sélectionne un template via “Parcourir…” ou la liste.
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Section Identité */}
-        <div className="form-section">
-          <h3>👤 Identité</h3>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Prénom</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Prénom"
-              />
-            </div>
-            <div className="form-group">
-              <label>Nom</label>
-              <input
-                type="text"
-                value={surname}
-                onChange={(e) => setSurname(e.target.value)}
-                placeholder="Nom"
-              />
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Civilité</label>
-              <select
-                value={civility}
-                onChange={(e) => setCivility(e.target.value)}
-              >
-                <option value="Monsieur">Monsieur</option>
-                <option value="Madame">Madame</option>
-                <option value="Autre">Autre</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Numéro AVS</label>
-              <input
-                type="text"
-                value={avsNumber}
-                onChange={(e) => setAvsNumber(e.target.value)}
-                placeholder="756.XXXX.XXXX.XX"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Section Localisation */}
-        <div className="form-section">
-          <h3>📍 Localisation et Date</h3>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Ville</label>
-              <input
-                type="text"
-                value={locationCity}
-                onChange={(e) => setLocationCity(e.target.value)}
-                placeholder="Genève"
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group checkbox-group">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={autoDate}
-                  onChange={(e) => setAutoDate(e.target.checked)}
-                />
-                <span>Date automatique (aujourd'hui)</span>
-              </label>
-            </div>
-          </div>
-
-          {!autoDate && (
+          <div className="form-section">
+            <h3>Lieu et date</h3>
             <div className="form-row">
               <div className="form-group">
-                <label>Date manuelle</label>
-                <input
-                  type="text"
-                  value={manualDate}
-                  onChange={(e) => setManualDate(e.target.value)}
-                  placeholder="15 décembre 2024"
-                />
+                <label>Ville</label>
+                <input type="text" value={locationCity} onChange={(e) => setLocationCity(e.target.value)} placeholder="Geneve" />
               </div>
             </div>
-          )}
-
-          <div className="preview-box">
-            <strong>Prévisualisation :</strong> {getLocationDatePreview()}
+            <div className="form-row">
+              <div className="form-group checkbox-group">
+                <label>
+                  <input type="checkbox" checked={autoDate} onChange={(e) => setAutoDate(e.target.checked)} />
+                  <span>Date du jour automatique</span>
+                </label>
+              </div>
+            </div>
+            {!autoDate && (
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Date</label>
+                  <input type="text" value={manualDate} onChange={(e) => setManualDate(e.target.value)} placeholder="15 decembre 2024" />
+                </div>
+              </div>
+            )}
+            <div className="preview-box">
+              <strong>Apercu :</strong> {getLocationDatePreview()}
+            </div>
           </div>
         </div>
 
-        {/* Section LLM */}
-        <div className="form-section">
-          <h3>🧠 Configuration LLM</h3>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label>Serveur Ollama</label>
-              <input
-                type="text"
-                value={llmHost}
-                onChange={(e) => setLlmHost(e.target.value)}
-                placeholder="http://localhost:11434"
-              />
+        {/* ── COLONNE 3: IA + Personnalisation ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div className="form-section">
+            <h3>Modele d'intelligence artificielle</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Adresse du serveur</label>
+                <input
+                  type="text"
+                  value={llmHost}
+                  onChange={(e) => setLlmHost(e.target.value)}
+                  placeholder="http://localhost:11434"
+                />
+              </div>
             </div>
+            <div className="form-row">
+              <div className="form-group">
+                <div className="label-with-button">
+                  <label>
+                    Modele
+                    {modelsLoading && <span className="models-loading">(chargement...)</span>}
+                  </label>
+                  <button type="button" className="btn-icon" onClick={loadOllamaModels} disabled={modelsLoading} title="Actualiser la liste">
+                    &#x21bb;
+                  </button>
+                  <button type="button" className="btn-icon" onClick={restartAllLlm} disabled={llmRestarting} title="Redemarrer le serveur IA">
+                    &#x267b;
+                  </button>
+                </div>
+                <select
+                  value={useCustomModel ? 'custom' : llmModel}
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') {
+                      setUseCustomModel(true);
+                    } else {
+                      setUseCustomModel(false);
+                      setLlmModel(e.target.value);
+                    }
+                  }}
+                >
+                  {availableModels.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {m.available ? '\u25cf ' : '\u25cb '}{m.name}
+                    </option>
+                  ))}
+                  {availableModels.length === 0 && <option disabled>Aucun modele disponible</option>}
+                  <option value="custom">Autre (saisie libre)</option>
+                </select>
+
+                {llmModelsError && (
+                  <div className="llm-restart-message llm-restart-error">
+                    {llmModelsError}
+                  </div>
+                )}
+                {llmRestartMessage && (
+                  <div className={`llm-restart-message llm-restart-${llmRestartMessage.type}`}>
+                    {llmRestartMessage.text}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {useCustomModel && (
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Nom du modele</label>
+                  <input type="text" value={llmCustom} onChange={(e) => setLlmCustom(e.target.value)} placeholder="phi3:mini" />
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <div className="label-with-button">
+          {/* Personnalisation (branding) */}
+          <div className="form-section">
+            <h3>Personnalisation du document</h3>
+            <div className="form-row">
+              <div className="form-group checkbox-group">
                 <label>
-                  Modèle LLM
-                  {modelsLoading && <span className="models-loading"> (Chargement...)</span>}
+                  <input type="checkbox" checked={brandingEnabled} onChange={(e) => setBrandingEnabled(e.target.checked)} />
+                  <span>Appliquer entete et pied de page</span>
                 </label>
-                <button 
-                  type="button" 
-                  className="btn-refresh-models"
-                  onClick={loadOllamaModels}
-                  disabled={modelsLoading}
-                  title="Rafraîchir la liste des modèles"
-                >
-                  🔄
-                </button>
-                <button
-                  type="button"
-                  className="btn-restart-llm"
-                  onClick={restartAllLlm}
-                  disabled={llmRestarting}
-                  title="Restart all LLM (unload des modèles actifs)"
-                >
-                  ♻️
-                </button>
               </div>
-              <select
-                value={useCustomModel ? 'custom' : llmModel}
-                onChange={(e) => {
-                  if (e.target.value === 'custom') {
-                    setUseCustomModel(true);
-                  } else {
-                    setUseCustomModel(false);
-                    setLlmModel(e.target.value);
-                  }
-                }}
-              >
-                {availableModels.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.available ? '🟢 ' : '🔴 '}{model.name}
-                  </option>
-                ))}
-                {availableModels.length === 0 && (
-                  <option disabled>Aucun modèle disponible</option>
-                )}
-                <option value="custom">✏️ Autre (personnalisé)</option>
-              </select>
+            </div>
 
-              {llmModelsError && (
-                <div className="llm-restart-message llm-restart-error">
-                  ❌ {llmModelsError}
-                  <div style={{ marginTop: 4, opacity: 0.9 }}>
-                    Astuce: si tu es sur <code>http://127.0.0.1:5174</code>, l'API doit autoriser cette origine (CORS).
+            {brandingEnabled && (
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Titre du document</label>
+                    <input type="text" value={brandingTitreDocument} onChange={(e) => setBrandingTitreDocument(e.target.value)} placeholder="ESSAI" />
+                  </div>
+                  <div className="form-group">
+                    <label>Societe</label>
+                    <input type="text" value={brandingSociete} onChange={(e) => setBrandingSociete(e.target.value)} placeholder="MALIK SAS" />
                   </div>
                 </div>
-              )}
-
-              {llmRestartMessage && (
-                <div className={`llm-restart-message llm-restart-${llmRestartMessage.type}`}>
-                  {llmRestartMessage.text}
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Rue</label>
+                    <input type="text" value={brandingRue} onChange={(e) => setBrandingRue(e.target.value)} placeholder="Rue" />
+                  </div>
+                  <div className="form-group">
+                    <label>Numero</label>
+                    <input type="text" value={brandingNumero} onChange={(e) => setBrandingNumero(e.target.value)} placeholder="2" />
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {useCustomModel && (
-            <div className="form-row">
-              <div className="form-group">
-                <label>Modèle personnalisé</label>
-                <input
-                  type="text"
-                  value={llmCustom}
-                  onChange={(e) => setLlmCustom(e.target.value)}
-                  placeholder="phi3:mini"
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>
-                📏 Longueur max paragraphe
-                <span style={{ marginLeft: 8, fontSize: '0.85em', opacity: 0.7 }}>
-                  (évite les "..." de troncature)
-                </span>
-              </label>
-              <select
-                value={maxChars}
-                onChange={(e) => setMaxChars(Number(e.target.value))}
-                title="Longueur maximale des paragraphes générés par le LLM"
-              >
-                <option value={500}>500 caractères (défaut)</option>
-                <option value={1000}>1000 caractères (2x plus long)</option>
-                <option value={2000}>2000 caractères (4x plus long)</option>
-              </select>
-            </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Code postal</label>
+                    <input type="text" value={brandingCp} onChange={(e) => setBrandingCp(e.target.value)} placeholder="1200" />
+                  </div>
+                  <div className="form-group">
+                    <label>Ville</label>
+                    <input type="text" value={brandingVille} onChange={(e) => setBrandingVille(e.target.value)} placeholder="Geneve" />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Telephone</label>
+                    <input type="text" value={brandingTel} onChange={(e) => setBrandingTel(e.target.value)} placeholder="+41..." />
+                  </div>
+                  <div className="form-group">
+                    <label>Email</label>
+                    <input type="text" value={brandingEmail} onChange={(e) => setBrandingEmail(e.target.value)} placeholder="contact@..." />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Logo entete</label>
+                    <FilePicker
+                      id="branding-logo-header"
+                      accept="image/png,image/jpeg,image/tiff"
+                      disabled={loading}
+                      file={brandingLogoHeader}
+                      onFileSelected={(file) => setBrandingLogoHeader(file)}
+                      buttonLabel="Parcourir"
+                      placeholder="Aucun fichier"
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Logo pied de page</label>
+                    <FilePicker
+                      id="branding-logo-footer"
+                      accept="image/png,image/jpeg,image/tiff"
+                      disabled={loading}
+                      file={brandingLogoFooter}
+                      onFileSelected={(file) => setBrandingLogoFooter(file)}
+                      buttonLabel="Parcourir"
+                      placeholder="Aucun fichier"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Options avancées */}
+      {/* ── Options avancees ── */}
       <div className="advanced-section">
-        <button
-          type="button"
-          className="btn-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          ⚙️ Options avancées {showAdvanced ? '▼' : '▶'}
+        <button type="button" className="btn-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+          Reglages avances {showAdvanced ? '\u25BC' : '\u25B6'}
         </button>
 
         {showAdvanced && (
           <div className="advanced-content">
             <div className="form-row">
               <div className="form-group">
-                <label>Top-K passages ({topK})</label>
-                <input
-                  type="range"
-                  min="3"
-                  max="20"
-                  value={topK}
-                  onChange={(e) => setTopK(parseInt(e.target.value))}
-                />
+                <label>Nombre de passages ({topK})</label>
+                <span className="hint">Combien d'extraits du dossier sont envoyes au modele pour chaque section.</span>
+                <input type="range" min="3" max="20" value={topK} onChange={(e) => setTopK(parseInt(e.target.value))} />
               </div>
               <div className="form-group">
-                <label>Temperature ({temperature})</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                />
+                <label>Creativite ({temperature})</label>
+                <span className="hint">Plus la valeur est basse, plus le texte colle aux documents. Plus elle est haute, plus le texte est libre.</span>
+                <input type="range" min="0" max="1" step="0.05" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} />
               </div>
               <div className="form-group">
-                <label>Top-p ({topP})</label>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1"
-                  step="0.05"
-                  value={topP}
-                  onChange={(e) => setTopP(parseFloat(e.target.value))}
-                />
+                <label>Diversite ({topP})</label>
+                <span className="hint">Controle la variete des mots utilises par le modele.</span>
+                <input type="range" min="0.1" max="1" step="0.05" value={topP} onChange={(e) => setTopP(parseFloat(e.target.value))} />
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label>Inclure chemins (séparés par ,)</label>
-                <input
-                  type="text"
-                  value={includeFilters}
-                  onChange={(e) => setIncludeFilters(e.target.value)}
-                  placeholder="01 Dossier, 02 Tests"
-                />
+                <label>Inclure uniquement ces dossiers</label>
+                <input type="text" value={includeFilters} onChange={(e) => setIncludeFilters(e.target.value)} placeholder="01 Dossier, 02 Tests" />
+                <span className="hint">Separer par des virgules. Laissez vide pour tout inclure.</span>
               </div>
               <div className="form-group">
-                <label>Exclure chemins (séparés par ,)</label>
-                <input
-                  type="text"
-                  value={excludeFilters}
-                  onChange={(e) => setExcludeFilters(e.target.value)}
-                  placeholder="archive, old"
-                />
+                <label>Exclure ces dossiers</label>
+                <input type="text" value={excludeFilters} onChange={(e) => setExcludeFilters(e.target.value)} placeholder="archive, old" />
+                <span className="hint">Separer par des virgules.</span>
               </div>
             </div>
 
             <div className="form-row checkbox-row">
               <div className="form-group checkbox-group">
                 <label>
-                  <input
-                    type="checkbox"
-                    checked={forceReextract}
-                    onChange={(e) => setForceReextract(e.target.checked)}
-                  />
-                  <span>Forcer extraction</span>
+                  <input type="checkbox" checked={forceReextract} onChange={(e) => setForceReextract(e.target.checked)} />
+                  <span>Relire tous les documents (ignorer le cache)</span>
                 </label>
               </div>
               <div className="form-group checkbox-group">
                 <label>
-                  <input
-                    type="checkbox"
-                    checked={enableSoffice}
-                    onChange={(e) => setEnableSoffice(e.target.checked)}
-                  />
-                  <span>LibreOffice</span>
+                  <input type="checkbox" checked={enableSoffice} onChange={(e) => setEnableSoffice(e.target.checked)} />
+                  <span>Utiliser LibreOffice pour les anciens formats</span>
                 </label>
               </div>
               <div className="form-group checkbox-group">
                 <label>
-                  <input
-                    type="checkbox"
-                    checked={autoPdf}
-                    onChange={(e) => setAutoPdf(e.target.checked)}
-                  />
-                  <span>PDF automatique</span>
+                  <input type="checkbox" checked={autoPdf} onChange={(e) => setAutoPdf(e.target.checked)} />
+                  <span>Creer aussi un PDF</span>
                 </label>
               </div>
             </div>
@@ -1014,10 +710,10 @@ function ClientSelection() {
 
       <button
         onClick={handleCreateReport}
-        disabled={loading || !selectedClient || !templateSelectionOk}
+        disabled={loading || !selectedClient || !templateReady}
         className="btn-primary btn-generate"
       >
-        {loading ? '⏳ Génération en cours...' : '🚀 Générer le Rapport'}
+        {loading ? 'Generation en cours...' : 'Generer le rapport'}
       </button>
     </div>
   );

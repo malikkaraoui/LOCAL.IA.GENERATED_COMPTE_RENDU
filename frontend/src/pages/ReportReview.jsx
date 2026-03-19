@@ -309,6 +309,53 @@ function ReportReview() {
                   <span key={src} className="source-tag">{src}</span>
                 ))}
               </div>
+
+              {/* Métadonnées de génération */}
+              {selectedSection.generation_meta && Object.keys(selectedSection.generation_meta).length > 0 && (
+                <>
+                  <h4>Generation</h4>
+                  <div className="gen-meta">
+                    <div className="gen-meta-row">
+                      <span className="gen-meta-label">Fichiers</span>
+                      <span className="gen-meta-value">{selectedSection.generation_meta.source_count || 0}</span>
+                    </div>
+                    <div className="gen-meta-row">
+                      <span className="gen-meta-label">Passages</span>
+                      <span className="gen-meta-value">{selectedSection.generation_meta.chunk_count || 0}</span>
+                    </div>
+                    <div className="gen-meta-row">
+                      <span className="gen-meta-label">Retries</span>
+                      <span className="gen-meta-value">{selectedSection.generation_meta.retries || 0}</span>
+                    </div>
+                    <div className="gen-meta-row">
+                      <span className="gen-meta-label">Prompt</span>
+                      <span className="gen-meta-value">{selectedSection.generation_meta.prompt_length || 0} chars</span>
+                    </div>
+                    {selectedSection.generation_meta.had_prior_sections && (
+                      <div className="gen-meta-row">
+                        <span className="gen-meta-label">Contexte</span>
+                        <span className="gen-meta-value gen-meta-tag">+ sections precedentes</span>
+                      </div>
+                    )}
+                    {selectedSection.generation_meta.source_files?.length > 0 && (
+                      <div className="gen-meta-files">
+                        <span className="gen-meta-label">Documents utilises</span>
+                        <ul className="gen-file-list">
+                          {selectedSection.generation_meta.source_files.map((f) => (
+                            <li key={f} className="gen-file-item">{f}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedSection.generation_meta.instructions && (
+                      <div className="gen-meta-files">
+                        <span className="gen-meta-label">Consigne LLM</span>
+                        <div className="gen-instructions">{selectedSection.generation_meta.instructions}</div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <p className="no-selection">Selectionnez une section</p>

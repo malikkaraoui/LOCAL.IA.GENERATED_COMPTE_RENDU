@@ -213,6 +213,20 @@ class ReportOrchestrator:
             # Création du répertoire temporaire
             self.temp_dir = Path(tempfile.mkdtemp(prefix="rapport_"))
             
+            # Publier les métadonnées du job (affichées côté UI)
+            if self.progress_callback:
+                self.progress_callback({
+                    "job_meta": {
+                        "client_name": self.params.client_dir.name,
+                        "name": self.params.name,
+                        "surname": self.params.surname,
+                        "civility": self.params.civility,
+                        "avs_number": self.params.avs_number,
+                        "llm_model": (self.params.llm_config.model if self.params.llm_config else self.params.llm_model),
+                        "report_type": self.params.report_type or "",
+                    },
+                })
+
             # ÉTAPE 1: Extraction
             self._log_progress("EXTRACTING", "Extraction des documents sources...", 0.1)
             extracted_path = self._extract_sources()
@@ -643,6 +657,21 @@ class ReportOrchestrator:
         if self.params.report_type:
             generate_kwargs["report_type"] = self.params.report_type
             generate_kwargs.pop("fields", None)  # Let V3 build its own fields
+
+            # Réinitialiser field_progress avec les sections V3 (pas les 25 champs V2)
+            from core.field_specs_v3 import get_specs_for_report_type
+            v3_specs = get_specs_for_report_type(self.params.report_type)
+            if v3_specs:
+                v3_fields = [{"key": s.key} for s in v3_specs]
+                self._init_field_progress(v3_fields)
+                if self.progress_callback:
+                    self.progress_callback({
+                        "status": "GENERATING",
+                        "message": f"Mode V3 : {len(v3_specs)} sections",
+                        "field_progress": self.field_progress,
+                        "field_order": self.field_order,
+                        "field_progress_version": self.field_progress_version,
+                    })
 
         answers = generate_fields(payload, **generate_kwargs)
 

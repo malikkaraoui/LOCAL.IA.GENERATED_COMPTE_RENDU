@@ -50,6 +50,9 @@ def get_report_review(job_id: str):
         answer_data = answers.get(spec.key, {})
         text = answer_data.get("value", "") if isinstance(answer_data, dict) else ""
         evaluation = evaluate_section(spec, text)
+        # Métadonnées de production (fichiers, sources, retries, prompt)
+        generation_meta = answer_data.get("meta", {}) if isinstance(answer_data, dict) else {}
+
         sections.append({
             "key": spec.key,
             "text": text,
@@ -66,6 +69,7 @@ def get_report_review(job_id: str):
                 "comment": evaluation.comment,
             },
             "evaluation_prompt": spec.evaluation_prompt,
+            "generation_meta": generation_meta,
         })
 
     bon_count = sum(1 for s in sections if s["evaluation"]["status"] == "BON")
