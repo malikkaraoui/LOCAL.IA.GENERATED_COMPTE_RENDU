@@ -211,6 +211,16 @@ export const adminAPI = {
     });
     return response.data;
   },
+
+  /**
+   * Kill agressif : workers, LLM en cours, queues Redis, puis relance propre.
+   */
+  nuke: async ({ restart = true } = {}) => {
+    const response = await apiClient.post('/admin/nuke', null, {
+      params: { restart },
+    });
+    return response.data;
+  },
 };
 
 /**

@@ -89,3 +89,61 @@ async def restart_workers(
         "pids": pids,
         "logs": ["/tmp/worker.log"] + [f"/tmp/worker_{i+1}.log" for i in range(1, count)],
     }
+
+
+@router.post("/admin/nuke")
+async def nuke_all(
+    request: Request,
+    restart: bool = Query(True, description="Relancer un worker propre après le nettoyage"),
+):
+    """Kill agressif : tout arrêter, tout nettoyer, repartir de zéro.
+
+    1. Kill tous les workers RQ
+    2. Kill les process ollama serve / ollama runner (LLM en cours)
+    3. Flush les queues Redis (jobs fantômes, résultats périmés)
+    4. Optionnel : relance un worker propre
+    """
+    _ensure_localhost(request)
+
+    actions: list[str] = []
+
+    # 1. Kill workers
+    subprocess.run(["pkill", "-f", "scripts/start_worker.py"], check=False)
+    subprocess.run(["pkill", "-f", "rq worker"], check=False)
+    actions.append("workers killed")
+
+    # 2. Kill ollama runner processes (les inférences en cours)
+    # On ne kill PAS ollama serve, juste les runners
+    subprocess.run(["pkill", "-f", "ollama_llama_server"], check=False)
+    subprocess.run(["pkill", "-f", "ollama runner"], check=False)
+    actions.append("ollama runners killed")
+
+    # 3. Flush Redis queues
+    try:
+        import redis
+        r = redis.Redis()
+        # Supprimer les queues RQ et les jobs
+        keys = r.keys("rq:job:*") + r.keys("rq:queue:*") + r.keys("rq:worker:*")
+        if keys:
+            r.delete(*keys)
+            actions.append(f"redis: {len(keys)} keys flushed")
+        else:
+            actions.append("redis: already clean")
+    except Exception as e:
+        actions.append(f"redis flush error: {e}")
+
+    # Attendre que tout soit bien mort
+    time.sleep(1.0)
+
+    # 4. Relancer un worker propre
+    pid = None
+    if restart:
+        log = Path("/tmp/worker.log")
+        pid = _spawn_worker(log_path=log)
+        actions.append(f"worker restarted (PID {pid})")
+
+    return {
+        "message": "Nuke complete",
+        "actions": actions,
+        "worker_pid": pid,
+    }

@@ -109,14 +109,15 @@ function Progress() {
     catch { setError('Erreur lors du telechargement'); }
   };
 
-  const handleRestartWorkers = async () => {
-    if (!window.confirm('Redemarrer le processus de generation ?\nLes taches en cours seront interrompues.')) return;
+  const handleNuke = async () => {
+    if (!window.confirm('TOUT ARRETER ?\n\nCette action va :\n- Tuer tous les workers\n- Couper le LLM en cours\n- Vider les queues Redis\n- Relancer un worker propre')) return;
     setAdminBusy(true); setAdminMessage(null); setError(null);
     try {
-      const resp = await adminAPI.restartWorkers({ count: 1, kill: true });
-      setAdminMessage(`Processus relance (PID: ${resp?.pids?.join(', ') || '-'})`);
+      const resp = await adminAPI.nuke({ restart: true });
+      const actions = resp?.actions?.join(', ') || 'done';
+      setAdminMessage(`Nuke OK : ${actions}`);
     } catch (err) {
-      setError(extractApiErrorDetail(err) || 'Erreur lors du redemarrage');
+      setError(extractApiErrorDetail(err) || 'Erreur lors du nuke');
     } finally { setAdminBusy(false); }
   };
 
@@ -307,8 +308,8 @@ function Progress() {
           {adminMessage && <div className="admin-message">{adminMessage}</div>}
           {ragMessage && <div className="admin-message">{ragMessage}</div>}
           <div className="troubleshooting-actions">
-            <button className="btn-action btn-action-danger" onClick={handleRestartWorkers} disabled={adminBusy}>
-              {adminBusy ? '...' : 'Relancer le processus'}
+            <button className="btn-action btn-action-danger" onClick={handleNuke} disabled={adminBusy}>
+              {adminBusy ? '...' : 'Tout arreter et relancer'}
             </button>
             {audioCount > 0 && !ingestedTxt && (
               <button className="btn-action btn-action-primary" onClick={handleIngestAudio} disabled={ragBusy}>
