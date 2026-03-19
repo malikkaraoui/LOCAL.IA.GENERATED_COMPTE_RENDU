@@ -4,6 +4,7 @@ import ClientSelection from './pages/ClientSelection';
 import Progress from './pages/Progress';
 import Branding from './pages/Branding';
 import Training from './pages/Training';
+import ReportReview from './pages/ReportReview';
 import { reportsAPI } from './services/api';
 import './App.css';
 
@@ -141,6 +142,7 @@ function App() {
             <Route path="/progress/:jobId" element={<Progress />} />
             <Route path="/branding" element={<Branding />} />
             <Route path="/training" element={<Training />} />
+            <Route path="/review/:jobId" element={<ReportReview />} />
           </Routes>
         </main>
         
