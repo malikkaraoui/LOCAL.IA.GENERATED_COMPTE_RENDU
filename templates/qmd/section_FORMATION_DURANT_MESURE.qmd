@@ -1,0 +1,23 @@
+---
+section: "FORMATION_DURANT_MESURE"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [msg, formation, entretien_audio]
+mode: inference
+---
+
+# Contexte — Formation durant la mesure
+
+Focus de cette section : formations suivies ou planifiées dans le cadre de la
+mesure d'insertion, objectifs de formation, résultats attendus.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Décris la ou les formations suivies ou envisagées durant la mesure.
+Inclure : intitulé, objectif, durée si connue, organisme si mentionné.
+Si aucune formation n'est prévue ou mentionnée, l'indiquer explicitement.

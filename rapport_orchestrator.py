@@ -51,6 +51,9 @@ class PipelineConfig:
     report_filename: Optional[str] = None
     debug_subdir: str = "debug"
     export_pdf: bool = False
+    # Beyond-RAG (SKI) — couche de connaissance structurée
+    knowledge_layer_enabled: bool = False
+    knowledge_max_chars: int = 3000
 
 
 @dataclass
@@ -196,6 +199,11 @@ class RapportOrchestrator:
         if not needs_extraction:
             self._log("Extraction déjà à jour, réutilisation des données existantes.")
             payload = json.loads(extracted_path.read_text(encoding="utf-8"))
+            # Beyond-RAG : construire _knowledge/ si absent même quand extraction réutilisée
+            if config.knowledge_layer_enabled:
+                knowledge_dir = config.client_dir / "_knowledge"
+                if not knowledge_dir.exists():
+                    self._build_knowledge(config, payload)
             return extracted_path, payload, True
 
         self._log(f"Extraction des sources depuis {config.client_dir}...")
@@ -208,6 +216,11 @@ class RapportOrchestrator:
 
         extracted_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         self._log(f"Extraction écrite -> {extracted_path}")
+
+        # Beyond-RAG : construire/mettre à jour la base de connaissance structurée
+        if config.knowledge_layer_enabled:
+            self._build_knowledge(config, payload)
+
         return extracted_path, payload, False
 
     def _handle_generation(
@@ -236,6 +249,16 @@ class RapportOrchestrator:
             "NUMERO_AVS": config.avs_number,
         }
 
+        # Beyond-RAG : résoudre le knowledge_dir si la couche est activée
+        knowledge_dir: Path | None = None
+        if config.knowledge_layer_enabled:
+            candidate = config.client_dir / "_knowledge"
+            if candidate.exists():
+                knowledge_dir = candidate
+                self._log(f"SKI activé — base de connaissance: {knowledge_dir}")
+            else:
+                self._log("SKI activé mais _knowledge/ absent — fallback BM25 standard")
+
         answers = generate_fields(
             payload,
             model=config.model,
@@ -251,6 +274,8 @@ class RapportOrchestrator:
             deterministic_values=deterministic_values,
             status_callback=self._log,
             progress_callback=progress_callback,
+            knowledge_dir=knowledge_dir,
+            knowledge_max_chars=config.knowledge_max_chars,
         )
 
         answers_path.parent.mkdir(parents=True, exist_ok=True)
@@ -320,6 +345,20 @@ class RapportOrchestrator:
             except FileNotFoundError:
                 return True
         return False
+
+    def _build_knowledge(self, config: PipelineConfig, payload: dict[str, Any]) -> None:
+        """Construit ou met à jour la base de connaissance structurée du client."""
+        try:
+            from core.knowledge_builder import build_client_knowledge
+            knowledge_dir = build_client_knowledge(
+                config.client_dir,
+                payload,
+                force_rebuild=config.force_reextract,
+            )
+            self._log(f"SKI — base de connaissance mise à jour: {knowledge_dir}")
+        except Exception as exc:
+            self._log(f"SKI — erreur knowledge builder (pipeline non bloqué): {exc}")
+            self.logger.exception("Erreur knowledge_builder pour %s", config.client_dir)
 
     def _log(self, message: str) -> None:
         self.logger.info(message)

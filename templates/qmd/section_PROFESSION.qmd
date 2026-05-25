@@ -1,0 +1,25 @@
+---
+section: "PROFESSION"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [cv, msg, entretien_audio]
+mode: inference
+---
+
+# Contexte — Situation professionnelle actuelle
+
+Focus de cette section : statut professionnel actuel (ou dernier connu),
+poste occupé, missions principales, environnement de travail, raison de l'arrêt.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Rédige la situation professionnelle actuelle en 6-10 lignes, du plus ancien au
+plus récent. Inclure : statut, poste, secteur, missions (3-6 implicites),
+environnement, raison de l'arrêt si disponible, compétences transférables.
+Texte professionnel, sans liste longue, sans JSON, sans Markdown.
+Si une info est absente des sources : indique "Non renseigné".

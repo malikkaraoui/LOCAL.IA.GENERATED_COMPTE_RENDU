@@ -1,0 +1,24 @@
+---
+section: "{{section_key}}"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+mode: inference
+---
+
+# Contexte client — section {{section_key}}
+
+Les données ci-dessous sont extraites des documents du dossier client.
+Utilise UNIQUEMENT ces données pour rédiger la section demandée.
+Ne pas inventer, ne pas compléter avec des informations non présentes.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction de rédaction
+
+Génère le contenu de la section "{{section_key}}" en texte brut, professionnel,
+en français, à partir des données ci-dessus uniquement.
+Si une information est absente, indique "Non renseigné" plutôt que d'inventer.

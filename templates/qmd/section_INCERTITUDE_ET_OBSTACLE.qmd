@@ -1,0 +1,24 @@
+---
+section: "INCERTITUDE_ET_OBSTACLE"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [msg, entretien_audio, cv]
+mode: inference
+---
+
+# Contexte — Incertitudes et obstacles
+
+Focus de cette section : freins identifiés à la réinsertion professionnelle,
+incertitudes exprimées par le client, obstacles potentiels (santé, compétences,
+mobilité, langue, situation personnelle).
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Rédige les incertitudes et obstacles en texte factuel et bienveillant.
+Base-toi uniquement sur ce qui est mentionné dans les sources.
+Ne pas spéculer ni dramatiser. Si aucun obstacle n'est mentionné, indique-le.

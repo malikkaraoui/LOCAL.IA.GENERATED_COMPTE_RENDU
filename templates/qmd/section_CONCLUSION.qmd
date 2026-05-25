@@ -1,0 +1,24 @@
+---
+section: "CONCLUSION"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [msg, entretien_audio, cv, lettre]
+mode: inference
+---
+
+# Contexte — Conclusion du rapport
+
+Focus de cette section : synthèse globale du bilan, points forts identifiés,
+axes de développement, recommandations pour la suite du parcours.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Rédige la conclusion du rapport de manière synthétique et professionnelle.
+Inclure : points forts du client, axes de progression, perspectives d'insertion,
+recommandations concrètes si disponibles dans les sources.
+Ton bienveillant, factuel, orienté action. Pas d'invention hors sources.

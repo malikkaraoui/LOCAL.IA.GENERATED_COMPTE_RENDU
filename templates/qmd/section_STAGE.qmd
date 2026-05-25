@@ -1,0 +1,23 @@
+---
+section: "STAGE"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [msg, cv, entretien_audio]
+mode: inference
+---
+
+# Contexte — Stage(s) effectué(s)
+
+Focus de cette section : stages réalisés dans le cadre de la mesure ou du
+parcours, entreprises d'accueil, durée, tâches effectuées, bilan.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Décris le ou les stages effectués. Inclure : entreprise, secteur, période/durée,
+missions principales, bilan (positif/négatif/neutre) si disponible.
+Si aucun stage n'est mentionné, l'indiquer clairement.

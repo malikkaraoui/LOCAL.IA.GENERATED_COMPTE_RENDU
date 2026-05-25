@@ -81,5 +81,14 @@ class Settings(BaseSettings):
     # Dossier de cache contrôlé pour les modèles Whisper.
     # (Local-friendly: permet de pré-télécharger puis d'être offline.)
     AUDIO_MODEL_CACHE_DIR: Path = PROJECT_ROOT / "data" / "models" / "whisper"
-    
+
+    # -----------------
+    # Beyond-RAG — couche de connaissance structurée (SKI)
+    # -----------------
+    # Active la construction d'une base de connaissance Markdown+YAML par dossier client
+    # et l'injection de contexte structuré dans le LLM au lieu du dump BM25 brut.
+    KNOWLEDGE_LAYER_ENABLED: bool = False
+    # Taille max du contexte structuré injecté par section (en caractères).
+    KNOWLEDGE_MAX_CHARS: int = 3000
+
 settings = Settings()

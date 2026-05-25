@@ -1,0 +1,23 @@
+---
+section: "FORMATION"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [formation, cv, msg]
+mode: inference
+---
+
+# Contexte — Parcours de formation
+
+Focus de cette section : diplômes obtenus, certifications, formations suivies,
+niveau d'études, établissements, années d'obtention.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Rédige le parcours de formation de manière chronologique (plus ancien au plus
+récent). Inclure : diplôme ou certification, établissement, année si disponible,
+pays/ville si mentionné. Texte professionnel en français, sans invention.

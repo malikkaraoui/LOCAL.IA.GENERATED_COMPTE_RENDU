@@ -498,6 +498,9 @@ def generate_fields(
     llm_config: Optional[LLMConfig] = None,
     # V3: type de rapport (rapport_initial, etc.)
     report_type: Optional[str] = None,
+    # Beyond-RAG: base de connaissance structurée (SKI)
+    knowledge_dir: Optional[Path] = None,
+    knowledge_max_chars: int = 3000,
 ) -> dict[str, Any]:
     # ✅ Créer une config LLM unifiée (depuis llm_config ou legacy params)
     if not llm_config:
@@ -582,6 +585,30 @@ def generate_fields(
                     "text": ch.text,
                 }
             )
+
+        # Beyond-RAG (SKI) : injecter le contexte structuré en tête si disponible
+        if knowledge_dir is not None:
+            from .context_builder import build_section_context
+            structured_ctx = build_section_context(
+                knowledge_dir,
+                key,
+                max_chars=knowledge_max_chars,
+            )
+            if structured_ctx:
+                context_blocks.insert(0, {
+                    "score": 2.0,  # Score supérieur au BM25 pour rester en tête
+                    "chunk_id": f"__knowledge__{key}__",
+                    "source_path": str(knowledge_dir / "_knowledge"),
+                    "page": None,
+                    "text": structured_ctx,
+                })
+                LOG.info(
+                    "SKI [%s]: contexte structuré injecté (%d chars, %d blocs total)",
+                    key,
+                    len(structured_ctx),
+                    len(context_blocks),
+                )
+
         sources_ids = [ctx["chunk_id"] for ctx in context_blocks]
         if progress_callback:
             progress_callback(key, "context", f"{len(context_blocks)} passages sélectionnés")
@@ -914,7 +941,14 @@ def generate_fields(
                     missing_info.append("EMPTY")
 
         # Métadonnées de production pour la page review
-        source_files = list({Path(ctx["source_path"]).name for ctx in context_blocks if ctx.get("source_path") and ctx["chunk_id"] != "__prior_sections__"})
+        _synthetic_ids = {"__prior_sections__"}
+        source_files = list({
+            Path(ctx["source_path"]).name
+            for ctx in context_blocks
+            if ctx.get("source_path")
+            and ctx["chunk_id"] not in _synthetic_ids
+            and not ctx["chunk_id"].startswith("__knowledge__")
+        })
 
         answers[key] = {
             "field": key,
@@ -925,8 +959,13 @@ def generate_fields(
             "meta": {
                 "source_files": sorted(source_files),
                 "source_count": len(source_files),
-                "chunk_count": len([c for c in context_blocks if c["chunk_id"] != "__prior_sections__"]),
+                "chunk_count": len([
+                    c for c in context_blocks
+                    if c["chunk_id"] != "__prior_sections__"
+                    and not c["chunk_id"].startswith("__knowledge__")
+                ]),
                 "had_prior_sections": any(c["chunk_id"] == "__prior_sections__" for c in context_blocks),
+                "had_knowledge_context": any(c["chunk_id"].startswith("__knowledge__") for c in context_blocks),
                 "prompt_length": len(prompt) if isinstance(prompt, str) else 0,
                 "instructions": instruction[:200] if instruction else "",
                 "query": query or "",

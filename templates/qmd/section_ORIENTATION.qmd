@@ -1,0 +1,23 @@
+---
+section: "ORIENTATION"
+client: "{{client_name}}"
+generated_at: "{{generated_at}}"
+sources_prioritaires: [msg, entretien_audio, lettre]
+mode: inference
+---
+
+# Contexte — Orientation professionnelle
+
+Focus de cette section : projet professionnel, secteurs visés, types de postes
+envisagés, aspirations exprimées par le client, cohérence avec le parcours.
+
+---
+
+{{notes_content}}
+
+---
+
+## Instruction
+Rédige l'orientation professionnelle en texte structuré. Inclure : projet cible,
+secteurs/postes envisagés, motivations exprimées, cohérence avec le parcours.
+Rester factuel et basé sur les sources. Ne pas inventer de projet non mentionné.
